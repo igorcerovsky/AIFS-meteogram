@@ -39,9 +39,15 @@ def generate_meteogram(
 
     print(f"[✓] Found: {loc_name} ({country}) at {lat:.4f}°N, {lon:.4f}°E (alt: {elev:.0f}m)")
 
+    img_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".img")
+    os.makedirs(img_dir, exist_ok=True)
+
     if not output:
         clean_name = "".join(c if c.isalnum() else "_" for c in loc_name.lower())
-        output = f"{clean_name}_aifs_meteogram.png"
+        output = os.path.join(img_dir, f"{clean_name}_aifs_meteogram.png")
+    elif not os.path.isabs(output) and not os.path.dirname(output):
+        # Bare filename (e.g. -o output.png) placed inside .img folder
+        output = os.path.join(img_dir, output)
 
     print(f"[*] Fetching ECMWF AIFS 0.25° 50-member ensemble ({days} days - full AI horizon)...")
     stats = client.fetch_aifs_ensemble(lat, lon, days=days)
@@ -87,7 +93,7 @@ def main():
         "--output",
         type=str,
         default=None,
-        help="Output file path (e.g. 'bratislava.png' or 'bratislava.svg'). Default: auto-named.",
+        help="Output file path (e.g. 'bratislava.png'). Defaults to auto-named inside '.img/' directory.",
     )
     parser.add_argument(
         "--lang",

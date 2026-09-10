@@ -2,8 +2,6 @@
 
 A meteogram / EPSGRAM generator inspired by [SHMÚ's ECMWF EPSGRAM](https://www.shmu.sk/sk/?page=1&id=meteo_epsgramy&nwp_mesto=34031#ecmwf) powered by open forecast data from ECMWF's **AIFS** (*Artificial Intelligence Forecasting System* 0.25° Ensemble — 50 AI members) catalogued in [ECMWF AI Models](https://charts.ecmwf.int/catalogue/packages/ai_models/).
 
-![ECMWF AIFS Meteogram Preview](example_meteogram.png)
-
 ---
 
 ## Installation
@@ -79,7 +77,7 @@ python3 meteogram.py --location "48.148,17.107" --output custom_coord.png
 |---|---|---|
 | `-l`, `--location` | `Bratislava-Koliba` | City / preset name or `lat,lon` coordinates |
 | `-d`, `--days` | `15` | Forecast horizon (1 to 16 days, full AI horizon) |
-| `-o`, `--output` | Auto-named | Output image file path (`.png`, `.svg`, `.pdf`) |
+| `-o`, `--output` | `.img/<location>_aifs_meteogram.png` | Output image file path (`.png`, `.svg`, `.pdf`). Saved in `.img/` by default. |
 | `--lang` | `en` | Label language: `en` (English, default) or `sk` (Slovak) |
 | `--dpi` | `200` | Resolution for rendered image |
 

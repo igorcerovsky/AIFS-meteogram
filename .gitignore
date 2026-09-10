@@ -1,5 +1,7 @@
 .cache
 .cache/
+.img
+.img/
 __pycache__/
 *.py[cod]
 *$py.class
