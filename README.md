@@ -2,11 +2,14 @@
 
 A meteogram / EPSGRAM generator inspired by [SHMÚ's ECMWF EPSGRAM](https://www.shmu.sk/sk/?page=1&id=meteo_epsgramy&nwp_mesto=34031#ecmwf) powered by open forecast data from ECMWF's **AIFS** (*Artificial Intelligence Forecasting System* 0.25° Ensemble — 50 AI members) catalogued in [ECMWF AI Models](https://charts.ecmwf.int/catalogue/packages/ai_models/).
 
+![ECMWF AIFS Meteogram Preview](assets/meteogram_preview.png)
+
 ---
 
 ## Installation
 
 Clone the repository and install dependencies:
+
 ```bash
 git clone https://github.com/igorcerovsky/AIFS-meteogram.git
 cd AIFS-meteogram
@@ -41,11 +44,13 @@ pip install -r requirements.txt
 ## 1. CLI Usage
 
 Generate a meteogram for the default location (**Bratislava-Koliba**, 15 days, English):
+
 ```bash
 python3 meteogram.py
 ```
 
 Quick generation for the default locations:
+
 ```bash
 # Bratislava-Koliba (Default)
 python3 meteogram.py --location "Bratislava-Koliba"
@@ -61,6 +66,7 @@ python3 meteogram.py --location "Plavecke Podhradie"
 ```
 
 Other custom locations or coordinates:
+
 ```bash
 # 15-day forecast for Vienna
 python3 meteogram.py --location "Vienna" --days 15 --output vienna_meteogram.png
@@ -73,13 +79,14 @@ python3 meteogram.py --location "48.148,17.107" --output custom_coord.png
 ```
 
 ### CLI Arguments
+
 | Parameter | Default | Description |
-|---|---|---|
+| --- | --- | --- |
 | `-l`, `--location` | `Bratislava-Koliba` | City / preset name or `lat,lon` coordinates |
 | `-d`, `--days` | `15` | Forecast horizon (1 to 16 days, full AI horizon) |
 | `-o`, `--output` | `.img/<location>_aifs_meteogram.png` | Output image file path (`.png`, `.svg`, `.pdf`). Saved in `.img/` by default. |
 | `--lang` | `en` | Label language: `en` (English, default) or `sk` (Slovak) |
-| `--tz`, `--timezone` | `local` | Time zone mode for X-axis: `local` (Default, actual local time for location) or `utc` |
+| `--tz`, `--timezone` | `local` | Time zone mode for X-axis: `local` (Default, current local time [summer or winter] at render time) or `utc` |
 | `--dpi` | `200` | Resolution for rendered image |
 
 ---
@@ -87,15 +94,18 @@ python3 meteogram.py --location "48.148,17.107" --output custom_coord.png
 ## 2. Interactive Web Dashboard
 
 To launch the web interface:
+
 ```bash
 python3 server.py 8080
 ```
+
 Open [http://localhost:8080](http://localhost:8080) in your web browser.
 
 Features:
+
 - Type any city name in the search bar or click the quick presets
 - Switch forecast horizon (3, 5, 7, 10, 15 days)
-- Select time zone (**Local Time** [default, actual local time for location] or **UTC**)
+- Select time zone (**Local Time** [default, current local time either summer or winter] or **UTC**)
 - Download generated image with a single click
 - View full-size graph in a new tab
 
@@ -104,6 +114,7 @@ Features:
 ## Requirements
 
 Python 3.9+ with standard packages:
+
 - `matplotlib`
 - `numpy`
 - Standard library modules (`urllib`, `http.server`, `json`, `datetime`)
