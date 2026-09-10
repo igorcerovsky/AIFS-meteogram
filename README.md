@@ -79,7 +79,7 @@ python3 meteogram.py --location "48.148,17.107" --output custom_coord.png
 | `-d`, `--days` | `15` | Forecast horizon (1 to 16 days, full AI horizon) |
 | `-o`, `--output` | `.img/<location>_aifs_meteogram.png` | Output image file path (`.png`, `.svg`, `.pdf`). Saved in `.img/` by default. |
 | `--lang` | `en` | Label language: `en` (English, default) or `sk` (Slovak) |
-| `--tz`, `--timezone` | `local` | Time zone mode for X-axis: `local` (Default, current local time [summer or winter] at render time) or `utc` |
+| `--tz`, `--timezone` | `local` | Time zone mode for X-axis: `local` (Default, actual local time for location) or `utc` |
 | `--dpi` | `200` | Resolution for rendered image |
 
 ---
@@ -95,7 +95,7 @@ Open [http://localhost:8080](http://localhost:8080) in your web browser.
 Features:
 - Type any city name in the search bar or click the quick presets
 - Switch forecast horizon (3, 5, 7, 10, 15 days)
-- Select time zone (**Local Time** [default, current local time either summer or winter] or **UTC**)
+- Select time zone (**Local Time** [default, actual local time for location] or **UTC**)
 - Download generated image with a single click
 - View full-size graph in a new tab
 
