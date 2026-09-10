@@ -352,7 +352,7 @@
 
   <main>
     <section class="control-panel">
-      <form id="meteogram-form">
+      <form id="meteogram-form" onsubmit="event.preventDefault(); updateMeteogram(); return false;">
         <div class="form-row">
           <div class="form-group" style="flex: 2;">
             <label for="location">Location / Coordinates (lat, lon)</label>
@@ -378,7 +378,7 @@
             </select>
           </div>
 
-          <button type="submit" id="generate-btn" class="btn-primary">
+          <button type="button" id="generate-btn" class="btn-primary" onclick="updateMeteogram()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="5 3 19 12 5 21 5 3"></polygon>
             </svg>
@@ -413,7 +413,7 @@
             </svg>
             Download PNG
           </a>
-          <button class="btn-secondary" onclick="openFullSize()">
+          <button type="button" class="btn-secondary" onclick="openFullSize()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="15 3 21 3 21 9"></polyline>
               <polyline points="9 21 3 21 3 15"></polyline>
@@ -459,9 +459,11 @@
   </footer>
 
   <script>
+    let currentRequestId = 0;
+
     function setLoc(name) {
       document.getElementById('location').value = name;
-      document.getElementById('meteogram-form').dispatchEvent(new Event('submit'));
+      updateMeteogram();
     }
 
     function showLoader(text) {
@@ -479,7 +481,7 @@
 
     function handleError() {
       document.getElementById('loader').style.display = 'flex';
-      document.getElementById('loader-status').innerText = 'Error generating meteogram. Please check the location name.';
+      document.getElementById('loader-status').innerText = 'Error generating meteogram. Please check the location name or network.';
       document.getElementById('generate-btn').disabled = false;
     }
 
@@ -490,24 +492,87 @@
       }
     }
 
-    document.getElementById('meteogram-form').addEventListener('submit', function(e) {
-      e.preventDefault();
-      const loc = document.getElementById('location').value.trim();
+    function updateMeteogram() {
+      const locInput = document.getElementById('location');
+      const loc = locInput.value.trim();
       const days = document.getElementById('days').value;
       const lang = document.getElementById('lang').value;
       if (!loc) return;
 
+      // Update UI title and show loading animation
       document.getElementById('result-title').innerText = `Meteogram: ${loc} (ECMWF AIFS ${days}-day)`;
       showLoader(`Fetching 50 AI ensemble members for ${loc} (${days} days)...`);
 
-      const t = Date.now();
-      const url = `/api/image?location=${encodeURIComponent(loc)}&days=${days}&lang=${lang}&_t=${t}`;
-      const img = document.getElementById('meteogram-img');
-      img.src = url;
+      // Update active chip highlight
+      document.querySelectorAll('.chip').forEach(btn => {
+        const btnText = btn.innerText.replace(/^[📍\s]+/, '').trim().toLowerCase();
+        if (btnText === loc.toLowerCase()) {
+          btn.classList.add('active-preset');
+        } else {
+          btn.classList.remove('active-preset');
+        }
+      });
 
+      // Update URL query parameters cleanly without page refresh
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.set('location', loc);
+      newUrl.searchParams.set('days', days);
+      newUrl.searchParams.set('lang', lang);
+      window.history.replaceState({}, '', newUrl.toString());
+
+      // Track request ID to prevent race conditions
+      const requestId = ++currentRequestId;
+      const t = Date.now();
+      const imageUrl = `/api/image?location=${encodeURIComponent(loc)}&days=${days}&lang=${lang}&_t=${t}`;
+
+      // Update download link
       const dl = document.getElementById('download-btn');
-      dl.href = url;
+      dl.href = imageUrl;
       dl.download = `${loc.toLowerCase().replace(/[^a-z0-9]/g, '_')}_meteogram.png`;
+
+      // Preload image so old image remains hidden during load and new one appears immediately
+      const preloadImg = new Image();
+      preloadImg.onload = function() {
+        if (requestId === currentRequestId) {
+          const img = document.getElementById('meteogram-img');
+          img.src = imageUrl;
+          hideLoader();
+        }
+      };
+      preloadImg.onerror = function() {
+        if (requestId === currentRequestId) {
+          handleError();
+        }
+      };
+      preloadImg.src = imageUrl;
+    }
+
+    // Handle Enter key on input
+    document.getElementById('location').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        updateMeteogram();
+      }
+    });
+
+    // Auto-sync form selects if changed
+    document.getElementById('days').addEventListener('change', updateMeteogram);
+    document.getElementById('lang').addEventListener('change', updateMeteogram);
+
+    // Initial page load checking URL params
+    window.addEventListener('DOMContentLoaded', () => {
+      const params = new URLSearchParams(window.location.search);
+      const locParam = params.get('location');
+      const daysParam = params.get('days');
+      const langParam = params.get('lang');
+
+      if (locParam) document.getElementById('location').value = locParam;
+      if (daysParam) document.getElementById('days').value = daysParam;
+      if (langParam) document.getElementById('lang').value = langParam;
+
+      if (locParam && locParam !== 'Bratislava-Koliba') {
+        updateMeteogram();
+      }
     });
   </script>
 </body>

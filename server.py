@@ -11,7 +11,7 @@ import json
 import os
 import sys
 import urllib.parse
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import HTTPServer, SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 from aifs_client import AIFSClient
 from renderer import MeteogramRenderer
@@ -27,6 +27,10 @@ renderers = {
 
 
 class MeteogramHandler(SimpleHTTPRequestHandler):
+    def log_message(self, format, *args):
+        # Clean request logging
+        sys.stderr.write(f"[{self.log_date_time_string()}] {format % args}\n")
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
@@ -44,8 +48,13 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(content)
                 return
+            except (BrokenPipeError, ConnectionResetError):
+                return
             except Exception as e:
-                self.send_error(500, f"Failed to read index.html: {e}")
+                try:
+                    self.send_error(500, f"Failed to read index.html: {e}")
+                except Exception:
+                    pass
                 return
 
         # API: /api/image
@@ -85,7 +94,10 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
                         dpi=170,
                     )
                 except Exception as e:
-                    self.send_error(400, f"Error generating meteogram: {e}")
+                    try:
+                        self.send_error(400, f"Error generating meteogram: {e}")
+                    except Exception:
+                        pass
                     return
 
             try:
@@ -98,8 +110,13 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(img_data)
                 return
+            except (BrokenPipeError, ConnectionResetError):
+                return
             except Exception as e:
-                self.send_error(500, f"Failed to deliver image: {e}")
+                try:
+                    self.send_error(500, f"Failed to deliver image: {e}")
+                except Exception:
+                    pass
                 return
 
         # Default static file serving
@@ -108,7 +125,7 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
 
 def run_server(port=8080):
     server_address = ("", port)
-    httpd = HTTPServer(server_address, MeteogramHandler)
+    httpd = ThreadingHTTPServer(server_address, MeteogramHandler)
     print(f"[*] Meteogram Web Server running on http://localhost:{port}")
     print(f"[*] Open http://localhost:{port} in your browser to explore!")
     try:
