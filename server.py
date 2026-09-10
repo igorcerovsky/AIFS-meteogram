@@ -62,11 +62,14 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
             loc_param = query.get("location", ["Bratislava-Koliba"])[0].strip()
             days_param = int(query.get("days", ["15"])[0])
             lang_param = query.get("lang", ["en"])[0]
+            tz_param = query.get("tz", ["local"])[0].lower()
+            if tz_param not in ["local", "utc", "winter", "summer"]:
+                tz_param = "local"
             if lang_param not in renderers:
                 lang_param = "en"
 
             # Cache key
-            cache_key = hashlib.md5(f"{loc_param}_{days_param}_{lang_param}".encode()).hexdigest()
+            cache_key = hashlib.md5(f"{loc_param}_{days_param}_{lang_param}_{tz_param}".encode()).hexdigest()
             cache_file = os.path.join(CACHE_DIR, f"{cache_key}.png")
 
             # Check if cached recently (under 1 hour)
@@ -92,6 +95,7 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
                         sun_times=sun_times,
                         output_path=cache_file,
                         dpi=170,
+                        tz_mode=tz_param,
                     )
                 except Exception as e:
                     try:

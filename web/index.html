@@ -378,6 +378,16 @@
             </select>
           </div>
 
+          <div class="form-group">
+            <label for="tz">Time Zone</label>
+            <select id="tz" name="tz">
+              <option value="local" selected>Local Time (Default)</option>
+              <option value="utc">UTC</option>
+              <option value="winter">Winter Time (Standard)</option>
+              <option value="summer">Summer Time (Daylight Saving)</option>
+            </select>
+          </div>
+
           <button type="button" id="generate-btn" class="btn-primary" onclick="updateMeteogram()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -405,7 +415,7 @@
       <div class="result-header">
         <h2 id="result-title">Meteogram: Bratislava-Koliba (ECMWF AIFS 15-day)</h2>
         <div class="result-actions">
-          <a id="download-btn" class="btn-secondary" href="/api/image?location=Bratislava-Koliba&days=15&lang=en" download="bratislava_koliba_meteogram.png">
+          <a id="download-btn" class="btn-secondary" href="/api/image?location=Bratislava-Koliba&days=15&lang=en&tz=local" download="bratislava_koliba_meteogram.png">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
               <polyline points="7 10 12 15 17 10"></polyline>
@@ -430,7 +440,7 @@
           <div class="spinner"></div>
           <p id="loader-status">Fetching 50 ECMWF AIFS ensemble members and rendering meteogram...</p>
         </div>
-        <img id="meteogram-img" src="/api/image?location=Bratislava-Koliba&days=15&lang=en" alt="Meteogram" onload="hideLoader()" onerror="handleError()" />
+        <img id="meteogram-img" src="/api/image?location=Bratislava-Koliba&days=15&lang=en&tz=local" alt="Meteogram" onload="hideLoader()" onerror="handleError()" />
       </div>
     </section>
 
@@ -497,6 +507,7 @@
       const loc = locInput.value.trim();
       const days = document.getElementById('days').value;
       const lang = document.getElementById('lang').value;
+      const tz = document.getElementById('tz').value;
       if (!loc) return;
 
       // Update UI title and show loading animation
@@ -518,12 +529,13 @@
       newUrl.searchParams.set('location', loc);
       newUrl.searchParams.set('days', days);
       newUrl.searchParams.set('lang', lang);
+      newUrl.searchParams.set('tz', tz);
       window.history.replaceState({}, '', newUrl.toString());
 
       // Track request ID to prevent race conditions
       const requestId = ++currentRequestId;
       const t = Date.now();
-      const imageUrl = `/api/image?location=${encodeURIComponent(loc)}&days=${days}&lang=${lang}&_t=${t}`;
+      const imageUrl = `/api/image?location=${encodeURIComponent(loc)}&days=${days}&lang=${lang}&tz=${tz}&_t=${t}`;
 
       // Update download link
       const dl = document.getElementById('download-btn');
@@ -558,6 +570,7 @@
     // Auto-sync form selects if changed
     document.getElementById('days').addEventListener('change', updateMeteogram);
     document.getElementById('lang').addEventListener('change', updateMeteogram);
+    document.getElementById('tz').addEventListener('change', updateMeteogram);
 
     // Initial page load checking URL params
     window.addEventListener('DOMContentLoaded', () => {
@@ -565,10 +578,12 @@
       const locParam = params.get('location');
       const daysParam = params.get('days');
       const langParam = params.get('lang');
+      const tzParam = params.get('tz');
 
       if (locParam) document.getElementById('location').value = locParam;
       if (daysParam) document.getElementById('days').value = daysParam;
       if (langParam) document.getElementById('lang').value = langParam;
+      if (tzParam) document.getElementById('tz').value = tzParam;
 
       if (locParam && locParam !== 'Bratislava-Koliba') {
         updateMeteogram();

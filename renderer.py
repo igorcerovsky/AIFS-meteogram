@@ -10,6 +10,7 @@ Panels:
 """
 
 import os
+import zoneinfo
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 import matplotlib
@@ -25,50 +26,9 @@ LANG_TEXTS = {
         "title_model": "Model: ECMWF AIFS 0.25° Ensemble (50 AI členov)",
         "alt": "Nadm. výška",
         "coord": "Súradnice",
-        "utc_note": "Čas: UTC",
-        "temp_title": "Teplota 2 m [°C]",
-        "precip_title": "Zrážky [mm / 6h]",
-        "cloud_title": "Oblačnosť [%]",
-        "wind_title": "Vietor 10 m [km/h]",
-        "pressure_title": "Tlak vzduchu (MSLP) [hPa]",
-        "days": ["Po", "Ut", "St", "Št", "Pi", "So", "Ne"],
-        "min": "Min",
-        "max": "Max",
-        "sum": "Suma",
-        "median": "Medián",
-        "iqr": "25-75% percentil",
-        "spread": "Rozptyl (Min-Max)",
-        "rain": "Dážď",
-        "snow": "Sneh",
-        "max_precip": "Max úhrn ansámbla",
-    },
-    "en": {
-        "title_model": "Model: ECMWF AIFS 0.25° Ensemble (50 AI members)",
-        "alt": "Elevation",
-        "coord": "Coordinates",
-        "utc_note": "Time: UTC",
-        "temp_title": "2m Temperature [°C]",
-        "precip_title": "Precipitation [mm / 6h]",
-        "cloud_title": "Cloud Cover [%]",
-        "wind_title": "10m Wind [km/h]",
-        "pressure_title": "MSLP Pressure [hPa]",
-        "days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-        "min": "Min",
-        "max": "Max",
-        "sum": "Sum",
-        "median": "Median",
-        "iqr": "25-75% percentile",
-        "spread": "Spread (Min-Max)",
-        "rain": "Rain",
-        "snow": "Snow",
-        "max_precip": "Max ensemble precip",
-        "night": "Night (sunset to sunrise)",
-    },
-    "sk": {
-        "title_model": "Model: ECMWF AIFS 0.25° Ensemble (50 AI členov)",
-        "alt": "Nadm. výška",
-        "coord": "Súradnice",
-        "utc_note": "Čas: UTC",
+        "run_prefix": "Beh",
+        "time_prefix": "Čas",
+        "hour_label": "Hodina",
         "temp_title": "Teplota 2 m [°C]",
         "precip_title": "Zrážky [mm / 6h]",
         "cloud_title": "Oblačnosť [%]",
@@ -86,6 +46,30 @@ LANG_TEXTS = {
         "max_precip": "Max úhrn ansámbla",
         "night": "Noc (západ až východ slnka)",
     },
+    "en": {
+        "title_model": "Model: ECMWF AIFS 0.25° Ensemble (50 AI members)",
+        "alt": "Elevation",
+        "coord": "Coordinates",
+        "run_prefix": "Run",
+        "time_prefix": "Time",
+        "hour_label": "Hour",
+        "temp_title": "2m Temperature [°C]",
+        "precip_title": "Precipitation [mm / 6h]",
+        "cloud_title": "Cloud Cover [%]",
+        "wind_title": "10m Wind [km/h]",
+        "pressure_title": "MSLP Pressure [hPa]",
+        "days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+        "min": "Min",
+        "max": "Max",
+        "sum": "Sum",
+        "median": "Median",
+        "iqr": "25-75% percentile",
+        "spread": "Spread (Min-Max)",
+        "rain": "Rain",
+        "snow": "Snow",
+        "max_precip": "Max ensemble precip",
+        "night": "Night (sunset to sunrise)",
+    },
 }
 
 
@@ -101,15 +85,75 @@ class MeteogramRenderer:
         sun_times: List[Tuple[datetime, datetime]],
         output_path: str,
         dpi: int = 200,
+        tz_mode: str = "local",
     ) -> str:
         """Render the complete meteogram to output_path (PNG, SVG, or PDF)."""
-        times = stats["times"]
-        if not times:
+        raw_times = stats["times"]
+        if not raw_times:
             raise ValueError("No forecast time data available.")
 
+        # Resolve Timezone for location
+        iana_tz_name = location_info.get("timezone") or stats.get("timezone") or "Europe/Bratislava"
+        if iana_tz_name == "auto":
+            iana_tz_name = stats.get("timezone") or "Europe/Bratislava"
+
+        try:
+            tz_obj = zoneinfo.ZoneInfo(iana_tz_name)
+        except Exception:
+            tz_obj = zoneinfo.ZoneInfo("Europe/Bratislava")
+
+        raw_start = raw_times[0]
+
+        # Determine target active timezone and descriptive labels based on tz_mode
+        if tz_mode == "utc":
+            active_tz = timezone.utc
+            tz_badge = "UTC"
+            tz_label = "UTC"
+        elif tz_mode == "winter":
+            # Force winter / standard time
+            jan_dt = datetime(raw_start.year, 1, 15, 12, 0, tzinfo=tz_obj)
+            offset = jan_dt.utcoffset() or timedelta(hours=1)
+            active_tz = timezone(offset)
+            hrs = int(offset.total_seconds() // 3600)
+            sign = "+" if hrs >= 0 else ""
+            name = jan_dt.tzname() or f"UTC{sign}{hrs}"
+            tz_badge = name
+            tz_label = f"{name} (Winter Time, UTC{sign}{hrs})" if self.lang == "en" else f"{name} (Zimný čas, UTC{sign}{hrs})"
+        elif tz_mode == "summer":
+            # Force summer / daylight saving time
+            jul_dt = datetime(raw_start.year, 7, 15, 12, 0, tzinfo=tz_obj)
+            offset = jul_dt.utcoffset() or timedelta(hours=2)
+            active_tz = timezone(offset)
+            hrs = int(offset.total_seconds() // 3600)
+            sign = "+" if hrs >= 0 else ""
+            name = jul_dt.tzname() or f"UTC{sign}{hrs}"
+            tz_badge = name
+            tz_label = f"{name} (Summer Time, UTC{sign}{hrs})" if self.lang == "en" else f"{name} (Letný čas, UTC{sign}{hrs})"
+        else:
+            # "local" (default): dynamic local time for location with automatic DST
+            active_tz = tz_obj
+            first_local = raw_start.astimezone(tz_obj)
+            tz_name = first_local.tzname() or ""
+            offset = first_local.utcoffset() or timedelta(0)
+            hrs = int(offset.total_seconds() // 3600)
+            sign = "+" if hrs >= 0 else ""
+            tz_badge = tz_name if tz_name else f"UTC{sign}{hrs}"
+            if self.lang == "en":
+                tz_label = f"Local Time ({tz_badge}, UTC{sign}{hrs})"
+            else:
+                tz_label = f"Miestny čas ({tz_badge}, UTC{sign}{hrs})"
+
+        # Convert forecast times to active timezone
+        times = [t.astimezone(active_tz) for t in raw_times]
         start_time = times[0]
         end_time = times[-1]
         forecast_days = (end_time - start_time).total_seconds() / 86400.0
+
+        # Convert sun times to active timezone
+        sun_times_tz = [
+            (rise.astimezone(active_tz), sset.astimezone(active_tz))
+            for rise, sset in sun_times
+        ]
 
         # Convert times to matplotlib numerical dates for smooth plotting
         num_times = mdates.date2num(times)
@@ -136,7 +180,7 @@ class MeteogramRenderer:
         ax_temp, ax_precip, ax_cloud, ax_wind, ax_press = axes
 
         # Apply night background shading across all axes
-        self._draw_night_shading(axes, sun_times, start_time, end_time)
+        self._draw_night_shading(axes, sun_times_tz, start_time, end_time)
 
         # -------------------------------------------------------------
         # PANEL 1: TEMPERATURE 2M (TOP PANEL - As requested)
@@ -408,7 +452,7 @@ class MeteogramRenderer:
         # -------------------------------------------------------------
         # TIMELINE CONFIGURATION & LABELS
         # -------------------------------------------------------------
-        self._format_x_axis(ax_press, start_time, end_time)
+        self._format_x_axis(ax_press, start_time, end_time, active_tz, tz_badge)
 
         # Super Title / Header banner
         loc_name = location_info.get("name", "Unknown")
@@ -418,13 +462,13 @@ class MeteogramRenderer:
         lon = location_info.get("longitude", 0.0)
         elev = location_info.get("elevation", stats.get("elevation", 0))
 
-        run_time_str = start_time.strftime("%Y-%m-%d %H:%M UTC")
+        run_time_str = raw_start.astimezone(active_tz).strftime("%Y-%m-%d %H:%M")
 
         header_title = f"{loc_str} ({lat:.2f}°N, {lon:.2f}°E, {self.t['alt']}: {elev:.0f} m)"
         header_sub = (
             f"{self.t['title_model']}  |  "
-            f"Run: {run_time_str}  |  "
-            f"{self.t['utc_note']}"
+            f"{self.t['run_prefix']}: {run_time_str} ({tz_badge})  |  "
+            f"{self.t['time_prefix']}: {tz_label}"
         )
 
         fig.text(
@@ -482,7 +526,7 @@ class MeteogramRenderer:
                     x1 = mdates.date2num(clamped_end)
                     ax.axvspan(x0, x1, color="#c8d1d9", alpha=0.75, zorder=0)
 
-            # Mark midnight (00:00 UTC) with solid dark vertical line across all panels
+            # Mark midnight (00:00 local time) with solid dark vertical line across all panels
             current_day = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
             while current_day <= end_time + timedelta(days=1):
                 if current_day >= start_time and current_day <= end_time:
@@ -496,16 +540,23 @@ class MeteogramRenderer:
                     )
                 current_day += timedelta(days=1)
 
-    def _format_x_axis(self, ax: plt.Axes, start_time: datetime, end_time: datetime):
-        """Format bottom X-axis with cleanly separated hours, day names, and calendar dates."""
+    def _format_x_axis(
+        self,
+        ax: plt.Axes,
+        start_time: datetime,
+        end_time: datetime,
+        active_tz: Any,
+        tz_badge: str,
+    ):
+        """Format bottom X-axis with cleanly separated hours, day names, and calendar dates in active timezone."""
         x_min = mdates.date2num(start_time)
         x_max = mdates.date2num(end_time)
         ax.set_xlim(x_min, x_max)
 
-        # 6-hour interval ticks
-        hours_locator = mdates.HourLocator(byhour=[0, 6, 12, 18])
+        # 6-hour interval ticks in the active timezone
+        hours_locator = mdates.HourLocator(byhour=[0, 6, 12, 18], tz=active_tz)
         ax.xaxis.set_major_locator(hours_locator)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H"))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H", tz=active_tz))
         ax.tick_params(axis="x", which="major", labelsize=8.5, length=4, pad=4)
 
         # Place day names & dates in a neat strip right under the hours

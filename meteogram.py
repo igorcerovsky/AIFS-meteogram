@@ -23,6 +23,7 @@ def generate_meteogram(
     days: int = 15,
     output: str = None,
     lang: str = "en",
+    tz: str = "local",
     dpi: int = 200,
 ) -> str:
     """End-to-end pipeline: geocode -> fetch AIFS ensemble -> render image."""
@@ -57,13 +58,14 @@ def generate_meteogram(
     print(f"[*] Fetching sunrise & sunset times for {loc_name}...")
     sun_times = client.fetch_sun_times(lat, lon, days=days)
 
-    print(f"[*] Rendering SHMÚ-style meteogram (Temperature on top, in {lang.upper()})...")
+    print(f"[*] Rendering SHMÚ-style meteogram (Temperature on top, in {lang.upper()}, Time: {tz.upper()})...")
     out_file = renderer.render(
         location_info=loc_info,
         stats=stats,
         sun_times=sun_times,
         output_path=output,
         dpi=dpi,
+        tz_mode=tz,
     )
     print(f"[SUCCESS] Meteogram generated and saved to: {os.path.abspath(out_file)}")
     return out_file
@@ -103,6 +105,13 @@ def main():
         help="Language for labels ('en' for English, 'sk' for Slovak). Default: en.",
     )
     parser.add_argument(
+        "--tz",
+        type=str,
+        default="local",
+        choices=["local", "utc", "winter", "summer"],
+        help="Timezone on X-axis: 'local' (auto DST, default), 'utc', 'winter' (standard time), 'summer' (daylight saving time). Default: local.",
+    )
+    parser.add_argument(
         "--dpi",
         type=int,
         default=200,
@@ -117,6 +126,7 @@ def main():
             days=args.days,
             output=args.output,
             lang=args.lang,
+            tz=args.tz,
             dpi=args.dpi,
         )
     except Exception as e:
