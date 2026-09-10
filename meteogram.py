@@ -108,8 +108,8 @@ def main():
         "--tz",
         type=str,
         default="local",
-        choices=["local", "utc", "winter", "summer"],
-        help="Timezone on X-axis: 'local' (auto DST, default), 'utc', 'winter' (standard time), 'summer' (daylight saving time). Default: local.",
+        choices=["local", "utc"],
+        help="Timezone on X-axis: 'local' (default, current local time [summer/winter] at render time) or 'utc'.",
     )
     parser.add_argument(
         "--dpi",

@@ -63,7 +63,7 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
             days_param = int(query.get("days", ["15"])[0])
             lang_param = query.get("lang", ["en"])[0]
             tz_param = query.get("tz", ["local"])[0].lower()
-            if tz_param not in ["local", "utc", "winter", "summer"]:
+            if tz_param not in ["local", "utc"]:
                 tz_param = "local"
             if lang_param not in renderers:
                 lang_param = "en"

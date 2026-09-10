@@ -104,40 +104,20 @@ class MeteogramRenderer:
 
         raw_start = raw_times[0]
 
-        # Determine target active timezone and descriptive labels based on tz_mode
+        # Determine target active timezone and descriptive labels based on tz_mode ("local" or "utc")
         if tz_mode == "utc":
             active_tz = timezone.utc
             tz_badge = "UTC"
             tz_label = "UTC"
-        elif tz_mode == "winter":
-            # Force winter / standard time
-            jan_dt = datetime(raw_start.year, 1, 15, 12, 0, tzinfo=tz_obj)
-            offset = jan_dt.utcoffset() or timedelta(hours=1)
-            active_tz = timezone(offset)
-            hrs = int(offset.total_seconds() // 3600)
-            sign = "+" if hrs >= 0 else ""
-            name = jan_dt.tzname() or f"UTC{sign}{hrs}"
-            tz_badge = name
-            tz_label = f"{name} (Winter Time, UTC{sign}{hrs})" if self.lang == "en" else f"{name} (Zimný čas, UTC{sign}{hrs})"
-        elif tz_mode == "summer":
-            # Force summer / daylight saving time
-            jul_dt = datetime(raw_start.year, 7, 15, 12, 0, tzinfo=tz_obj)
-            offset = jul_dt.utcoffset() or timedelta(hours=2)
-            active_tz = timezone(offset)
-            hrs = int(offset.total_seconds() // 3600)
-            sign = "+" if hrs >= 0 else ""
-            name = jul_dt.tzname() or f"UTC{sign}{hrs}"
-            tz_badge = name
-            tz_label = f"{name} (Summer Time, UTC{sign}{hrs})" if self.lang == "en" else f"{name} (Letný čas, UTC{sign}{hrs})"
         else:
-            # "local" (default): dynamic local time for location with automatic DST
-            active_tz = tz_obj
-            first_local = raw_start.astimezone(tz_obj)
-            tz_name = first_local.tzname() or ""
-            offset = first_local.utcoffset() or timedelta(0)
-            hrs = int(offset.total_seconds() // 3600)
+            # "local" (default): current local time (summer or winter at the time of rendering)
+            now_local = datetime.now(tz=tz_obj)
+            now_offset = now_local.utcoffset() or timedelta(0)
+            now_name = now_local.tzname() or ""
+            active_tz = timezone(now_offset, name=now_name) if now_name else timezone(now_offset)
+            hrs = int(now_offset.total_seconds() // 3600)
             sign = "+" if hrs >= 0 else ""
-            tz_badge = tz_name if tz_name else f"UTC{sign}{hrs}"
+            tz_badge = now_name if now_name else f"UTC{sign}{hrs}"
             if self.lang == "en":
                 tz_label = f"Local Time ({tz_badge}, UTC{sign}{hrs})"
             else:
