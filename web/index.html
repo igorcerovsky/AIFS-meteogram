@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ECMWF AIFS Meteogram | AI Weather Forecast</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card-bg: rgba(22, 27, 34, 0.85);
+      --card-border: rgba(48, 54, 61, 0.8);
+      --text-main: #f0f6fc;
+      --text-muted: #8b949e;
+      --accent-blue: #388bfd;
+      --accent-hover: #58a6ff;
+      --accent-red: #f85149;
+      --accent-green: #3fb950;
+      --input-bg: #161b22;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(56, 139, 253, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(248, 81, 73, 0.05) 0%, transparent 40%);
+    }
+
+    header {
+      padding: 1.5rem 2rem;
+      border-bottom: 1px solid var(--card-border);
+      background: rgba(13, 17, 23, 0.7);
+      backdrop-filter: blur(12px);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+    }
+
+    .brand-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #238636 0%, #1f6feb 100%);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 1.2rem;
+      color: white;
+      box-shadow: 0 4px 12px rgba(31, 111, 235, 0.3);
+    }
+
+    .brand-text h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-text p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: rgba(56, 139, 253, 0.15);
+      color: var(--accent-hover);
+      border: 1px solid rgba(56, 139, 253, 0.3);
+    }
+
+    main {
+      flex: 1;
+      max-width: 1500px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .control-panel {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 1.5rem;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    }
+
+    .form-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: flex-end;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      flex: 1;
+      min-width: 220px;
+    }
+
+    label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    input, select {
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      color: var(--text-main);
+      padding: 0.75rem 1rem;
+      font-size: 0.95rem;
+      font-family: inherit;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px rgba(56, 139, 253, 0.2);
+    }
+
+    button.btn-primary {
+      background: linear-gradient(180deg, #1f6feb 0%, #1a56db 100%);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 0.75rem 1.75rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s;
+      height: 44px;
+      box-shadow: 0 4px 14px rgba(31, 111, 235, 0.35);
+    }
+
+    button.btn-primary:hover {
+      background: linear-gradient(180deg, #388bfd 0%, #1f6feb 100%);
+      transform: translateY(-1px);
+    }
+
+    button.btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .presets {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .presets span {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .chip {
+      background: rgba(48, 54, 61, 0.5);
+      border: 1px solid var(--card-border);
+      color: var(--text-main);
+      border-radius: 20px;
+      padding: 0.3rem 0.8rem;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .chip:hover {
+      background: rgba(56, 139, 253, 0.2);
+      border-color: var(--accent-blue);
+      color: var(--accent-hover);
+    }
+
+    .result-container {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 1.5rem;
+      backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .result-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .result-header h2 {
+      font-size: 1.15rem;
+      font-weight: 600;
+    }
+
+    .result-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .btn-secondary {
+      background: rgba(48, 54, 61, 0.5);
+      border: 1px solid var(--card-border);
+      color: var(--text-main);
+      border-radius: 6px;
+      padding: 0.5rem 0.9rem;
+      font-size: 0.85rem;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(56, 139, 253, 0.15);
+      border-color: var(--accent-blue);
+      color: var(--accent-hover);
+    }
+
+    .image-wrapper {
+      background: #ffffff;
+      border-radius: 10px;
+      overflow-x: auto;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 400px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      position: relative;
+    }
+
+    .image-wrapper img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .loader {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+      color: var(--text-muted);
+      padding: 3rem;
+    }
+
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 3px solid rgba(56, 139, 253, 0.2);
+      border-top-color: var(--accent-blue);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .features-info {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 0.5rem;
+    }
+
+    .feature-card {
+      background: rgba(22, 27, 34, 0.5);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+    }
+
+    .feature-card h3 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--accent-hover);
+      margin-bottom: 0.3rem;
+    }
+
+    .feature-card p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    footer {
+      text-align: center;
+      padding: 1.5rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      border-top: 1px solid var(--card-border);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brand-icon">AI</div>
+      <div class="brand-text">
+        <h1>ECMWF AIFS Meteogram</h1>
+        <p>ECMWF Artificial Intelligence Forecasting System (50 Ensemble Members) — SHMÚ EPSGRAM Style</p>
+      </div>
+    </div>
+    <span class="badge">AIFS 0.25° Open Data</span>
+  </header>
+
+  <main>
+    <section class="control-panel">
+      <form id="meteogram-form">
+        <div class="form-row">
+          <div class="form-group" style="flex: 2;">
+            <label for="location">Location / Coordinates (lat, lon)</label>
+            <input type="text" id="location" name="location" value="Bratislava-Koliba" placeholder="e.g. Bratislava-Koliba, Liptovsky Mikulas, Jasna, Plavecke Podhradie" required />
+          </div>
+
+          <div class="form-group">
+            <label for="days">Forecast Horizon</label>
+            <select id="days" name="days">
+              <option value="15" selected>15 days (Full AI horizon)</option>
+              <option value="10">10 days</option>
+              <option value="7">7 days (1 week)</option>
+              <option value="5">5 days</option>
+              <option value="3">3 days</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="lang">Language</label>
+            <select id="lang" name="lang">
+              <option value="en" selected>English (Default)</option>
+              <option value="sk">Slovenčina (SHMÚ)</option>
+            </select>
+          </div>
+
+          <button type="submit" id="generate-btn" class="btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            Generate Graph
+          </button>
+        </div>
+
+        <div class="presets">
+          <span>Default Locations:</span>
+          <button type="button" class="chip active-preset" onclick="setLoc('Bratislava-Koliba')">📍 Bratislava-Koliba</button>
+          <button type="button" class="chip" onclick="setLoc('Liptovsky Mikulas')">📍 Liptovsky Mikulas</button>
+          <button type="button" class="chip" onclick="setLoc('Jasna')">📍 Jasna</button>
+          <button type="button" class="chip" onclick="setLoc('Plavecke Podhradie')">📍 Plavecke Podhradie</button>
+          <span style="margin-left: 0.5rem;">More:</span>
+          <button type="button" class="chip" onclick="setLoc('Košice')">Košice</button>
+          <button type="button" class="chip" onclick="setLoc('Poprad')">Poprad / Tatry</button>
+          <button type="button" class="chip" onclick="setLoc('Vienna')">Vienna</button>
+          <button type="button" class="chip" onclick="setLoc('Prague')">Prague</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="result-container">
+      <div class="result-header">
+        <h2 id="result-title">Meteogram: Bratislava-Koliba (ECMWF AIFS 15-day)</h2>
+        <div class="result-actions">
+          <a id="download-btn" class="btn-secondary" href="/api/image?location=Bratislava-Koliba&days=15&lang=en" download="bratislava_koliba_meteogram.png">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Download PNG
+          </a>
+          <button class="btn-secondary" onclick="openFullSize()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="15 3 21 3 21 9"></polyline>
+              <polyline points="9 21 3 21 3 15"></polyline>
+              <line x1="21" y1="3" x2="14" y2="10"></line>
+              <line x1="3" y1="21" x2="10" y2="14"></line>
+            </svg>
+            Full Size
+          </button>
+        </div>
+      </div>
+
+      <div class="image-wrapper">
+        <div id="loader" class="loader">
+          <div class="spinner"></div>
+          <p id="loader-status">Fetching 50 ECMWF AIFS ensemble members and rendering meteogram...</p>
+        </div>
+        <img id="meteogram-img" src="/api/image?location=Bratislava-Koliba&days=15&lang=en" alt="Meteogram" onload="hideLoader()" onerror="handleError()" />
+      </div>
+    </section>
+
+    <div class="features-info">
+      <div class="feature-card">
+        <h3>1. 2m Air Temperature (Top Panel)</h3>
+        <p>Plots the median (red line), 25–75% quartile (darker salmon band), full 50 AI member spread (light pink band), daily min/max labels, and 0°C freezing level.</p>
+      </div>
+      <div class="feature-card">
+        <h3>2. Precipitation & Snowfall</h3>
+        <p>6-hour interval bars for liquid rain and solid snow with daily total sums (Σ mm) and maximum ensemble member ticks.</p>
+      </div>
+      <div class="feature-card">
+        <h3>3. Cloud Cover, Wind & MSLP</h3>
+        <p>Total cloud cover (0–100%), 10m wind speed, meteorological wind direction arrows, and mean sea level pressure.</p>
+      </div>
+      <div class="feature-card">
+        <h3>4. Astronomical Sunrise & Sunset</h3>
+        <p>Accurate grey nighttime shading computed for the exact geographic coordinates, matching the SHMÚ EPSGRAM convention.</p>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    Data: ECMWF AIFS Open Data &copy; European Centre for Medium-Range Weather Forecasts (CC-BY 4.0) via Open-Meteo. Layout inspired by SHMÚ EPSGRAM.
+  </footer>
+
+  <script>
+    function setLoc(name) {
+      document.getElementById('location').value = name;
+      document.getElementById('meteogram-form').dispatchEvent(new Event('submit'));
+    }
+
+    function showLoader(text) {
+      document.getElementById('loader-status').innerText = text || 'Rendering meteogram...';
+      document.getElementById('loader').style.display = 'flex';
+      document.getElementById('meteogram-img').style.display = 'none';
+      document.getElementById('generate-btn').disabled = true;
+    }
+
+    function hideLoader() {
+      document.getElementById('loader').style.display = 'none';
+      document.getElementById('meteogram-img').style.display = 'block';
+      document.getElementById('generate-btn').disabled = false;
+    }
+
+    function handleError() {
+      document.getElementById('loader').style.display = 'flex';
+      document.getElementById('loader-status').innerText = 'Error generating meteogram. Please check the location name.';
+      document.getElementById('generate-btn').disabled = false;
+    }
+
+    function openFullSize() {
+      const img = document.getElementById('meteogram-img');
+      if (img && img.src) {
+        window.open(img.src, '_blank');
+      }
+    }
+
+    document.getElementById('meteogram-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const loc = document.getElementById('location').value.trim();
+      const days = document.getElementById('days').value;
+      const lang = document.getElementById('lang').value;
+      if (!loc) return;
+
+      document.getElementById('result-title').innerText = `Meteogram: ${loc} (ECMWF AIFS ${days}-day)`;
+      showLoader(`Fetching 50 AI ensemble members for ${loc} (${days} days)...`);
+
+      const t = Date.now();
+      const url = `/api/image?location=${encodeURIComponent(loc)}&days=${days}&lang=${lang}&_t=${t}`;
+      const img = document.getElementById('meteogram-img');
+      img.src = url;
+
+      const dl = document.getElementById('download-btn');
+      dl.href = url;
+      dl.download = `${loc.toLowerCase().replace(/[^a-z0-9]/g, '_')}_meteogram.png`;
+    });
+  </script>
+</body>
+</html>
