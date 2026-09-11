@@ -18,6 +18,7 @@ matplotlib.use("Agg")  # Non-interactive backend for server/CLI
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+import matplotlib.transforms as mtransforms
 import numpy as np
 
 
@@ -140,20 +141,21 @@ class MeteogramRenderer:
 
         # Scale width dynamically based on duration (from 14 inches up to 24 inches for 15 days)
         fig_width = max(14.0, min(24.0, 10.0 + forecast_days * 0.9))
+        fig_height = 18.0
 
         # Create Figure with 5 subplots (Temperature on top!)
         fig, axes = plt.subplots(
             nrows=5,
             ncols=1,
-            figsize=(fig_width, 15.5),
+            figsize=(fig_width, fig_height),
             sharex=True,
             gridspec_kw={
-                "height_ratios": [2.4, 1.8, 1.5, 1.9, 1.6],
-                "hspace": 0.08,
-                "top": 0.925,
-                "bottom": 0.065,
-                "left": 0.08,
-                "right": 0.96,
+                "height_ratios": [2.5, 1.8, 1.5, 1.9, 1.6],
+                "hspace": 0.22,
+                "top": 0.938,
+                "bottom": 0.055,
+                "left": 0.075,
+                "right": 0.965,
             },
         )
 
@@ -191,23 +193,44 @@ class MeteogramRenderer:
             zorder=4,
         )
 
-        # Freezing line (0°C)
-        ax_temp.axhline(0, color="#1d3557", linestyle="--", linewidth=1.2, alpha=0.85, zorder=3)
-        ax_temp.text(
-            num_times[-1],
-            0,
-            " 0°C",
-            verticalalignment="center",
-            fontsize=9,
-            fontweight="bold",
-            color="#1d3557",
-        )
+        # Thicker lines to -10, 0, 10, 20, 30 degrees with distinctive light colors:
+        # -10: light blue, 0: blue, 10: yellow, 20: orange, 30: red
+        temp_levels = [
+            (-10, "#38bdf8", " -10°C"),  # light blue
+            (0,   "#0284c7", "   0°C"),  # blue
+            (10,  "#eab308", "  10°C"),  # yellow
+            (20,  "#f97316", "  20°C"),  # orange
+            (30,  "#ef4444", "  30°C"),  # red
+        ]
+
+        t_min_data = float(np.nanmin(temp["min"]))
+        t_max_data = float(np.nanmax(temp["max"]))
+        y_min = min(-2.0, t_min_data - 2.0)
+        y_max = max(32.0, t_max_data + 3.0)
+        if t_min_data < -8.0:
+            y_min = min(-12.0, t_min_data - 2.0)
+        ax_temp.set_ylim(y_min, y_max)
+
+        for deg, color, lbl in temp_levels:
+            if y_min <= deg <= y_max:
+                ax_temp.axhline(deg, color=color, linestyle="--", linewidth=1.5, alpha=0.85, zorder=3)
+                ax_temp.text(
+                    num_times[-1],
+                    deg,
+                    lbl,
+                    verticalalignment="center",
+                    ha="left",
+                    fontsize=8.5,
+                    fontweight="bold",
+                    color=color,
+                    zorder=5,
+                )
 
         # Annotate daily min / max temperatures for the median curve
         self._annotate_daily_temp(ax_temp, times, num_times, temp["median"])
 
         ax_temp.set_ylabel(self.t["temp_title"], fontsize=10.5, fontweight="bold", color="#800f2f")
-        ax_temp.grid(True, linestyle=":", alpha=0.55, color="#6c757d", zorder=1)
+        ax_temp.grid(True, linestyle=":", alpha=0.45, color="#94a3b8", zorder=1)
 
         # Include Night shading in legend
         from matplotlib.patches import Patch
@@ -218,61 +241,93 @@ class MeteogramRenderer:
         ax_temp.legend(handles=handles, labels=labels, loc="upper right", framealpha=0.92, fontsize=8.5, ncol=4)
 
         # -------------------------------------------------------------
-        # PANEL 2: PRECIPITATION & SNOWFALL
+        # PANEL 2: PRECIPITATION & SNOWFALL (6h intervals + Sqrt scaling)
         # -------------------------------------------------------------
-        precip = stats["precipitation"]
-        snow = stats["snowfall"]
+        precip_raw = stats["precipitation"]
+        snow_raw = stats["snowfall"]
 
-        # Interval width in days for bar chart
-        if len(num_times) > 1:
-            bar_width = (num_times[1] - num_times[0]) * 0.85
-        else:
-            bar_width = 0.2
+        # Aggregate hourly data into 6-hour blocks: (00-06, 06-12, 12-18, 18-00 in active tz)
+        blocks: Dict[datetime, List[int]] = {}
+        for i, t in enumerate(times):
+            block_start_hour = (t.hour // 6) * 6
+            block_dt = t.replace(hour=block_start_hour, minute=0, second=0, microsecond=0)
+            blocks.setdefault(block_dt, []).append(i)
 
-        # Rain (liquid) vs Snow
-        rain_vals = np.maximum(0, precip["median"] - snow["median"])
-        snow_vals = snow["median"]
+        block_dts = sorted(blocks.keys())
+        block_num_times = [mdates.date2num(b + timedelta(hours=3)) for b in block_dts]
+        bar_width = (6.0 / 24.0) * 0.82  # ~5 hours wide in days
 
+        rain_6h = []
+        snow_6h = []
+        max_precip_6h = []
+
+        for b_dt in block_dts:
+            idxs = blocks[b_dt]
+            p_med_sum = float(np.sum(precip_raw["median"][idxs]))
+            s_med_sum = float(np.sum(snow_raw["median"][idxs]))
+            r_med_sum = max(0.0, p_med_sum - s_med_sum)
+            rain_6h.append(r_med_sum)
+            snow_6h.append(s_med_sum)
+            max_precip_6h.append(float(np.sum(precip_raw["max"][idxs])))
+
+        rain_6h = np.array(rain_6h)
+        snow_6h = np.array(snow_6h)
+        max_precip_6h = np.array(max_precip_6h)
+
+        # Plot stacked bars with clean edges
         ax_precip.bar(
-            num_times,
-            rain_vals,
+            block_num_times,
+            rain_6h,
             width=bar_width,
             color="#1d70b8",
+            edgecolor="#0f4c81",
+            linewidth=0.8,
             alpha=0.85,
             label=self.t["rain"],
             zorder=3,
         )
         ax_precip.bar(
-            num_times,
-            snow_vals,
-            bottom=rain_vals,
+            block_num_times,
+            snow_6h,
+            bottom=rain_6h,
             width=bar_width,
             color="#00b4d8",
+            edgecolor="#0077b6",
+            linewidth=0.8,
             alpha=0.9,
             label=self.t["snow"],
             zorder=3,
         )
 
-        # Error ticks for ensemble max spread
+        # Error ticks for ensemble max spread across 6h
         ax_precip.plot(
-            num_times,
-            precip["max"],
+            block_num_times,
+            max_precip_6h,
             color="#03045e",
             linestyle="",
             marker="_",
-            markersize=6,
-            markeredgewidth=1.6,
-            alpha=0.75,
+            markersize=9,
+            markeredgewidth=2.0,
+            alpha=0.85,
             label=self.t["max_precip"],
             zorder=4,
         )
 
-        # Make sure Y axis has enough room for daily sum labels
-        max_p_val = max(3.0, float(np.nanmax(precip["max"])) * 1.35)
+        # Better scaling for precipitation: Square-root scale allows small amounts (0.1 - 2mm)
+        # to be clearly visible while still cleanly accommodating heavy rain without squashing!
+        max_p_val = max(2.5, float(np.nanmax(max_precip_6h)) * 1.25)
+        ax_precip.set_yscale("function", functions=(lambda v: np.sqrt(np.maximum(0, v)), lambda v: v**2))
         ax_precip.set_ylim(0, max_p_val)
 
+        possible_ticks = [0, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 15.0, 20.0, 30.0, 50.0]
+        precip_ticks = [t for t in possible_ticks if t <= max_p_val]
+        if len(precip_ticks) < 4:
+            precip_ticks = [0, 0.5, 1.0, 2.0, max_p_val]
+        ax_precip.set_yticks(precip_ticks)
+        ax_precip.set_yticklabels([f"{t:g}" for t in precip_ticks], fontsize=8.5)
+
         # Annotate daily precipitation sum
-        self._annotate_daily_precip(ax_precip, times, num_times, precip["median"])
+        self._annotate_daily_precip(ax_precip, times, num_times, precip_raw["median"])
 
         ax_precip.set_ylabel(self.t["precip_title"], fontsize=10, fontweight="bold", color="#0077b6")
         ax_precip.grid(True, linestyle=":", alpha=0.55, color="#6c757d", zorder=1)
@@ -430,9 +485,9 @@ class MeteogramRenderer:
         ax_press.legend(loc="upper right", framealpha=0.9, fontsize=8.5, ncol=3)
 
         # -------------------------------------------------------------
-        # TIMELINE CONFIGURATION & LABELS
+        # TIMELINE CONFIGURATION & LABELS ACROSS ALL PANES
         # -------------------------------------------------------------
-        self._format_x_axis(ax_press, start_time, end_time, active_tz, tz_badge)
+        self._format_axes_timeline(fig, axes, start_time, end_time, active_tz, tz_badge)
 
         # Super Title / Header banner
         loc_name = location_info.get("name", "Unknown")
@@ -452,8 +507,8 @@ class MeteogramRenderer:
         )
 
         fig.text(
-            0.09,
-            0.968,
+            0.075,
+            0.972,
             header_title,
             fontsize=15,
             fontweight="bold",
@@ -461,8 +516,8 @@ class MeteogramRenderer:
             ha="left",
         )
         fig.text(
-            0.09,
-            0.942,
+            0.075,
+            0.948,
             header_sub,
             fontsize=10.5,
             color="#4a4e69",
@@ -520,47 +575,63 @@ class MeteogramRenderer:
                     )
                 current_day += timedelta(days=1)
 
-    def _format_x_axis(
+    def _format_axes_timeline(
         self,
-        ax: plt.Axes,
+        fig: plt.Figure,
+        axes: List[plt.Axes],
         start_time: datetime,
         end_time: datetime,
         active_tz: Any,
         tz_badge: str,
     ):
-        """Format bottom X-axis with cleanly separated hours, day names, and calendar dates in active timezone."""
+        """Format X-axes on all panes: 6-hour ticks and day badges both between graph panes and at the bottom."""
         x_min = mdates.date2num(start_time)
         x_max = mdates.date2num(end_time)
-        ax.set_xlim(x_min, x_max)
 
-        # 6-hour interval ticks in the active timezone
-        hours_locator = mdates.HourLocator(byhour=[0, 6, 12, 18], tz=active_tz)
-        ax.xaxis.set_major_locator(hours_locator)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H", tz=active_tz))
-        ax.tick_params(axis="x", which="major", labelsize=8.5, length=4, pad=4)
+        for p_idx, ax in enumerate(axes):
+            ax.set_xlim(x_min, x_max)
+            is_bottom = (p_idx == len(axes) - 1)
 
-        # Place day names & dates in a neat strip right under the hours
-        curr = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
-        while curr <= end_time:
-            midday = curr + timedelta(hours=12)
-            num_mid = mdates.date2num(midday)
-            if num_mid >= x_min and num_mid <= x_max:
-                day_name = self.t["days"][curr.weekday()]
-                date_str = curr.strftime("%d.%m.")
-                label_text = f"{day_name}\n{date_str}"
-                ax.text(
-                    num_mid,
-                    -0.26,
-                    label_text,
-                    ha="center",
-                    va="top",
-                    fontsize=9,
-                    fontweight="bold",
-                    color="#212529",
-                    transform=ax.get_xaxis_transform(),
-                    bbox=dict(boxstyle="square,pad=0.25", fc="#f8f9fa", ec="#ced4da", lw=0.8, alpha=0.9),
-                )
-            curr += timedelta(days=1)
+            # 6-hour interval ticks in active timezone
+            hours_locator = mdates.HourLocator(byhour=[0, 6, 12, 18], tz=active_tz)
+            ax.xaxis.set_major_locator(hours_locator)
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%H", tz=active_tz))
+            ax.tick_params(axis="x", which="major", labelbottom=True, labelsize=8, length=3, pad=2)
+
+            # Use point offset so badges are placed at identical physical distances regardless of subplot height
+            badge_y_offset = -24 if is_bottom else -18
+            trans_badge = mtransforms.offset_copy(ax.get_xaxis_transform(), fig=fig, y=badge_y_offset, units="points")
+
+            curr = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
+            while curr <= end_time:
+                midday = curr + timedelta(hours=12)
+                num_mid = mdates.date2num(midday)
+                if num_mid >= x_min and num_mid <= x_max:
+                    day_name = self.t["days"][curr.weekday()]
+                    date_str = curr.strftime("%d.%m.")
+                    if is_bottom:
+                        badge_text = f"{day_name}\n{date_str}"
+                        fontsize = 8.5
+                        pad = 0.25
+                    else:
+                        badge_text = f"{day_name} {date_str}"
+                        fontsize = 8.0
+                        pad = 0.18
+
+                    ax.text(
+                        num_mid,
+                        0,
+                        badge_text,
+                        ha="center",
+                        va="top",
+                        fontsize=fontsize,
+                        fontweight="bold",
+                        color="#1e293b",
+                        transform=trans_badge,
+                        bbox=dict(boxstyle=f"square,pad={pad}", fc="#f8fafc", ec="#cbd5e1", lw=0.7, alpha=0.92),
+                        zorder=10,
+                    )
+                curr += timedelta(days=1)
 
     def _annotate_daily_temp(
         self,
