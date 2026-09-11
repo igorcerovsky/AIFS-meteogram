@@ -175,7 +175,7 @@ class MeteogramRenderer:
                 "height_ratios": [2.5, 1.8, 1.5, 1.9, 1.6],
                 "hspace": 0.22,
                 "top": 0.938,
-                "bottom": 0.055,
+                "bottom": 0.060,
                 "left": 0.075,
                 "right": 0.965,
             },
@@ -534,7 +534,9 @@ class MeteogramRenderer:
         # -------------------------------------------------------------
         # TIMELINE CONFIGURATION & LABELS ACROSS ALL PANES
         # -------------------------------------------------------------
-        self._format_axes_timeline(fig, axes, start_time, end_time, active_tz, tz_badge)
+        self._format_axes_timeline(
+            fig, axes, start_time, end_time, active_tz, tz_badge, sun_times_tz
+        )
 
         # Super Title / Header banner
         loc_name = location_info.get("name", "Unknown")
@@ -637,12 +639,29 @@ class MeteogramRenderer:
         end_time: datetime,
         active_tz: Any,
         tz_badge: str,
+        sun_times_tz: Optional[List[Tuple[datetime, datetime]]] = None,
     ):
-        """Format X-axes on all panes: 6-hour ticks and day badges both between graph panes and at the bottom."""
+        """Format X-axes on all panes: ticks and day badges both between graph panes and at the bottom with sunrise/sunset."""
         x_min = mdates.date2num(start_time)
         x_max = mdates.date2num(end_time)
 
         forecast_days = (end_time - start_time).total_seconds() / 86400.0
+
+        def get_sun_pair(target_day: datetime) -> Optional[Tuple[datetime, datetime]]:
+            if not sun_times_tz:
+                return None
+            midday = target_day + timedelta(hours=12)
+            best_pair = None
+            min_diff = None
+            for r, s in sun_times_tz:
+                solar_noon = r + (s - r) / 2
+                diff = abs((solar_noon - midday).total_seconds())
+                if min_diff is None or diff < min_diff:
+                    min_diff = diff
+                    best_pair = (r, s)
+            if min_diff is not None and min_diff < 18 * 3600:
+                return best_pair
+            return None
 
         for p_idx, ax in enumerate(axes):
             ax.set_xlim(x_min, x_max)
@@ -673,7 +692,7 @@ class MeteogramRenderer:
             ax.tick_params(axis="x", which="major", labelbottom=True, labelsize=8, length=3, pad=2)
 
             # Use point offset so badges are placed at identical physical distances regardless of subplot height
-            badge_y_offset = -24 if is_bottom else -18
+            badge_y_offset = -23 if is_bottom else -18
             trans_badge = mtransforms.offset_copy(ax.get_xaxis_transform(), fig=fig, y=badge_y_offset, units="points")
 
             curr = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -684,9 +703,14 @@ class MeteogramRenderer:
                     day_name = self.t["days"][curr.weekday()]
                     date_str = curr.strftime("%d.%m.")
                     if is_bottom:
-                        badge_text = f"{day_name}\n{date_str}"
-                        fontsize = 8.5
-                        pad = 0.25
+                        sun_str = ""
+                        pair = get_sun_pair(curr)
+                        if pair:
+                            r, s = pair
+                            sun_str = f"\n☀ {r.strftime('%H:%M')}   ☽ {s.strftime('%H:%M')}"
+                        badge_text = f"{day_name} {date_str}{sun_str}"
+                        fontsize = 7.8 if forecast_days > 10 else 8.5
+                        pad = 0.26
                     else:
                         badge_text = f"{day_name} {date_str}"
                         fontsize = 8.0
@@ -702,7 +726,7 @@ class MeteogramRenderer:
                         fontweight="bold",
                         color="#1e293b",
                         transform=trans_badge,
-                        bbox=dict(boxstyle=f"square,pad={pad}", fc="#f8fafc", ec="#cbd5e1", lw=0.7, alpha=0.92),
+                        bbox=dict(boxstyle=f"square,pad={pad}", fc="#f8fafc", ec="#cbd5e1", lw=0.75, alpha=0.94),
                         zorder=10,
                     )
                 curr += timedelta(days=1)
