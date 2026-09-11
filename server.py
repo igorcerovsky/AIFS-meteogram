@@ -68,10 +68,14 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
             if lang_param not in renderers:
                 lang_param = "en"
 
-            # Cache key (includes renderer.py mtime to automatically invalidate on style updates)
+            model_param = query.get("model", ["aifs"])[0].lower()
+            if model_param not in ["aifs", "icon_d2", "icon_eu"]:
+                model_param = "aifs"
+
+            # Cache key (includes model and renderer.py mtime to automatically invalidate on style updates)
             renderer_file = os.path.join(os.path.dirname(__file__), "renderer.py")
             renderer_mtime = int(os.path.getmtime(renderer_file)) if os.path.exists(renderer_file) else 0
-            cache_key = hashlib.md5(f"{loc_param}_{days_param}_{lang_param}_{tz_param}_{renderer_mtime}".encode()).hexdigest()
+            cache_key = hashlib.md5(f"{loc_param}_{days_param}_{lang_param}_{tz_param}_{model_param}_{renderer_mtime}".encode()).hexdigest()
             cache_file = os.path.join(CACHE_DIR, f"{cache_key}.png")
 
             # Check if cached recently (under 1 hour)
@@ -87,7 +91,7 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
                     loc_info = client.geocode(loc_param)
                     lat = loc_info["latitude"]
                     lon = loc_info["longitude"]
-                    stats = client.fetch_aifs_ensemble(lat, lon, days=days_param)
+                    stats = client.fetch_ensemble(lat, lon, days=days_param, model=model_param)
                     sun_times = client.fetch_sun_times(lat, lon, days=days_param)
 
                     renderer = renderers[lang_param]

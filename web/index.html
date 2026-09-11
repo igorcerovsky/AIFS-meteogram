@@ -360,13 +360,19 @@
           </div>
 
           <div class="form-group">
-            <label for="days">Forecast Horizon</label>
+            <label for="days">Forecast Horizon & Model</label>
             <select id="days" name="days">
-              <option value="15" selected>15 days (Full AI horizon)</option>
-              <option value="10">10 days</option>
-              <option value="7">7 days (1 week)</option>
-              <option value="5">5 days</option>
-              <option value="3">3 days</option>
+              <optgroup label="ECMWF AIFS (Global AI Ensemble - 50 members)">
+                <option value="15" selected>15 days (Full AI horizon)</option>
+                <option value="10">10 days</option>
+                <option value="7">7 days (1 week)</option>
+                <option value="5">5 days</option>
+                <option value="3">3 days</option>
+              </optgroup>
+              <optgroup label="Regional High-Resolution Ensembles (ALADIN style)">
+                <option value="icon_eu_5">5 days (DWD ICON-EU, 7 km - 40 members)</option>
+                <option value="icon_d2_2">2 days / 48h (DWD ICON-D2, 2.2 km - 20 members)</option>
+              </optgroup>
             </select>
           </div>
 
@@ -503,14 +509,32 @@
     function updateMeteogram() {
       const locInput = document.getElementById('location');
       const loc = locInput.value.trim();
-      const days = document.getElementById('days').value;
+      const rawHorizon = document.getElementById('days').value;
       const lang = document.getElementById('lang').value;
       const tz = document.getElementById('tz').value;
       if (!loc) return;
 
+      let model = 'aifs';
+      let days = 15;
+      let modelLabel = 'ECMWF AIFS (15-day)';
+
+      if (rawHorizon === 'icon_d2_2' || rawHorizon === 'icon_d2') {
+        model = 'icon_d2';
+        days = 2;
+        modelLabel = 'DWD ICON-D2 (2.2 km, 48h)';
+      } else if (rawHorizon === 'icon_eu_5' || rawHorizon === 'icon_eu') {
+        model = 'icon_eu';
+        days = 5;
+        modelLabel = 'DWD ICON-EU (7.0 km, 5-day)';
+      } else {
+        model = 'aifs';
+        days = parseInt(rawHorizon, 10) || 15;
+        modelLabel = `ECMWF AIFS (${days}-day)`;
+      }
+
       // Update UI title and show loading animation
-      document.getElementById('result-title').innerText = `Meteogram: ${loc} (ECMWF AIFS ${days}-day)`;
-      showLoader(`Fetching 50 AI ensemble members for ${loc} (${days} days)...`);
+      document.getElementById('result-title').innerText = `Meteogram: ${loc} (${modelLabel})`;
+      showLoader(`Fetching ensemble forecast for ${loc} (${modelLabel})...`);
 
       // Update active chip highlight
       document.querySelectorAll('.chip').forEach(btn => {
@@ -525,7 +549,8 @@
       // Update URL query parameters cleanly without page refresh
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.set('location', loc);
-      newUrl.searchParams.set('days', days);
+      newUrl.searchParams.set('days', rawHorizon);
+      newUrl.searchParams.set('model', model);
       newUrl.searchParams.set('lang', lang);
       newUrl.searchParams.set('tz', tz);
       window.history.replaceState({}, '', newUrl.toString());
@@ -533,12 +558,12 @@
       // Track request ID to prevent race conditions
       const requestId = ++currentRequestId;
       const t = Date.now();
-      const imageUrl = `/api/image?location=${encodeURIComponent(loc)}&days=${days}&lang=${lang}&tz=${tz}&_t=${t}`;
+      const imageUrl = `/api/image?location=${encodeURIComponent(loc)}&days=${days}&model=${model}&lang=${lang}&tz=${tz}&_t=${t}`;
 
       // Update download link
       const dl = document.getElementById('download-btn');
       dl.href = imageUrl;
-      dl.download = `${loc.toLowerCase().replace(/[^a-z0-9]/g, '_')}_meteogram.png`;
+      dl.download = `${loc.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${model}_meteogram.png`;
 
       // Preload image so old image remains hidden during load and new one appears immediately
       const preloadImg = new Image();
@@ -575,11 +600,18 @@
       const params = new URLSearchParams(window.location.search);
       const locParam = params.get('location');
       const daysParam = params.get('days');
+      const modelParam = params.get('model');
       const langParam = params.get('lang');
       const tzParam = params.get('tz');
 
       if (locParam) document.getElementById('location').value = locParam;
-      if (daysParam) document.getElementById('days').value = daysParam;
+      if (modelParam === 'icon_d2') {
+        document.getElementById('days').value = 'icon_d2_2';
+      } else if (modelParam === 'icon_eu') {
+        document.getElementById('days').value = 'icon_eu_5';
+      } else if (daysParam) {
+        document.getElementById('days').value = daysParam;
+      }
       if (langParam) document.getElementById('lang').value = langParam;
       if (tzParam) document.getElementById('tz').value = tzParam;
 

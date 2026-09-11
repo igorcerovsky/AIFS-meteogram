@@ -25,6 +25,13 @@ import numpy as np
 LANG_TEXTS = {
     "sk": {
         "title_model": "Model: ECMWF AIFS 0.25° Ensemble (50 AI členov)",
+        "model_prefix": "Model",
+        "models": {
+            "aifs": "ECMWF AIFS 0.25° Ensemble (50 AI členov)",
+            "icon_d2": "DWD ICON-D2 2.2 km Ensemble (20 členov)",
+            "icon_eu": "DWD ICON-EU 7.0 km Ensemble (40 členov)",
+        },
+        "fallback_notice": "(zmena z ICON-D2: poloha mimo domény)",
         "alt": "Nadm. výška",
         "coord": "Súradnice",
         "run_prefix": "Beh",
@@ -49,6 +56,13 @@ LANG_TEXTS = {
     },
     "en": {
         "title_model": "Model: ECMWF AIFS 0.25° Ensemble (50 AI members)",
+        "model_prefix": "Model",
+        "models": {
+            "aifs": "ECMWF AIFS 0.25° Ensemble (50 AI members)",
+            "icon_d2": "DWD ICON-D2 2.2 km Ensemble (20 members)",
+            "icon_eu": "DWD ICON-EU 7.0 km Ensemble (40 members)",
+        },
+        "fallback_notice": "(fallback from ICON-D2: location outside domain)",
         "alt": "Elevation",
         "coord": "Coordinates",
         "run_prefix": "Run",
@@ -500,8 +514,15 @@ class MeteogramRenderer:
         run_time_str = raw_start.astimezone(active_tz).strftime("%Y-%m-%d %H:%M")
 
         header_title = f"{loc_str} ({lat:.2f}°N, {lon:.2f}°E, {self.t['alt']}: {elev:.0f} m)"
+        
+        active_model = stats.get("model", "aifs")
+        model_desc = self.t.get("models", {}).get(active_model, self.t["title_model"])
+        if stats.get("model_fallback"):
+            model_desc += f" {self.t.get('fallback_notice', '')}"
+        model_header = f"{self.t['model_prefix']}: {model_desc}"
+
         header_sub = (
-            f"{self.t['title_model']}  |  "
+            f"{model_header}  |  "
             f"{self.t['run_prefix']}: {run_time_str} ({tz_badge})  |  "
             f"{self.t['time_prefix']}: {tz_label}"
         )

@@ -13,30 +13,32 @@ import argparse
 import os
 import sys
 from datetime import datetime
+from typing import Optional
 
 from aifs_client import AIFSClient
 from renderer import MeteogramRenderer
 
 
 def generate_meteogram(
-    location: str,
+    location: str = "Bratislava-Koliba",
     days: int = 15,
-    output: str = None,
+    output: Optional[str] = None,
     lang: str = "en",
     tz: str = "local",
     dpi: int = 200,
+    model: str = "aifs",
 ) -> str:
-    """End-to-end pipeline: geocode -> fetch AIFS ensemble -> render image."""
+    """End-to-end pipeline: geocode, fetch ensemble, fetch sun times, render."""
     client = AIFSClient()
     renderer = MeteogramRenderer(lang=lang)
 
     print(f"[*] Geocoding location: '{location}'...")
     loc_info = client.geocode(location)
-    loc_name = loc_info["name"]
-    country = loc_info["country"]
     lat = loc_info["latitude"]
     lon = loc_info["longitude"]
-    elev = loc_info["elevation"]
+    elev = loc_info.get("elevation", 0)
+    loc_name = loc_info.get("name", location)
+    country = loc_info.get("country", "")
 
     print(f"[✓] Found: {loc_name} ({country}) at {lat:.4f}°N, {lon:.4f}°E (alt: {elev:.0f}m)")
 
@@ -45,15 +47,15 @@ def generate_meteogram(
 
     if not output:
         clean_name = "".join(c if c.isalnum() else "_" for c in loc_name.lower())
-        output = os.path.join(img_dir, f"{clean_name}_aifs_meteogram.png")
+        output = os.path.join(img_dir, f"{clean_name}_{model}_meteogram.png")
     elif not os.path.isabs(output) and not os.path.dirname(output):
         # Bare filename (e.g. -o output.png) placed inside .img folder
         output = os.path.join(img_dir, output)
 
-    print(f"[*] Fetching ECMWF AIFS 0.25° 50-member ensemble ({days} days - full AI horizon)...")
-    stats = client.fetch_aifs_ensemble(lat, lon, days=days)
+    print(f"[*] Fetching {model.upper()} ensemble data ({days} days)...")
+    stats = client.fetch_ensemble(lat, lon, days=days, model=model)
     timesteps = len(stats["times"])
-    print(f"[✓] Retrieved {timesteps} time steps across 50 AI ensemble members.")
+    print(f"[✓] Retrieved {timesteps} time steps across ensemble members.")
 
     print(f"[*] Fetching sunrise & sunset times for {loc_name}...")
     sun_times = client.fetch_sun_times(lat, lon, days=days)
@@ -73,7 +75,7 @@ def generate_meteogram(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate an SHMÚ-styled meteogram from ECMWF AI-model (AIFS) ensemble data."
+        description="Generate an SHMÚ-styled meteogram from ECMWF AI-model (AIFS) or DWD ICON ensemble data."
     )
     parser.add_argument(
         "-l",
@@ -83,12 +85,20 @@ def main():
         help="City or preset name (e.g. 'Bratislava-Koliba', 'Liptovsky Mikulas', 'Jasna', 'Plavecke Podhradie') or 'lat,lon' coordinates. Default: Bratislava-Koliba.",
     )
     parser.add_argument(
+        "-m",
+        "--model",
+        type=str,
+        default="aifs",
+        choices=["aifs", "icon_d2", "icon_eu"],
+        help="Ensemble model: 'aifs' (ECMWF 0.25° AI), 'icon_d2' (DWD 2.2 km, 48h), 'icon_eu' (DWD 7.0 km, 5-day). Default: aifs.",
+    )
+    parser.add_argument(
         "-d",
         "--days",
         type=int,
         default=15,
         choices=range(1, 17),
-        help="Forecast duration in days (1 to 16, full AI model horizon). Default: 15.",
+        help="Forecast duration in days (1 to 16). Default: 15.",
     )
     parser.add_argument(
         "-o",
@@ -128,6 +138,7 @@ def main():
             lang=args.lang,
             tz=args.tz,
             dpi=args.dpi,
+            model=args.model,
         )
     except Exception as e:
         print(f"[ERROR] Failed to generate meteogram: {e}", file=sys.stderr)

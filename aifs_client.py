@@ -170,19 +170,42 @@ class AIFSClient:
                 pairs.append((rise, sunset))
         return pairs
 
-    def fetch_aifs_ensemble(
-        self, latitude: float, longitude: float, days: int = 15
+    MODEL_MAPPING = {
+        "aifs": {
+            "api_model": "ecmwf_aifs025",
+            "name": "ECMWF AIFS 0.25°",
+            "max_days": 16,
+            "default_days": 15,
+        },
+        "icon_d2": {
+            "api_model": "icon_d2",
+            "name": "DWD ICON-D2 2.2 km",
+            "max_days": 3,
+            "default_days": 2,
+        },
+        "icon_eu": {
+            "api_model": "icon_eu",
+            "name": "DWD ICON-EU 7.0 km",
+            "max_days": 7,
+            "default_days": 5,
+        },
+    }
+
+    def fetch_ensemble(
+        self, latitude: float, longitude: float, days: int = 15, model: str = "aifs"
     ) -> Dict[str, Any]:
         """
-        Fetch all 50 members of ECMWF AIFS 0.25° ensemble forecast:
-        - temperature_2m
-        - precipitation
-        - snowfall
-        - cloud_cover
-        - wind_speed_10m
-        - wind_direction_10m
-        - pressure_msl
+        Fetch multi-member ensemble forecast:
+        - aifs: ECMWF AIFS 0.25° (50 members, up to 16 days)
+        - icon_d2: DWD ICON-D2 2.2 km (20 members, up to 3 days / 48-72h)
+        - icon_eu: DWD ICON-EU 7.0 km (40 members, up to 7 days / 120h)
         """
+        model_key = model.lower() if model else "aifs"
+        if model_key not in self.MODEL_MAPPING:
+            model_key = "aifs"
+
+        cfg = self.MODEL_MAPPING[model_key]
+        actual_days = min(days, cfg["max_days"])
         hourly_vars = [
             "temperature_2m",
             "precipitation",
@@ -196,18 +219,61 @@ class AIFSClient:
             {
                 "latitude": latitude,
                 "longitude": longitude,
-                "models": "ecmwf_aifs025",
+                "models": cfg["api_model"],
                 "hourly": ",".join(hourly_vars),
-                "forecast_days": min(days, 16),
+                "forecast_days": actual_days,
                 "timezone": "UTC",
             }
         )
         url = f"{self.ENSEMBLE_URL}?{params}"
         req = urllib.request.Request(url, headers=self.headers)
         with urllib.request.urlopen(req, timeout=15) as resp:
-            raw = json.loads(resp.read().decode())
+            raw_content = resp.read().decode()
+            try:
+                raw = json.loads(raw_content)
+            except Exception:
+                raw = {"latitude": float("nan")}
 
-        return self._process_ensemble(raw)
+        # Check if coordinates are NaN or domain missing (e.g. icon_d2 queried outside Central Europe domain)
+        import math
+        lat_val = raw.get("latitude")
+        is_invalid = (
+            lat_val is None
+            or (isinstance(lat_val, float) and math.isnan(lat_val))
+            or not raw.get("hourly", {}).get("time")
+        )
+        fallback_used = False
+        if is_invalid and model_key == "icon_d2":
+            # Gracefully fallback to icon_eu which covers all of Europe
+            fallback_used = True
+            model_key = "icon_eu"
+            cfg = self.MODEL_MAPPING["icon_eu"]
+            actual_days = min(max(days, 5), cfg["max_days"])
+            params = urllib.parse.urlencode(
+                {
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "models": cfg["api_model"],
+                    "hourly": ",".join(hourly_vars),
+                    "forecast_days": actual_days,
+                    "timezone": "UTC",
+                }
+            )
+            url = f"{self.ENSEMBLE_URL}?{params}"
+            req = urllib.request.Request(url, headers=self.headers)
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                raw = json.loads(resp.read().decode())
+
+        stats = self._process_ensemble(raw)
+        stats["model"] = model_key
+        stats["model_fallback"] = fallback_used
+        return stats
+
+    def fetch_aifs_ensemble(
+        self, latitude: float, longitude: float, days: int = 15
+    ) -> Dict[str, Any]:
+        """Backwards-compatible wrapper for fetching ECMWF AIFS ensemble."""
+        return self.fetch_ensemble(latitude, longitude, days=days, model="aifs")
 
     def _process_ensemble(self, raw: Dict[str, Any]) -> Dict[str, Any]:
         """Compute median, 25th, 75th, min, and max across the 50 ensemble members."""
