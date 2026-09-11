@@ -104,7 +104,7 @@ Open [http://localhost:8080](http://localhost:8080) in your web browser.
 Features:
 
 - Type any city name in the search bar or click the quick presets
-- Switch forecast horizon (3, 5, 7, 10, 15 days)
+- Switch forecast horizon & model (**ECMWF AIFS**: 7, 10, 15 days; **DWD ICON-EU**: 5 days; **DWD ICON-D2**: 2 days / 48h)
 - Select time zone (**Local Time** [default, current local time either summer or winter] or **UTC**)
 - Download generated image with a single click
 - View full-size graph in a new tab
