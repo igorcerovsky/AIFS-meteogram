@@ -88,13 +88,20 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
 
             if not use_cache:
                 try:
-                    loc_info = client.geocode(loc_param)
+                    import importlib
+                    import aifs_client
+                    import renderer as renderer_mod
+                    importlib.reload(aifs_client)
+                    importlib.reload(renderer_mod)
+
+                    client_inst = aifs_client.AIFSClient()
+                    loc_info = client_inst.geocode(loc_param)
                     lat = loc_info["latitude"]
                     lon = loc_info["longitude"]
-                    stats = client.fetch_ensemble(lat, lon, days=days_param, model=model_param)
-                    sun_times = client.fetch_sun_times(lat, lon, days=days_param)
+                    stats = client_inst.fetch_ensemble(lat, lon, days=days_param, model=model_param)
+                    sun_times = client_inst.fetch_sun_times(lat, lon, days=days_param)
 
-                    renderer = renderers[lang_param]
+                    renderer = renderer_mod.MeteogramRenderer(lang=lang_param)
                     renderer.render(
                         location_info=loc_info,
                         stats=stats,
