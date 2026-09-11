@@ -39,6 +39,8 @@ LANG_TEXTS = {
         "hour_label": "Hodina",
         "temp_title": "Teplota 2 m [°C]",
         "precip_title": "Zrážky [mm / 6h]",
+        "precip_title_hourly": "Zrážky [mm / 1h]",
+        "precip_title_6h": "Zrážky [mm / 6h]",
         "cloud_title": "Oblačnosť [%]",
         "wind_title": "Vietor 10 m [km/h]",
         "pressure_title": "Tlak vzduchu (MSLP) [hPa]",
@@ -52,6 +54,8 @@ LANG_TEXTS = {
         "rain": "Dážď",
         "snow": "Sneh",
         "max_precip": "Max úhrn ansámbla",
+        "max_precip_hourly": "Max úhrn ansámbla / 1h",
+        "max_precip_6h": "Max úhrn ansámbla / 6h",
         "night": "Noc (západ až východ slnka)",
     },
     "en": {
@@ -70,6 +74,8 @@ LANG_TEXTS = {
         "hour_label": "Hour",
         "temp_title": "2m Temperature [°C]",
         "precip_title": "Precipitation [mm / 6h]",
+        "precip_title_hourly": "Precipitation [mm / 1h]",
+        "precip_title_6h": "Precipitation [mm / 6h]",
         "cloud_title": "Cloud Cover [%]",
         "wind_title": "10m Wind [km/h]",
         "pressure_title": "MSLP Pressure [hPa]",
@@ -83,6 +89,8 @@ LANG_TEXTS = {
         "rain": "Rain",
         "snow": "Snow",
         "max_precip": "Max ensemble precip",
+        "max_precip_hourly": "Max ensemble precip / 1h",
+        "max_precip_6h": "Max ensemble precip / 6h",
         "night": "Night (sunset to sunrise)",
     },
 }
@@ -255,81 +263,101 @@ class MeteogramRenderer:
         ax_temp.legend(handles=handles, labels=labels, loc="upper right", framealpha=0.92, fontsize=8.5, ncol=4)
 
         # -------------------------------------------------------------
-        # PANEL 2: PRECIPITATION & SNOWFALL (6h intervals + Sqrt scaling)
+        # PANEL 2: PRECIPITATION & SNOWFALL (Hourly for high-res / 6h for long range)
         # -------------------------------------------------------------
         precip_raw = stats["precipitation"]
         snow_raw = stats["snowfall"]
+        active_model = stats.get("model", "aifs")
+        is_hourly = (active_model in ["icon_d2", "icon_eu"]) or (forecast_days <= 5.5)
 
-        # Aggregate hourly data into 6-hour blocks: (00-06, 06-12, 12-18, 18-00 in active tz)
-        blocks: Dict[datetime, List[int]] = {}
-        for i, t in enumerate(times):
-            block_start_hour = (t.hour // 6) * 6
-            block_dt = t.replace(hour=block_start_hour, minute=0, second=0, microsecond=0)
-            blocks.setdefault(block_dt, []).append(i)
+        if is_hourly:
+            # Hourly precipitation bars: directly plot each individual hour
+            bar_num_times = num_times
+            bar_width = (1.0 / 24.0) * 0.78  # ~47 minutes wide in days
+            p_med = np.nan_to_num(precip_raw["median"], nan=0.0)
+            s_med = np.nan_to_num(snow_raw["median"], nan=0.0)
+            rain_vals = np.maximum(0.0, p_med - s_med)
+            snow_vals = s_med
+            max_precip_vals = np.nan_to_num(precip_raw["max"], nan=0.0)
+            p_title = self.t.get("precip_title_hourly", self.t["precip_title"])
+            max_precip_label = self.t.get("max_precip_hourly", self.t["max_precip"])
+            edge_lw = 0.5
+            marker_size = 5.5
+        else:
+            # Aggregate hourly data into 6-hour blocks for medium/long range (AIFS 10-15 days)
+            blocks: Dict[datetime, List[int]] = {}
+            for i, t in enumerate(times):
+                block_start_hour = (t.hour // 6) * 6
+                block_dt = t.replace(hour=block_start_hour, minute=0, second=0, microsecond=0)
+                blocks.setdefault(block_dt, []).append(i)
 
-        block_dts = sorted(blocks.keys())
-        block_num_times = [mdates.date2num(b + timedelta(hours=3)) for b in block_dts]
-        bar_width = (6.0 / 24.0) * 0.82  # ~5 hours wide in days
+            block_dts = sorted(blocks.keys())
+            bar_num_times = [mdates.date2num(b + timedelta(hours=3)) for b in block_dts]
+            bar_width = (6.0 / 24.0) * 0.82  # ~5 hours wide in days
 
-        rain_6h = []
-        snow_6h = []
-        max_precip_6h = []
+            rain_6h = []
+            snow_6h = []
+            max_precip_6h = []
 
-        for b_dt in block_dts:
-            idxs = blocks[b_dt]
-            p_med_sum = float(np.sum(precip_raw["median"][idxs]))
-            s_med_sum = float(np.sum(snow_raw["median"][idxs]))
-            r_med_sum = max(0.0, p_med_sum - s_med_sum)
-            rain_6h.append(r_med_sum)
-            snow_6h.append(s_med_sum)
-            max_precip_6h.append(float(np.sum(precip_raw["max"][idxs])))
+            for b_dt in block_dts:
+                idxs = blocks[b_dt]
+                p_med_sum = float(np.sum(precip_raw["median"][idxs]))
+                s_med_sum = float(np.sum(snow_raw["median"][idxs]))
+                r_med_sum = max(0.0, p_med_sum - s_med_sum)
+                rain_6h.append(r_med_sum)
+                snow_6h.append(s_med_sum)
+                max_precip_6h.append(float(np.sum(precip_raw["max"][idxs])))
 
-        rain_6h = np.array(rain_6h)
-        snow_6h = np.array(snow_6h)
-        max_precip_6h = np.array(max_precip_6h)
+            rain_vals = np.array(rain_6h)
+            snow_vals = np.array(snow_6h)
+            max_precip_vals = np.array(max_precip_6h)
+            p_title = self.t.get("precip_title_6h", self.t["precip_title"])
+            max_precip_label = self.t.get("max_precip_6h", self.t["max_precip"])
+            edge_lw = 0.8
+            marker_size = 9.0
 
         # Plot stacked bars with clean edges
         ax_precip.bar(
-            block_num_times,
-            rain_6h,
+            bar_num_times,
+            rain_vals,
             width=bar_width,
             color="#1d70b8",
             edgecolor="#0f4c81",
-            linewidth=0.8,
+            linewidth=edge_lw,
             alpha=0.85,
             label=self.t["rain"],
             zorder=3,
         )
         ax_precip.bar(
-            block_num_times,
-            snow_6h,
-            bottom=rain_6h,
+            bar_num_times,
+            snow_vals,
+            bottom=rain_vals,
             width=bar_width,
             color="#00b4d8",
             edgecolor="#0077b6",
-            linewidth=0.8,
+            linewidth=edge_lw,
             alpha=0.9,
             label=self.t["snow"],
             zorder=3,
         )
 
-        # Error ticks for ensemble max spread across 6h
+        # Error ticks for ensemble max spread
         ax_precip.plot(
-            block_num_times,
-            max_precip_6h,
+            bar_num_times,
+            max_precip_vals,
             color="#03045e",
             linestyle="",
             marker="_",
-            markersize=9,
-            markeredgewidth=2.0,
+            markersize=marker_size,
+            markeredgewidth=1.8,
             alpha=0.85,
-            label=self.t["max_precip"],
+            label=max_precip_label,
             zorder=4,
         )
 
         # Better scaling for precipitation: Square-root scale allows small amounts (0.1 - 2mm)
         # to be clearly visible while still cleanly accommodating heavy rain without squashing!
-        max_p_val = max(2.5, float(np.nanmax(max_precip_6h)) * 1.25)
+        max_p_val = max(2.5, float(np.nanmax(max_precip_vals)) * 1.25)
         ax_precip.set_yscale("function", functions=(lambda v: np.sqrt(np.maximum(0, v)), lambda v: v**2))
         ax_precip.set_ylim(0, max_p_val)
 
@@ -343,7 +371,7 @@ class MeteogramRenderer:
         # Annotate daily precipitation sum
         self._annotate_daily_precip(ax_precip, times, num_times, precip_raw["median"])
 
-        ax_precip.set_ylabel(self.t["precip_title"], fontsize=10, fontweight="bold", color="#0077b6")
+        ax_precip.set_ylabel(p_title, fontsize=10, fontweight="bold", color="#0077b6")
         ax_precip.grid(True, linestyle=":", alpha=0.55, color="#6c757d", zorder=1)
         ax_precip.legend(loc="upper right", framealpha=0.9, fontsize=8.5, ncol=3)
 
@@ -432,7 +460,12 @@ class MeteogramRenderer:
         arrow_y = y_max_wind * 0.88
 
         # Draw clean meteorological wind arrows along the top of wind plot
-        step = max(1, len(num_times) // 28)
+        if forecast_days <= 2.5:
+            step = 1  # hourly arrows for short horizon (ICON-D2)
+        elif forecast_days <= 5.5:
+            step = 2  # every 2h for ICON-EU
+        else:
+            step = max(1, len(num_times) // 28)
         for i in range(0, len(num_times), step):
             t_val = num_times[i]
             deg = wind_dir["median"][i]
@@ -609,12 +642,32 @@ class MeteogramRenderer:
         x_min = mdates.date2num(start_time)
         x_max = mdates.date2num(end_time)
 
+        forecast_days = (end_time - start_time).total_seconds() / 86400.0
+
         for p_idx, ax in enumerate(axes):
             ax.set_xlim(x_min, x_max)
             is_bottom = (p_idx == len(axes) - 1)
 
-            # 6-hour interval ticks in active timezone
-            hours_locator = mdates.HourLocator(byhour=[0, 6, 12, 18], tz=active_tz)
+            if forecast_days <= 2.5:
+                # 48-hour high-res model (ICON-D2):
+                # Major ticks every 3 hours with labels (00, 03, 06, 09, 12, 15, 18, 21)
+                hours_locator = mdates.HourLocator(byhour=[0, 3, 6, 9, 12, 15, 18, 21], tz=active_tz)
+                minor_locator = mdates.HourLocator(interval=1, tz=active_tz)
+                ax.xaxis.set_minor_locator(minor_locator)
+                ax.grid(True, which="minor", axis="x", linestyle=":", alpha=0.35, color="#cbd5e1", zorder=1)
+                ax.tick_params(axis="x", which="minor", length=2, color="#94a3b8")
+            elif forecast_days <= 5.5:
+                # 5-day model (ICON-EU):
+                # Major ticks every 6 hours, minor ticks every 3 hours with subtle grid
+                hours_locator = mdates.HourLocator(byhour=[0, 6, 12, 18], tz=active_tz)
+                minor_locator = mdates.HourLocator(byhour=[0, 3, 6, 9, 12, 15, 18, 21], tz=active_tz)
+                ax.xaxis.set_minor_locator(minor_locator)
+                ax.grid(True, which="minor", axis="x", linestyle=":", alpha=0.30, color="#cbd5e1", zorder=1)
+                ax.tick_params(axis="x", which="minor", length=2, color="#94a3b8")
+            else:
+                # Medium/long range (AIFS):
+                hours_locator = mdates.HourLocator(byhour=[0, 6, 12, 18], tz=active_tz)
+
             ax.xaxis.set_major_locator(hours_locator)
             ax.xaxis.set_major_formatter(mdates.DateFormatter("%H", tz=active_tz))
             ax.tick_params(axis="x", which="major", labelbottom=True, labelsize=8, length=3, pad=2)
