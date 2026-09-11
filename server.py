@@ -68,8 +68,10 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
             if lang_param not in renderers:
                 lang_param = "en"
 
-            # Cache key
-            cache_key = hashlib.md5(f"{loc_param}_{days_param}_{lang_param}_{tz_param}".encode()).hexdigest()
+            # Cache key (includes renderer.py mtime to automatically invalidate on style updates)
+            renderer_file = os.path.join(os.path.dirname(__file__), "renderer.py")
+            renderer_mtime = int(os.path.getmtime(renderer_file)) if os.path.exists(renderer_file) else 0
+            cache_key = hashlib.md5(f"{loc_param}_{days_param}_{lang_param}_{tz_param}_{renderer_mtime}".encode()).hexdigest()
             cache_file = os.path.join(CACHE_DIR, f"{cache_key}.png")
 
             # Check if cached recently (under 1 hour)
