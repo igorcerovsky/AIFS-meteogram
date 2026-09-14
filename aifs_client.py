@@ -191,18 +191,69 @@ class AIFSClient:
         },
     }
 
+    def _fetch_open_meteo_raw(
+        self, latitude: float, longitude: float, api_model: str, days: int, hourly_vars: List[str]
+    ) -> Dict[str, Any]:
+        import re
+        params = urllib.parse.urlencode(
+            {
+                "latitude": latitude,
+                "longitude": longitude,
+                "models": api_model,
+                "hourly": ",".join(hourly_vars),
+                "forecast_days": days,
+                "timezone": "UTC",
+            }
+        )
+        url = f"{self.ENSEMBLE_URL}?{params}"
+        req = urllib.request.Request(url, headers=self.headers)
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                raw_content = resp.read().decode()
+                # Open-Meteo returns 'nan' without quotes when coordinates are out of model domain
+                cleaned = re.sub(r':\s*nan\b', ': null', raw_content)
+                return json.loads(cleaned)
+        except Exception:
+            return {"latitude": None}
+
+    def _is_valid_forecast(self, raw: Dict[str, Any]) -> bool:
+        import math
+        lat_val = raw.get("latitude")
+        if lat_val is None:
+            return False
+        if isinstance(lat_val, float) and math.isnan(lat_val):
+            return False
+        time_arr = raw.get("hourly", {}).get("time")
+        if not time_arr or len(time_arr) == 0:
+            return False
+        return True
+
+    def is_icon_d2_available(self, latitude: float, longitude: float) -> bool:
+        """Check if coordinates fall within the DWD ICON-D2 domain (Germany & Central Europe)."""
+        # ICON-D2 domain: lat ~43.0 to 58.0, lon ~ -2.5 to 18.35
+        # Locations in Central/Eastern Slovakia (Jasna at 19.58°E, Liptovsky Mikulas, etc.) are outside.
+        if not (43.0 <= latitude <= 58.0 and -2.5 <= longitude <= 18.35):
+            return False
+        return True
+
     def fetch_ensemble(
         self, latitude: float, longitude: float, days: int = 15, model: str = "aifs"
     ) -> Dict[str, Any]:
         """
         Fetch multi-member ensemble forecast:
-        - aifs: ECMWF AIFS 0.25° (50 members, up to 16 days)
-        - icon_d2: DWD ICON-D2 2.2 km (20 members, up to 3 days / 48-72h)
-        - icon_eu: DWD ICON-EU 7.0 km (40 members, up to 7 days / 120h)
+        - aifs: ECMWF AIFS 0.25° (50 members, up to 16 days, Global)
+        - icon_d2: DWD ICON-D2 2.2 km (20 members, up to 3 days / 48-72h, Central Europe)
+        - icon_eu: DWD ICON-EU 7.0 km (40 members, up to 7 days / 120h, Europe)
+
+        If 2-day data (icon_d2) is unavailable for a given location (e.g. Jasna),
+        automatically falls back to the closest available model (icon_eu, or aifs).
         """
         model_key = model.lower() if model else "aifs"
         if model_key not in self.MODEL_MAPPING:
             model_key = "aifs"
+
+        original_model = model_key
+        fallback_used = False
 
         cfg = self.MODEL_MAPPING[model_key]
         actual_days = min(days, cfg["max_days"])
@@ -215,58 +266,33 @@ class AIFSClient:
             "wind_direction_10m",
             "pressure_msl",
         ]
-        params = urllib.parse.urlencode(
-            {
-                "latitude": latitude,
-                "longitude": longitude,
-                "models": cfg["api_model"],
-                "hourly": ",".join(hourly_vars),
-                "forecast_days": actual_days,
-                "timezone": "UTC",
-            }
-        )
-        url = f"{self.ENSEMBLE_URL}?{params}"
-        req = urllib.request.Request(url, headers=self.headers)
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            raw_content = resp.read().decode()
-            try:
-                raw = json.loads(raw_content)
-            except Exception:
-                raw = {"latitude": float("nan")}
 
-        # Check if coordinates are NaN or domain missing (e.g. icon_d2 queried outside Central Europe domain)
-        import math
-        lat_val = raw.get("latitude")
-        is_invalid = (
-            lat_val is None
-            or (isinstance(lat_val, float) and math.isnan(lat_val))
-            or not raw.get("hourly", {}).get("time")
-        )
-        fallback_used = False
-        if is_invalid and model_key == "icon_d2":
-            # Gracefully fallback to icon_eu which covers all of Europe
-            fallback_used = True
-            model_key = "icon_eu"
-            cfg = self.MODEL_MAPPING["icon_eu"]
-            actual_days = min(max(days, 5), cfg["max_days"])
-            params = urllib.parse.urlencode(
-                {
-                    "latitude": latitude,
-                    "longitude": longitude,
-                    "models": cfg["api_model"],
-                    "hourly": ",".join(hourly_vars),
-                    "forecast_days": actual_days,
-                    "timezone": "UTC",
-                }
-            )
-            url = f"{self.ENSEMBLE_URL}?{params}"
-            req = urllib.request.Request(url, headers=self.headers)
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                raw = json.loads(resp.read().decode())
+        raw = self._fetch_open_meteo_raw(latitude, longitude, cfg["api_model"], actual_days, hourly_vars)
+
+        if not self._is_valid_forecast(raw):
+            # Model data not available for this location (e.g. icon_d2 for Jasna)
+            # Automatically switch to closest available model:
+            # 1. icon_d2 -> icon_eu (covers all Europe)
+            # 2. icon_eu -> aifs (global coverage)
+            if model_key == "icon_d2":
+                fallback_used = True
+                model_key = "icon_eu"
+                cfg = self.MODEL_MAPPING["icon_eu"]
+                actual_days = min(max(days, 5), cfg["max_days"])
+                raw = self._fetch_open_meteo_raw(latitude, longitude, cfg["api_model"], actual_days, hourly_vars)
+
+            if not self._is_valid_forecast(raw) and model_key in ["icon_d2", "icon_eu"]:
+                fallback_used = True
+                model_key = "aifs"
+                cfg = self.MODEL_MAPPING["aifs"]
+                actual_days = min(max(days, 10), cfg["max_days"])
+                raw = self._fetch_open_meteo_raw(latitude, longitude, cfg["api_model"], actual_days, hourly_vars)
 
         stats = self._process_ensemble(raw)
         stats["model"] = model_key
         stats["model_fallback"] = fallback_used
+        if fallback_used:
+            stats["fallback_from"] = original_model
         return stats
 
     def fetch_aifs_ensemble(

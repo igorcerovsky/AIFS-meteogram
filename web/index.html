@@ -329,6 +329,64 @@
       line-height: 1.4;
     }
 
+    .model-alert {
+      background: rgba(210, 153, 34, 0.15);
+      border: 1px solid rgba(210, 153, 34, 0.4);
+      border-radius: 12px;
+      padding: 0.9rem 1.25rem;
+      display: none;
+      align-items: center;
+      gap: 0.9rem;
+      color: #f0f6fc;
+      animation: alertSlideIn 0.3s ease-out;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 4px 16px rgba(210, 153, 34, 0.12);
+    }
+
+    @keyframes alertSlideIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .model-alert-icon {
+      font-size: 1.4rem;
+      flex-shrink: 0;
+      line-height: 1;
+    }
+
+    .model-alert-content {
+      flex: 1;
+      font-size: 0.85rem;
+      line-height: 1.45;
+    }
+
+    .model-alert-content strong {
+      color: #f2cc60;
+      display: block;
+      font-size: 0.9rem;
+      margin-bottom: 0.2rem;
+    }
+
+    .model-alert-content span {
+      color: #e6edf3;
+    }
+
+    .model-alert-close {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 1.25rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 6px;
+      transition: all 0.15s;
+    }
+
+    .model-alert-close:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.1);
+    }
+
     footer {
       text-align: center;
       padding: 1.5rem;
@@ -413,6 +471,16 @@
       </form>
     </section>
 
+    <!-- Automatic Model Switch Notice Banner -->
+    <div id="model-alert" class="model-alert" role="alert">
+      <div class="model-alert-icon">⚡</div>
+      <div class="model-alert-content">
+        <strong id="model-alert-title">Model Automatically Switched</strong>
+        <span id="model-alert-message">2-day ICON-D2 model is not available for this location. Automatically switched to closest available model: DWD ICON-EU (5-day).</span>
+      </div>
+      <button type="button" class="model-alert-close" onclick="hideAlert()" title="Close notice">&times;</button>
+    </div>
+
     <section class="result-container">
       <div class="result-header">
         <h2 id="result-title">Meteogram: Bratislava-Koliba (ECMWF AIFS 15-day)</h2>
@@ -473,8 +541,70 @@
   <script>
     let currentRequestId = 0;
 
+    // Fast client-side detection for known locations outside ICON-D2 domain (Germany & Central Europe boundary)
+    function isKnownOutsideIconD2(locationName) {
+      if (!locationName) return false;
+      const norm = locationName.trim().toLowerCase();
+      // ICON-D2 cuts off east of approx 18.35°E. Jasná, Liptovský Mikuláš, Poprad, Košice, etc. are outside.
+      const outsideKeywords = [
+        'jasna', 'jasná',
+        'liptovsky mikulas', 'liptovský mikuláš', 'mikulas', 'mikuláš',
+        'poprad', 'tatry', 'tatras', 'vysoke tatry', 'nizke tatry',
+        'kosice', 'košice', 'presov', 'prešov',
+        'banska bystrica', 'banská bystrica', 'zvolen', 'brezno',
+        'strbske pleso', 'štrbské pleso', 'tatranska lomnica', 'tatranská lomnica',
+        'bardejov', 'humenne', 'michalovce', 'trebisov', 'roznava', 'spisska nova ves'
+      ];
+      return outsideKeywords.some(kw => norm.includes(kw));
+    }
+
+    function checkLocationAndSyncDropdown(loc) {
+      if (!loc) return;
+      const isOutside = isKnownOutsideIconD2(loc);
+      const daysSelect = document.getElementById('days');
+      const iconD2Opt = daysSelect.querySelector('option[value="icon_d2_2"]');
+      if (iconD2Opt) {
+        if (isOutside) {
+          iconD2Opt.text = '2 days / 48h (DWD ICON-D2) — outside coverage';
+          if (daysSelect.value === 'icon_d2_2') {
+            daysSelect.value = 'icon_eu_5';
+            showAlert(loc, 'icon_d2', 'icon_eu', document.getElementById('lang').value);
+          }
+        } else {
+          iconD2Opt.text = '2 days / 48h (DWD ICON-D2, 2.2 km - 20 members)';
+        }
+      }
+    }
+
+    function showAlert(loc, fromModel, toModel, lang) {
+      const alertEl = document.getElementById('model-alert');
+      const titleEl = document.getElementById('model-alert-title');
+      const msgEl = document.getElementById('model-alert-message');
+      if (!alertEl) return;
+
+      const fromName = fromModel === 'icon_d2' ? '2-day (DWD ICON-D2 2.2 km)' : fromModel.toUpperCase();
+      const toName = toModel === 'icon_eu' ? 'DWD ICON-EU (5-day, 7.0 km)' : 'ECMWF AIFS (15-day)';
+
+      if (lang === 'sk') {
+        const fromNameSk = fromModel === 'icon_d2' ? '2-dňový model (DWD ICON-D2 2.2 km)' : fromModel.toUpperCase();
+        const toNameSk = toModel === 'icon_eu' ? 'DWD ICON-EU (5-dňový, 7.0 km)' : 'ECMWF AIFS (15-dňový)';
+        titleEl.innerText = 'Model automaticky prepnutý na najbližší dostupný';
+        msgEl.innerText = `${fromNameSk} nie je pre lokalitu „${loc}“ dostupný (poloha je mimo domény modelu). Automaticky sme prepli na najbližší dostupný model: ${toNameSk}.`;
+      } else {
+        titleEl.innerText = 'Model Automatically Switched to Closest Available';
+        msgEl.innerText = `${fromName} is not available for "${loc}" (location is outside Central Europe model domain). Automatically switched to closest available model: ${toName}.`;
+      }
+      alertEl.style.display = 'flex';
+    }
+
+    function hideAlert() {
+      const alertEl = document.getElementById('model-alert');
+      if (alertEl) alertEl.style.display = 'none';
+    }
+
     function setLoc(name) {
       document.getElementById('location').value = name;
+      checkLocationAndSyncDropdown(name);
       updateMeteogram();
     }
 
@@ -504,13 +634,20 @@
       }
     }
 
-    function updateMeteogram() {
+    async function updateMeteogram() {
       const locInput = document.getElementById('location');
       const loc = locInput.value.trim();
-      const rawHorizon = document.getElementById('days').value;
+      let rawHorizon = document.getElementById('days').value;
       const lang = document.getElementById('lang').value;
       const tz = document.getElementById('tz').value;
       if (!loc) return;
+
+      // Proactive check: if user picked 2-day on a location known outside ICON-D2 domain, switch to closest model
+      if (rawHorizon === 'icon_d2_2' && isKnownOutsideIconD2(loc)) {
+        rawHorizon = 'icon_eu_5';
+        document.getElementById('days').value = 'icon_eu_5';
+        showAlert(loc, 'icon_d2', 'icon_eu', lang);
+      }
 
       let model = 'aifs';
       let days = 15;
@@ -563,33 +700,90 @@
       dl.href = imageUrl;
       dl.download = `${loc.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${model}_meteogram.png`;
 
-      // Preload image so old image remains hidden during load and new one appears immediately
-      const preloadImg = new Image();
-      preloadImg.onload = function() {
-        if (requestId === currentRequestId) {
-          const img = document.getElementById('meteogram-img');
-          img.src = imageUrl;
-          hideLoader();
+      try {
+        const response = await fetch(imageUrl);
+        if (!response.ok) {
+          throw new Error(`Server returned HTTP ${response.status}`);
         }
-      };
-      preloadImg.onerror = function() {
+        if (requestId !== currentRequestId) return;
+
+        const actualModel = response.headers.get('X-Actual-Model') || model;
+        const fallbackUsed = response.headers.get('X-Model-Fallback') === 'true';
+        const fallbackFrom = response.headers.get('X-Fallback-From') || 'icon_d2';
+
+        if (fallbackUsed) {
+          // Automatic switch to closest available model!
+          let newHorizonVal = 'icon_eu_5';
+          let newModelLabel = 'DWD ICON-EU (7.0 km, 5-day)';
+          if (actualModel === 'icon_eu') {
+            newHorizonVal = 'icon_eu_5';
+            newModelLabel = 'DWD ICON-EU (7.0 km, 5-day)';
+          } else if (actualModel === 'aifs') {
+            newHorizonVal = '15';
+            newModelLabel = 'ECMWF AIFS (15-day)';
+          }
+
+          // 1. Update dropdown
+          document.getElementById('days').value = newHorizonVal;
+
+          // 2. Update result title
+          document.getElementById('result-title').innerText = `Meteogram: ${loc} (${newModelLabel})`;
+
+          // 3. Update URL query parameters
+          const updatedUrl = new URL(window.location.href);
+          updatedUrl.searchParams.set('location', loc);
+          updatedUrl.searchParams.set('days', newHorizonVal);
+          updatedUrl.searchParams.set('model', actualModel);
+          updatedUrl.searchParams.set('lang', lang);
+          updatedUrl.searchParams.set('tz', tz);
+          window.history.replaceState({}, '', updatedUrl.toString());
+
+          // 4. Update download link
+          dl.download = `${loc.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${actualModel}_meteogram.png`;
+
+          // 5. Show alert message
+          showAlert(loc, fallbackFrom, actualModel, lang);
+        } else if (!isKnownOutsideIconD2(loc)) {
+          hideAlert();
+        }
+
+        const blob = await response.blob();
+        if (requestId !== currentRequestId) return;
+
+        const objectUrl = URL.createObjectURL(blob);
+        const img = document.getElementById('meteogram-img');
+        img.src = objectUrl;
+        hideLoader();
+      } catch (err) {
         if (requestId === currentRequestId) {
+          console.error(err);
           handleError();
         }
-      };
-      preloadImg.src = imageUrl;
+      }
     }
 
     // Handle Enter key on input
     document.getElementById('location').addEventListener('keydown', function(e) {
       if (e.key === 'Enter') {
         e.preventDefault();
+        checkLocationAndSyncDropdown(this.value);
         updateMeteogram();
       }
     });
 
+    document.getElementById('location').addEventListener('blur', function() {
+      checkLocationAndSyncDropdown(this.value);
+    });
+
     // Auto-sync form selects if changed
-    document.getElementById('days').addEventListener('change', updateMeteogram);
+    document.getElementById('days').addEventListener('change', function() {
+      const loc = document.getElementById('location').value.trim();
+      if (this.value === 'icon_d2_2' && isKnownOutsideIconD2(loc)) {
+        this.value = 'icon_eu_5';
+        showAlert(loc, 'icon_d2', 'icon_eu', document.getElementById('lang').value);
+      }
+      updateMeteogram();
+    });
     document.getElementById('lang').addEventListener('change', updateMeteogram);
     document.getElementById('tz').addEventListener('change', updateMeteogram);
 
@@ -602,7 +796,10 @@
       const langParam = params.get('lang');
       const tzParam = params.get('tz');
 
-      if (locParam) document.getElementById('location').value = locParam;
+      if (locParam) {
+        document.getElementById('location').value = locParam;
+        checkLocationAndSyncDropdown(locParam);
+      }
       if (modelParam === 'icon_d2') {
         document.getElementById('days').value = 'icon_d2_2';
       } else if (modelParam === 'icon_eu') {

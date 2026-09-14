@@ -45,17 +45,22 @@ def generate_meteogram(
     img_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".img")
     os.makedirs(img_dir, exist_ok=True)
 
-    if not output:
-        clean_name = "".join(c if c.isalnum() else "_" for c in loc_name.lower())
-        output = os.path.join(img_dir, f"{clean_name}_{model}_meteogram.png")
-    elif not os.path.isabs(output) and not os.path.dirname(output):
-        # Bare filename (e.g. -o output.png) placed inside .img folder
-        output = os.path.join(img_dir, output)
-
     print(f"[*] Fetching {model.upper()} ensemble data ({days} days)...")
     stats = client.fetch_ensemble(lat, lon, days=days, model=model)
     timesteps = len(stats["times"])
     print(f"[✓] Retrieved {timesteps} time steps across ensemble members.")
+
+    actual_model = stats.get("model", model)
+    if stats.get("model_fallback"):
+        print(f"[!] NOTICE: 2-day model '{model.upper()}' is not available for '{loc_name}' (outside domain).")
+        print(f"[✓] Automatically switched to closest available model: '{actual_model.upper()}'.")
+
+    if not output:
+        clean_name = "".join(c if c.isalnum() else "_" for c in loc_name.lower())
+        output = os.path.join(img_dir, f"{clean_name}_{actual_model}_meteogram.png")
+    elif not os.path.isabs(output) and not os.path.dirname(output):
+        # Bare filename (e.g. -o output.png) placed inside .img folder
+        output = os.path.join(img_dir, output)
 
     print(f"[*] Fetching sunrise & sunset times for {loc_name}...")
     sun_times = client.fetch_sun_times(lat, lon, days=days)
