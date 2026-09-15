@@ -13,10 +13,15 @@ import sys
 import urllib.parse
 from http.server import HTTPServer, SimpleHTTPRequestHandler, ThreadingHTTPServer
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
 from aifs_client import AIFSClient
 from renderer import MeteogramRenderer
 
-CACHE_DIR = os.path.join(os.path.dirname(__file__), ".cache")
+CACHE_DIR = os.path.join(REPO_ROOT, ".cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 client = AIFSClient()
@@ -38,7 +43,9 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
 
         # Route / -> web/index.html
         if path == "/" or path == "/index.html":
-            index_file = os.path.join(os.path.dirname(__file__), "web", "index.html")
+            index_file = os.path.join(REPO_ROOT, "web", "index.html")
+            if not os.path.exists(index_file):
+                index_file = os.path.join(BASE_DIR, "web", "index.html")
             try:
                 with open(index_file, "rb") as f:
                     content = f.read()
@@ -113,7 +120,7 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
                 model_param = "aifs"
 
             # Cache key (includes model and renderer.py mtime to automatically invalidate on style updates)
-            renderer_file = os.path.join(os.path.dirname(__file__), "renderer.py")
+            renderer_file = os.path.join(BASE_DIR, "renderer.py")
             renderer_mtime = int(os.path.getmtime(renderer_file)) if os.path.exists(renderer_file) else 0
             cache_key = hashlib.md5(f"{loc_param}_{days_param}_{lang_param}_{tz_param}_{model_param}_{renderer_mtime}".encode()).hexdigest()
             cache_file = os.path.join(CACHE_DIR, f"{cache_key}.png")

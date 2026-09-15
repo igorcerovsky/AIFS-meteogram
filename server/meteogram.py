@@ -15,6 +15,11 @@ import sys
 from datetime import datetime
 from typing import Optional
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
 from aifs_client import AIFSClient
 from renderer import MeteogramRenderer
 
@@ -42,7 +47,7 @@ def generate_meteogram(
 
     print(f"[✓] Found: {loc_name} ({country}) at {lat:.4f}°N, {lon:.4f}°E (alt: {elev:.0f}m)")
 
-    img_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".img")
+    img_dir = os.path.join(REPO_ROOT, ".img")
     os.makedirs(img_dir, exist_ok=True)
 
     print(f"[*] Fetching {model.upper()} ensemble data ({days} days)...")

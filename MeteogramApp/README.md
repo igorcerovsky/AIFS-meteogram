@@ -42,9 +42,9 @@ Runs seamlessly on:
 ## 🚀 How to Run
 
 ### 1. Start the Meteogram Python Server
-The app connects to the lightweight backend in the repository root:
+The app connects to the lightweight backend in the `server/` directory:
 ```bash
-python3 server.py 8080
+python3 server/server.py 8080
 ```
 This runs the API on port `8080`.
 
