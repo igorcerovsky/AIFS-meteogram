@@ -1,0 +1,385 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AA0100012C00000100000001 /* MeteogramApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200012C00000100000001 /* MeteogramApp.swift */; };
+		AA0100022C00000100000001 /* ForecastModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200022C00000100000001 /* ForecastModel.swift */; };
+		AA0100032C00000100000001 /* MeteogramConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200032C00000100000001 /* MeteogramConfig.swift */; };
+		AA0100042C00000100000001 /* MeteogramService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200042C00000100000001 /* MeteogramService.swift */; };
+		AA0100052C00000100000001 /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200052C00000100000001 /* LocationManager.swift */; };
+		AA0100062C00000100000001 /* MeteogramViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200062C00000100000001 /* MeteogramViewModel.swift */; };
+		AA0100072C00000100000001 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200072C00000100000001 /* ContentView.swift */; };
+		AA0100082C00000100000001 /* ControlPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200082C00000100000001 /* ControlPanelView.swift */; };
+		AA0100092C00000100000001 /* MeteogramImageViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200092C00000100000001 /* MeteogramImageViewer.swift */; };
+		AA01000A2C00000100000001 /* FallbackAlertBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA02000A2C00000100000001 /* FallbackAlertBanner.swift */; };
+		AA01000B2C00000100000001 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA02000B2C00000100000001 /* SettingsView.swift */; };
+		AA01000C2C00000100000001 /* PresetsRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA02000C2C00000100000001 /* PresetsRowView.swift */; };
+		AA01000E2C00000100000001 /* ModelPillsBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA02000F2C00000100000001 /* ModelPillsBar.swift */; };
+		AA01000D2C00000100000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA02000D2C00000100000001 /* Assets.xcassets */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		AA0200002C00000100000001 /* MeteogramApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MeteogramApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0200012C00000100000001 /* MeteogramApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeteogramApp.swift; sourceTree = "<group>"; };
+		AA0200022C00000100000001 /* ForecastModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForecastModel.swift; sourceTree = "<group>"; };
+		AA0200032C00000100000001 /* MeteogramConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeteogramConfig.swift; sourceTree = "<group>"; };
+		AA0200042C00000100000001 /* MeteogramService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeteogramService.swift; sourceTree = "<group>"; };
+		AA0200052C00000100000001 /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManager.swift; sourceTree = "<group>"; };
+		AA0200062C00000100000001 /* MeteogramViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeteogramViewModel.swift; sourceTree = "<group>"; };
+		AA0200072C00000100000001 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		AA0200082C00000100000001 /* ControlPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlPanelView.swift; sourceTree = "<group>"; };
+		AA0200092C00000100000001 /* MeteogramImageViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeteogramImageViewer.swift; sourceTree = "<group>"; };
+		AA02000A2C00000100000001 /* FallbackAlertBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FallbackAlertBanner.swift; sourceTree = "<group>"; };
+		AA02000B2C00000100000001 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		AA02000C2C00000100000001 /* PresetsRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetsRowView.swift; sourceTree = "<group>"; };
+		AA02000F2C00000100000001 /* ModelPillsBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPillsBar.swift; sourceTree = "<group>"; };
+		AA02000D2C00000100000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AA02000E2C00000100000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		AA0300002C00000100000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		AA0400002C00000100000001 = {
+			isa = PBXGroup;
+			children = (
+				AA0400012C00000100000001 /* Sources */,
+				AA0400052C00000100000001 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AA0400012C00000100000001 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				AA0200012C00000100000001 /* MeteogramApp.swift */,
+				AA0400022C00000100000001 /* Models */,
+				AA0400032C00000100000001 /* Services */,
+				AA0400042C00000100000001 /* ViewModels */,
+				AA0400062C00000100000001 /* Views */,
+				AA0400072C00000100000001 /* Resources */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		AA0400022C00000100000001 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				AA0200022C00000100000001 /* ForecastModel.swift */,
+				AA0200032C00000100000001 /* MeteogramConfig.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		AA0400032C00000100000001 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				AA0200042C00000100000001 /* MeteogramService.swift */,
+				AA0200052C00000100000001 /* LocationManager.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		AA0400042C00000100000001 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				AA0200062C00000100000001 /* MeteogramViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		AA0400052C00000100000001 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AA0200002C00000100000001 /* MeteogramApp.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		AA0400062C00000100000001 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				AA0200072C00000100000001 /* ContentView.swift */,
+				AA0200082C00000100000001 /* ControlPanelView.swift */,
+				AA0200092C00000100000001 /* MeteogramImageViewer.swift */,
+				AA02000A2C00000100000001 /* FallbackAlertBanner.swift */,
+				AA02000B2C00000100000001 /* SettingsView.swift */,
+				AA02000C2C00000100000001 /* PresetsRowView.swift */,
+				AA02000F2C00000100000001 /* ModelPillsBar.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		AA0400072C00000100000001 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				AA02000D2C00000100000001 /* Assets.xcassets */,
+				AA02000E2C00000100000001 /* Info.plist */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AA0500002C00000100000001 /* MeteogramApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0700002C00000100000001 /* Build configuration list for PBXNativeTarget "MeteogramApp" */;
+			buildPhases = (
+				AA0600002C00000100000001 /* Sources */,
+				AA0300002C00000100000001 /* Frameworks */,
+				AA0600012C00000100000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MeteogramApp;
+			productName = MeteogramApp;
+			productReference = AA0200002C00000100000001 /* MeteogramApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AA0800002C00000100000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					AA0500002C00000100000001 = {
+						CreatedOnToolsVersion = 15.0;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = AA0700012C00000100000001 /* Build configuration list for PBXProject "MeteogramApp" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = AA0400002C00000100000001;
+			productRefGroup = AA0400052C00000100000001 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AA0500002C00000100000001 /* MeteogramApp */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AA0600012C00000100000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA01000D2C00000100000001 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AA0600002C00000100000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0100012C00000100000001 /* MeteogramApp.swift in Sources */,
+				AA0100022C00000100000001 /* ForecastModel.swift in Sources */,
+				AA0100032C00000100000001 /* MeteogramConfig.swift in Sources */,
+				AA0100042C00000100000001 /* MeteogramService.swift in Sources */,
+				AA0100052C00000100000001 /* LocationManager.swift in Sources */,
+				AA0100062C00000100000001 /* MeteogramViewModel.swift in Sources */,
+				AA0100072C00000100000001 /* ContentView.swift in Sources */,
+				AA0100082C00000100000001 /* ControlPanelView.swift in Sources */,
+				AA0100092C00000100000001 /* MeteogramImageViewer.swift in Sources */,
+				AA01000A2C00000100000001 /* FallbackAlertBanner.swift in Sources */,
+				AA01000B2C00000100000001 /* SettingsView.swift in Sources */,
+				AA01000C2C00000100000001 /* PresetsRowView.swift in Sources */,
+				AA01000E2C00000100000001 /* ModelPillsBar.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		AA0900002C00000100000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CODE_SIGN_IDENTITY = "-";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = YRQFDQY53D;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				INFOPLIST_FILE = Sources/Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.meteogram.MeteogramApp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,6";
+			};
+			name = Debug;
+		};
+		AA0900012C00000100000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CODE_SIGN_IDENTITY = "-";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = YRQFDQY53D;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				INFOPLIST_FILE = Sources/Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.meteogram.MeteogramApp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,6";
+			};
+			name = Release;
+		};
+		AA0900022C00000100000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		AA0900032C00000100000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				MTL_FAST_MATH = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AA0700002C00000100000001 /* Build configuration list for PBXNativeTarget "MeteogramApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0900002C00000100000001 /* Debug */,
+				AA0900012C00000100000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0700012C00000100000001 /* Build configuration list for PBXProject "MeteogramApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0900022C00000100000001 /* Debug */,
+				AA0900032C00000100000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = AA0800002C00000100000001 /* Project object */;
+}
