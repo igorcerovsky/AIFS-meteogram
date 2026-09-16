@@ -10,6 +10,7 @@ Panels:
 """
 
 import os
+import math
 import zoneinfo
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -19,7 +20,11 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import matplotlib.transforms as mtransforms
+from matplotlib.lines import Line2D
+from matplotlib.patches import Circle, Patch, Polygon
+from matplotlib.offsetbox import AnnotationBbox, DrawingArea
 import numpy as np
+from scipy.interpolate import PchipInterpolator
 
 
 LANG_TEXTS = {
@@ -42,6 +47,10 @@ LANG_TEXTS = {
         "precip_title_hourly": "Zrážky [mm / 1h]",
         "precip_title_6h": "Zrážky [mm / 6h]",
         "cloud_title": "Oblačnosť [%]",
+        "cloud_total": "Celková",
+        "cloud_low": "Nízka",
+        "cloud_mid": "Stredná",
+        "cloud_high": "Vysoká",
         "wind_title": "Vietor 10 m [km/h]",
         "pressure_title": "Tlak vzduchu (MSLP) [hPa]",
         "days": ["Po", "Ut", "St", "Št", "Pi", "So", "Ne"],
@@ -57,6 +66,8 @@ LANG_TEXTS = {
         "max_precip_hourly": "Max úhrn ansámbla / 1h",
         "max_precip_6h": "Max úhrn ansámbla / 6h",
         "night": "Noc (západ až východ slnka)",
+        "sun_alt": "Výška slnka [°]",
+        "moon_alt": "Výška mesiaca [°]",
     },
     "en": {
         "title_model": "Model: ECMWF AIFS 0.25° Ensemble (50 AI members)",
@@ -77,6 +88,10 @@ LANG_TEXTS = {
         "precip_title_hourly": "Precipitation [mm / 1h]",
         "precip_title_6h": "Precipitation [mm / 6h]",
         "cloud_title": "Cloud Cover [%]",
+        "cloud_total": "Total",
+        "cloud_low": "Low",
+        "cloud_mid": "Medium",
+        "cloud_high": "High",
         "wind_title": "10m Wind [km/h]",
         "pressure_title": "MSLP Pressure [hPa]",
         "days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
@@ -92,8 +107,164 @@ LANG_TEXTS = {
         "max_precip_hourly": "Max ensemble precip / 1h",
         "max_precip_6h": "Max ensemble precip / 6h",
         "night": "Night (sunset to sunrise)",
+        "sun_alt": "Sun altitude [°]",
+        "moon_alt": "Moon altitude [°]",
     },
 }
+
+
+def get_solar_altitude(dt_utc: datetime, lat: float, lon: float) -> float:
+    """Calculate solar altitude in degrees above horizon (-90 to +90)."""
+    t_epoch = dt_utc.timestamp()
+    d = (t_epoch - 946728000.0) / 86400.0
+
+    g = (357.529 + 0.98560028 * d) % 360.0
+    g_rad = math.radians(g)
+    q = (280.459 + 0.98564736 * d) % 360.0
+    l_ecl = (q + 1.915 * math.sin(g_rad) + 0.020 * math.sin(2 * g_rad)) % 360.0
+    l_rad = math.radians(l_ecl)
+
+    e = 23.439 - 0.00000036 * d
+    e_rad = math.radians(e)
+
+    sin_dec = math.sin(e_rad) * math.sin(l_rad)
+    dec_rad = math.asin(sin_dec)
+
+    y = math.cos(e_rad) * math.sin(l_rad)
+    x = math.cos(l_rad)
+    ra_rad = math.atan2(y, x)
+
+    gmst = (280.46061837 + 360.98564736629 * d) % 360.0
+    lst_rad = math.radians((gmst + lon) % 360.0)
+    ha_rad = lst_rad - ra_rad
+
+    lat_rad = math.radians(lat)
+    sin_alt = math.sin(lat_rad) * math.sin(dec_rad) + math.cos(lat_rad) * math.cos(dec_rad) * math.cos(ha_rad)
+    return math.degrees(math.asin(max(-1.0, min(1.0, sin_alt))))
+
+
+def get_lunar_altitude(dt_utc: datetime, lat: float, lon: float) -> float:
+    """Calculate lunar altitude in degrees above horizon (-90 to +90)."""
+    t_epoch = dt_utc.timestamp()
+    d = (t_epoch - 946728000.0) / 86400.0
+
+    l_moon = (218.316 + 13.176396 * d) % 360.0
+    m_moon = (134.963 + 13.064993 * d) % 360.0
+    f_moon = (93.272 + 13.229350 * d) % 360.0
+
+    m_rad = math.radians(m_moon)
+    f_rad = math.radians(f_moon)
+
+    lon_moon = l_moon + 6.289 * math.sin(m_rad)
+    lat_moon = 5.128 * math.sin(f_rad)
+
+    lon_rad = math.radians(lon_moon)
+    lat_rad_moon = math.radians(lat_moon)
+
+    e = 23.439 - 0.00000036 * d
+    e_rad = math.radians(e)
+
+    sin_dec = (math.sin(lat_rad_moon) * math.cos(e_rad) +
+               math.cos(lat_rad_moon) * math.sin(e_rad) * math.sin(lon_rad))
+    dec_rad = math.asin(max(-1.0, min(1.0, sin_dec)))
+
+    y = (math.sin(lon_rad) * math.cos(e_rad) -
+         math.tan(lat_rad_moon) * math.sin(e_rad))
+    x = math.cos(lon_rad)
+    ra_rad = math.atan2(y, x)
+
+    gmst = (280.46061837 + 360.98564736629 * d) % 360.0
+    lst_rad = math.radians((gmst + lon) % 360.0)
+    ha_rad = lst_rad - ra_rad
+
+    lat_rad = math.radians(lat)
+    sin_alt = (math.sin(lat_rad) * math.sin(dec_rad) +
+               math.cos(lat_rad) * math.cos(dec_rad) * math.cos(ha_rad))
+    return math.degrees(math.asin(max(-1.0, min(1.0, sin_alt))))
+
+
+def get_moon_phase_name(phase: float, lang: str = "en") -> str:
+    """Return localized moon phase name for a given phase in [0, 1)."""
+    p = phase % 1.0
+    if p < 0.03 or p >= 0.97:
+        return "Nov" if lang == "sk" else "New Moon"
+    elif p < 0.22:
+        return "Dorastajúci kosák" if lang == "sk" else "Waxing Crescent"
+    elif p < 0.28:
+        return "Prvá štvrť" if lang == "sk" else "First Quarter"
+    elif p < 0.47:
+        return "Dorastajúci mesiac" if lang == "sk" else "Waxing Gibbous"
+    elif p < 0.53:
+        return "Spln" if lang == "sk" else "Full Moon"
+    elif p < 0.72:
+        return "Cúvajúci mesiac" if lang == "sk" else "Waning Gibbous"
+    elif p < 0.78:
+        return "Posledná štvrť" if lang == "sk" else "Last Quarter"
+    else:
+        return "Ubúdajúci kosák" if lang == "sk" else "Waning Crescent"
+
+
+def create_moon_icon_box(phase: float, size_pt: float = 14.0) -> DrawingArea:
+    """
+    Creates an OffsetImage/DrawingArea containing a crisp vector-drawn Moon phase disk.
+    Zero emoji/font glyph dependencies, renders cleanly at all DPIs.
+    Lit side uses a luminous moonish pearl silver-white; unlit side is almost transparent.
+    """
+    da = DrawingArea(size_pt, size_pt, 0, 0)
+    cx = size_pt / 2.0
+    cy = size_pt / 2.0
+    r = size_pt / 2.0 - 0.5
+
+    theta = np.linspace(0, 2 * np.pi, 80)
+    # Dark unlit side circle: almost transparent with subtle delicate perimeter
+    dark_circle = Polygon(
+        np.column_stack([cx + r * np.cos(theta), cy + r * np.sin(theta)]),
+        closed=True,
+        facecolor=(0.12, 0.16, 0.24, 0.08),
+        edgecolor=(0.35, 0.45, 0.55, 0.40),
+        linewidth=0.6,
+    )
+    da.add_artist(dark_circle)
+
+    # Moonish luminous silvery-pearl tone
+    moonish_lit_color = "#f1f5f9"
+    moonish_edge_color = (0.35, 0.45, 0.55, 0.45)
+
+    p = phase % 1.0
+    if 0.48 <= p <= 0.52:
+        # Full Moon: fully lit disc
+        full_circle = Circle(
+            (cx, cy), r, facecolor=moonish_lit_color, edgecolor=moonish_edge_color, linewidth=0.6
+        )
+        da.add_artist(full_circle)
+    elif 0.02 < p < 0.98:
+        phi = np.linspace(-np.pi / 2, np.pi / 2, 40)
+        k = math.cos(2 * math.pi * p)
+        if p < 0.5:
+            # Waxing: lit on right side
+            x_limb = cx + r * np.cos(phi)
+            y_limb = cy + r * np.sin(phi)
+            x_term = cx + r * k * np.cos(phi[::-1])
+            y_term = cy + r * np.sin(phi[::-1])
+        else:
+            # Waning: lit on left side
+            x_limb = cx - r * np.cos(phi)
+            y_limb = cy + r * np.sin(phi)
+            x_term = cx - r * k * np.cos(phi[::-1])
+            y_term = cy + r * np.sin(phi[::-1])
+
+        poly_x = np.concatenate([x_limb, x_term])
+        poly_y = np.concatenate([y_limb, y_term])
+        lit_patch = Polygon(
+            np.column_stack([poly_x, poly_y]),
+            closed=True,
+            facecolor=moonish_lit_color,
+            edgecolor=moonish_edge_color,
+            linewidth=0.5,
+        )
+        da.add_artist(lit_patch)
+
+    return da
 
 
 class MeteogramRenderer:
@@ -109,6 +280,7 @@ class MeteogramRenderer:
         output_path: str,
         dpi: int = 200,
         tz_mode: str = "local",
+        astro_data: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Render the complete meteogram to output_path (PNG, SVG, or PDF)."""
         raw_times = stats["times"]
@@ -158,8 +330,14 @@ class MeteogramRenderer:
             for rise, sset in sun_times
         ]
 
+        # Precompute celestial ephemeris (sun & moon altitude trajectories and peaks)
+        celestial_data = self._compute_celestial_data(start_time, end_time, location_info, astro_data)
+
         # Convert times to matplotlib numerical dates for smooth plotting
         num_times = mdates.date2num(times)
+        # Dense grid for silky-smooth continuous curve interpolation (PCHIP monotonic cubic splines)
+        num_dense_points = max(len(num_times) * 6, 600)
+        num_times_dense = np.linspace(num_times[0], num_times[-1], num_dense_points)
 
         # Scale width dynamically based on duration (from 14 inches up to 24 inches for 15 days)
         fig_width = max(14.0, min(24.0, 10.0 + forecast_days * 0.9))
@@ -175,7 +353,7 @@ class MeteogramRenderer:
                 "height_ratios": [2.5, 1.8, 1.5, 1.9, 1.6],
                 "hspace": 0.22,
                 "top": 0.938,
-                "bottom": 0.060,
+                "bottom": 0.068,
                 "left": 0.075,
                 "right": 0.965,
             },
@@ -190,25 +368,26 @@ class MeteogramRenderer:
         # PANEL 1: TEMPERATURE 2M (TOP PANEL - As requested)
         # -------------------------------------------------------------
         temp = stats["temperature_2m"]
+        temp_smooth = self._smooth_envelope(num_times, temp, num_times_dense)
         ax_temp.fill_between(
-            num_times,
-            temp["min"],
-            temp["max"],
+            num_times_dense,
+            temp_smooth["min"],
+            temp_smooth["max"],
             color="#ffccd5",
             alpha=0.6,
             label=self.t["spread"],
         )
         ax_temp.fill_between(
-            num_times,
-            temp["q25"],
-            temp["q75"],
+            num_times_dense,
+            temp_smooth["q25"],
+            temp_smooth["q75"],
             color="#ff4d6d",
             alpha=0.45,
             label=self.t["iqr"],
         )
         ax_temp.plot(
-            num_times,
-            temp["median"],
+            num_times_dense,
+            temp_smooth["median"],
             color="#a4161a",
             linewidth=2.4,
             label=self.t["median"],
@@ -251,16 +430,24 @@ class MeteogramRenderer:
         # Annotate daily min / max temperatures for the median curve
         self._annotate_daily_temp(ax_temp, times, num_times, temp["median"])
 
+        # -------------------------------------------------------------
+        # CELESTIAL ALTITUDE TRAJECTORIES (Sun & Moon) on Background Twin Axis
+        # -------------------------------------------------------------
+        self._draw_celestial_trajectories(ax_temp, forecast_days, celestial_data)
+
         ax_temp.set_ylabel(self.t["temp_title"], fontsize=10.5, fontweight="bold", color="#800f2f")
         ax_temp.grid(True, linestyle=":", alpha=0.45, color="#94a3b8", zorder=1)
 
-        # Include Night shading in legend
-        from matplotlib.patches import Patch
+        # Include Night shading, Sun & Moon altitude in legend
         handles, labels = ax_temp.get_legend_handles_labels()
         night_patch = Patch(facecolor="#c8d1d9", edgecolor="none", alpha=0.75, label=self.t["night"])
         handles.append(night_patch)
         labels.append(self.t["night"])
-        ax_temp.legend(handles=handles, labels=labels, loc="upper right", framealpha=0.92, fontsize=8.5, ncol=4)
+        sun_line = Line2D([], [], color="#f4a261", linestyle="--", linewidth=1.2, alpha=0.85, label=self.t["sun_alt"])
+        moon_line = Line2D([], [], color="#00b4d8", linestyle=":", linewidth=1.3, alpha=0.85, label=self.t["moon_alt"])
+        handles.extend([sun_line, moon_line])
+        labels.extend([self.t["sun_alt"], self.t["moon_alt"]])
+        ax_temp.legend(handles=handles, labels=labels, loc="upper right", framealpha=0.92, fontsize=8.0, ncol=6)
 
         # -------------------------------------------------------------
         # PANEL 2: PRECIPITATION & SNOWFALL (Hourly for high-res / 6h for long range)
@@ -270,15 +457,45 @@ class MeteogramRenderer:
         active_model = stats.get("model", "aifs")
         is_hourly = (active_model in ["icon_d2", "icon_eu"]) or (forecast_days <= 5.5)
 
+        step_hours = (times[1] - times[0]).total_seconds() / 3600.0 if len(times) > 1 else 1.0
+
         if is_hourly:
-            # Hourly precipitation bars: directly plot each individual hour
-            bar_num_times = num_times
-            bar_width = (1.0 / 24.0) * 0.78  # ~47 minutes wide in days
-            p_med = np.nan_to_num(precip_raw["median"], nan=0.0)
-            s_med = np.nan_to_num(snow_raw["median"], nan=0.0)
-            rain_vals = np.maximum(0.0, p_med - s_med)
-            snow_vals = s_med
-            max_precip_vals = np.nan_to_num(precip_raw["max"], nan=0.0)
+            if step_hours < 0.9:
+                # 15-minute (or sub-hourly) data: aggregate precipitation and snowfall into 1-hour blocks
+                # so the bars strictly represent standard mm / 1h
+                blocks: Dict[datetime, List[int]] = {}
+                for i, t in enumerate(times):
+                    block_dt = t.replace(minute=0, second=0, microsecond=0)
+                    blocks.setdefault(block_dt, []).append(i)
+
+                block_dts = sorted(blocks.keys())
+                bar_num_times = [mdates.date2num(b + timedelta(minutes=30)) for b in block_dts]
+                bar_width = (1.0 / 24.0) * 0.78
+
+                rain_1h = []
+                snow_1h = []
+                max_precip_1h = []
+                for b_dt in block_dts:
+                    idxs = blocks[b_dt]
+                    p_med_sum = float(np.sum(precip_raw["median"][idxs]))
+                    s_med_sum = float(np.sum(snow_raw["median"][idxs]))
+                    r_med_sum = max(0.0, p_med_sum - s_med_sum)
+                    rain_1h.append(r_med_sum)
+                    snow_1h.append(s_med_sum)
+                    max_precip_1h.append(float(np.sum(precip_raw["max"][idxs])))
+
+                rain_vals = np.array(rain_1h)
+                snow_vals = np.array(snow_1h)
+                max_precip_vals = np.array(max_precip_1h)
+            else:
+                bar_num_times = num_times
+                bar_width = (1.0 / 24.0) * 0.78
+                p_med = np.nan_to_num(precip_raw["median"], nan=0.0)
+                s_med = np.nan_to_num(snow_raw["median"], nan=0.0)
+                rain_vals = np.maximum(0.0, p_med - s_med)
+                snow_vals = s_med
+                max_precip_vals = np.nan_to_num(precip_raw["max"], nan=0.0)
+
             p_title = self.t.get("precip_title_hourly", self.t["precip_title"])
             max_precip_label = self.t.get("max_precip_hourly", self.t["max_precip"])
             edge_lw = 0.5
@@ -376,79 +593,122 @@ class MeteogramRenderer:
         ax_precip.legend(loc="upper right", framealpha=0.9, fontsize=8.5, ncol=3)
 
         # -------------------------------------------------------------
-        # PANEL 3: CLOUD COVER (Yellow palette as requested)
+        # PANEL 3: CLOUD COVER (Multi-layer differentiated by colors)
         # -------------------------------------------------------------
-        cloud = stats["cloud_cover"]
-        # Shaded min-max spread in light warm yellow
-        ax_cloud.fill_between(
-            num_times,
-            cloud["min"],
-            cloud["max"],
-            color="#fff3b0",
-            alpha=0.75,
-            label=self.t["spread"],
-            zorder=2,
-        )
-        # 25-75% interquartile range in vibrant sunny yellow
-        ax_cloud.fill_between(
-            num_times,
-            cloud["q25"],
-            cloud["q75"],
-            color="#ffd166",
-            alpha=0.85,
-            label=self.t["iqr"],
-            zorder=3,
-        )
-        # Area fill under median in warm sunny yellow
-        ax_cloud.fill_between(
-            num_times,
-            0,
-            cloud["median"],
-            color="#ffe066",
-            alpha=0.35,
-            zorder=2,
-        )
-        # Solid median line in deep golden amber yellow
-        ax_cloud.plot(
-            num_times,
-            cloud["median"],
-            color="#d48b00",
-            linewidth=2.4,
-            label=self.t["median"],
-            zorder=4,
+        cloud_total = stats["cloud_cover"]
+        cloud_low = stats.get("cloud_cover_low")
+        cloud_mid = stats.get("cloud_cover_mid")
+        cloud_high = stats.get("cloud_cover_high")
+
+        cloud_total_smooth = self._smooth_envelope(
+            num_times, cloud_total, num_times_dense, clip_min=0.0, clip_max=100.0
         )
 
-        ax_cloud.set_ylabel(self.t["cloud_title"], fontsize=10, fontweight="bold", color="#b57600")
+        # Soft background spread of total cloud cover (transparent dark blue variants)
+        ax_cloud.fill_between(
+            num_times_dense,
+            cloud_total_smooth["min"],
+            cloud_total_smooth["max"],
+            color="#1e3a8a",
+            alpha=0.10,
+            zorder=2,
+        )
+        ax_cloud.fill_between(
+            num_times_dense,
+            cloud_total_smooth["q25"],
+            cloud_total_smooth["q75"],
+            color="#1e3a8a",
+            alpha=0.22,
+            zorder=2,
+        )
+
+        # Plot 4 distinct curves with thicker lines
+        # 1. Total Cloud Cover: Deep Dark Blue (#1e3a8a), thick line (lw=2.8)
+        ax_cloud.plot(
+            num_times_dense,
+            cloud_total_smooth["median"],
+            color="#1e3a8a",
+            linewidth=2.8,
+            label=f"{self.t['cloud_total']}",
+            zorder=6,
+        )
+
+        # 2. High Clouds: Vivid Cyan / Sky Blue (#0096c7), thick line (lw=2.4)
+        if cloud_high is not None and "median" in cloud_high:
+            c_high_smooth = self._smooth_curve(
+                num_times, cloud_high["median"], num_times_dense, clip_min=0.0, clip_max=100.0
+            )
+            ax_cloud.plot(
+                num_times_dense,
+                c_high_smooth,
+                color="#0096c7",
+                linewidth=2.4,
+                label=f"{self.t['cloud_high']}",
+                zorder=5,
+            )
+
+        # 3. Medium Clouds: Emerald Teal / Jade Green (#2a9d8f), thick line (lw=2.4)
+        if cloud_mid is not None and "median" in cloud_mid:
+            c_mid_smooth = self._smooth_curve(
+                num_times, cloud_mid["median"], num_times_dense, clip_min=0.0, clip_max=100.0
+            )
+            ax_cloud.plot(
+                num_times_dense,
+                c_mid_smooth,
+                color="#2a9d8f",
+                linewidth=2.4,
+                label=f"{self.t['cloud_mid']}",
+                zorder=4,
+            )
+
+        # 4. Low Clouds: Deep Crimson / Burgundy (#c1121f), thick line (lw=2.4)
+        if cloud_low is not None and "median" in cloud_low:
+            c_low_smooth = self._smooth_curve(
+                num_times, cloud_low["median"], num_times_dense, clip_min=0.0, clip_max=100.0
+            )
+            ax_cloud.plot(
+                num_times_dense,
+                c_low_smooth,
+                color="#c1121f",
+                linewidth=2.4,
+                label=f"{self.t['cloud_low']}",
+                zorder=3,
+            )
+
+        ax_cloud.set_ylabel(self.t["cloud_title"], fontsize=10, fontweight="bold", color="#1e3a8a")
         ax_cloud.set_ylim(-2, 104)
         ax_cloud.set_yticks([0, 25, 50, 75, 100])
         ax_cloud.grid(True, linestyle=":", alpha=0.55, color="#6c757d", zorder=1)
-        ax_cloud.legend(loc="upper right", framealpha=0.9, fontsize=8.5, ncol=3)
+        ax_cloud.legend(loc="upper right", framealpha=0.92, fontsize=8.5, ncol=4)
 
         # -------------------------------------------------------------
         # PANEL 4: WIND SPEED & DIRECTION
         # -------------------------------------------------------------
         wind_spd = stats["wind_speed_10m"]
         wind_dir = stats["wind_direction_10m"]
+        wind_spd_smooth = self._smooth_envelope(
+            num_times, wind_spd, num_times_dense, clip_min=0.0
+        )
 
         ax_wind.fill_between(
-            num_times,
-            wind_spd["min"],
-            wind_spd["max"],
+            num_times_dense,
+            wind_spd_smooth["min"],
+            wind_spd_smooth["max"],
             color="#d8b4a0",
             alpha=0.55,
             label=self.t["spread"],
         )
         ax_wind.fill_between(
-            num_times,
-            wind_spd["q25"],
-            wind_spd["q75"],
+            num_times_dense,
+            wind_spd_smooth["q25"],
+            wind_spd_smooth["q75"],
             color="#bc6c25",
             alpha=0.45,
             label=self.t["iqr"],
         )
         ax_wind.plot(
-            num_times,
-            wind_spd["median"],
+            num_times_dense,
+            wind_spd_smooth["median"],
             color="#603808",
             linewidth=2.2,
             label=self.t["median"],
@@ -460,12 +720,14 @@ class MeteogramRenderer:
         arrow_y = y_max_wind * 0.88
 
         # Draw clean meteorological wind arrows along the top of wind plot
+        dt_hours = (times[1] - times[0]).total_seconds() / 3600.0 if len(times) > 1 else 1.0
         if forecast_days <= 2.5:
-            step = 1  # hourly arrows for short horizon (ICON-D2)
+            target_arrow_interval_hours = 1.0  # hourly arrows for short horizon (ICON-D2)
         elif forecast_days <= 5.5:
-            step = 2  # every 2h for ICON-EU
+            target_arrow_interval_hours = 2.0  # every 2h for ICON-EU
         else:
-            step = max(1, len(num_times) // 28)
+            target_arrow_interval_hours = max(3.0, (forecast_days * 24.0) / 28.0)
+        step = max(1, int(round(target_arrow_interval_hours / dt_hours)))
         for i in range(0, len(num_times), step):
             t_val = num_times[i]
             deg = wind_dir["median"][i]
@@ -497,25 +759,26 @@ class MeteogramRenderer:
         # PANEL 5: MEAN SEA LEVEL PRESSURE (MSLP)
         # -------------------------------------------------------------
         press = stats["pressure_msl"]
+        press_smooth = self._smooth_envelope(num_times, press, num_times_dense)
         ax_press.fill_between(
-            num_times,
-            press["min"],
-            press["max"],
+            num_times_dense,
+            press_smooth["min"],
+            press_smooth["max"],
             color="#d8f3dc",
             alpha=0.6,
             label=self.t["spread"],
         )
         ax_press.fill_between(
-            num_times,
-            press["q25"],
-            press["q75"],
+            num_times_dense,
+            press_smooth["q25"],
+            press_smooth["q75"],
             color="#74c69d",
             alpha=0.5,
             label=self.t["iqr"],
         )
         ax_press.plot(
-            num_times,
-            press["median"],
+            num_times_dense,
+            press_smooth["median"],
             color="#1b4332",
             linewidth=2.2,
             label=self.t["median"],
@@ -529,13 +792,22 @@ class MeteogramRenderer:
 
         ax_press.set_ylabel(self.t["pressure_title"], fontsize=9.5, fontweight="bold", color="#2d6a4f")
         ax_press.grid(True, linestyle=":", alpha=0.55, color="#6c757d")
-        ax_press.legend(loc="upper right", framealpha=0.9, fontsize=8.5, ncol=3)
+
+        # Celestial altitude trajectories on twin axis in pressure panel
+        self._draw_celestial_trajectories(ax_press, forecast_days, celestial_data)
+
+        handles, labels = ax_press.get_legend_handles_labels()
+        sun_line = Line2D([], [], color="#f4a261", linestyle="--", linewidth=1.2, alpha=0.85, label=self.t["sun_alt"])
+        moon_line = Line2D([], [], color="#00b4d8", linestyle=":", linewidth=1.3, alpha=0.85, label=self.t["moon_alt"])
+        handles.extend([sun_line, moon_line])
+        labels.extend([self.t["sun_alt"], self.t["moon_alt"]])
+        ax_press.legend(handles=handles, labels=labels, loc="upper right", framealpha=0.92, fontsize=8.0, ncol=5)
 
         # -------------------------------------------------------------
         # TIMELINE CONFIGURATION & LABELS ACROSS ALL PANES
         # -------------------------------------------------------------
         self._format_axes_timeline(
-            fig, axes, start_time, end_time, active_tz, tz_badge, sun_times_tz
+            fig, axes, start_time, end_time, active_tz, tz_badge, sun_times_tz, astro_data=astro_data
         )
 
         # Super Title / Header banner
@@ -631,6 +903,17 @@ class MeteogramRenderer:
                     )
                 current_day += timedelta(days=1)
 
+        # Draw subtle warm yellowish daytime background across all panels
+        if axes is not None:
+            for ax in axes:
+                for rise, sset in sun_times:
+                    clamped_rise = max(start_time, rise)
+                    clamped_sset = min(end_time, sset)
+                    if clamped_rise < clamped_sset:
+                        x0 = mdates.date2num(clamped_rise)
+                        x1 = mdates.date2num(clamped_sset)
+                        ax.axvspan(x0, x1, color="#fef9c3", alpha=0.65, zorder=0)
+
     def _format_axes_timeline(
         self,
         fig: plt.Figure,
@@ -640,8 +923,9 @@ class MeteogramRenderer:
         active_tz: Any,
         tz_badge: str,
         sun_times_tz: Optional[List[Tuple[datetime, datetime]]] = None,
+        astro_data: Optional[Dict[str, Any]] = None,
     ):
-        """Format X-axes on all panes: ticks and day badges both between graph panes and at the bottom with sunrise/sunset."""
+        """Format X-axes on all panes: ticks and day badges both between graph panes and at the bottom with sunrise/sunset and moon phase."""
         x_min = mdates.date2num(start_time)
         x_max = mdates.date2num(end_time)
 
@@ -692,7 +976,7 @@ class MeteogramRenderer:
             ax.tick_params(axis="x", which="major", labelbottom=True, labelsize=8, length=3, pad=2)
 
             # Use point offset so badges are placed at identical physical distances regardless of subplot height
-            badge_y_offset = -23 if is_bottom else -18
+            badge_y_offset = -28 if is_bottom else -18
             trans_badge = mtransforms.offset_copy(ax.get_xaxis_transform(), fig=fig, y=badge_y_offset, units="points")
 
             curr = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -707,10 +991,30 @@ class MeteogramRenderer:
                         pair = get_sun_pair(curr)
                         if pair:
                             r, s = pair
-                            sun_str = f"\n☀ {r.strftime('%H:%M')}   ☽ {s.strftime('%H:%M')}"
-                        badge_text = f"{day_name} {date_str}{sun_str}"
-                        fontsize = 7.8 if forecast_days > 10 else 8.5
-                        pad = 0.26
+                            sun_str = f"\n☀ {r.strftime('%H:%M')} – {s.strftime('%H:%M')}"
+
+                        moon_str = ""
+                        if astro_data and "daily" in astro_data:
+                            curr_d_str = curr.strftime("%Y-%m-%d")
+                            if curr_d_str in astro_data["daily"]:
+                                d_info = astro_data["daily"][curr_d_str]
+                                m_ph = d_info.get("moon_phase", 0.0)
+                                m_illum = d_info.get("illum_pct", 0)
+                                m_ph_name = get_moon_phase_name(m_ph, self.lang)
+
+                                mrise = d_info.get("moonrise")
+                                mset = d_info.get("moonset")
+                                mr_str = mrise.astimezone(active_tz).strftime('%H:%M') if mrise else "--:--"
+                                ms_str = mset.astimezone(active_tz).strftime('%H:%M') if mset else "--:--"
+
+                                if forecast_days > 8.0:
+                                    moon_str = f"\n☾ {mr_str} – {ms_str} ({m_illum}%)"
+                                else:
+                                    moon_str = f"\n☾ {mr_str} – {ms_str}\n{m_ph_name} ({m_illum}%)"
+
+                        badge_text = f"{day_name} {date_str}{sun_str}{moon_str}"
+                        fontsize = 7.0 if forecast_days > 10 else 7.8
+                        pad = 0.28
                     else:
                         badge_text = f"{day_name} {date_str}"
                         fontsize = 8.0
@@ -731,6 +1035,51 @@ class MeteogramRenderer:
                     )
                 curr += timedelta(days=1)
 
+    @staticmethod
+    def _smooth_curve(
+        x: np.ndarray,
+        y: np.ndarray,
+        x_dense: np.ndarray,
+        clip_min: Optional[float] = None,
+        clip_max: Optional[float] = None,
+    ) -> np.ndarray:
+        """Interpolate curve using shape-preserving monotonic cubic spline (PCHIP) to eliminate angular spikiness."""
+        if len(x) < 3:
+            return np.interp(x_dense, x, y)
+        valid = ~np.isnan(y)
+        if np.sum(valid) < 3:
+            return np.interp(x_dense, x, y)
+        pchip = PchipInterpolator(x[valid], y[valid], extrapolate=True)
+        res = pchip(x_dense)
+        if clip_min is not None:
+            res = np.maximum(clip_min, res)
+        if clip_max is not None:
+            res = np.minimum(clip_max, res)
+        return res
+
+    @classmethod
+    def _smooth_envelope(
+        cls,
+        x: np.ndarray,
+        stats_dict: Dict[str, np.ndarray],
+        x_dense: np.ndarray,
+        clip_min: Optional[float] = None,
+        clip_max: Optional[float] = None,
+    ) -> Dict[str, np.ndarray]:
+        """Interpolate full statistical envelope (min, q25, median, q75, max) while strictly preserving ordering."""
+        med = cls._smooth_curve(x, stats_dict["median"], x_dense, clip_min, clip_max)
+        q25 = cls._smooth_curve(x, stats_dict["q25"], x_dense, clip_min, clip_max)
+        q75 = cls._smooth_curve(x, stats_dict["q75"], x_dense, clip_min, clip_max)
+        mn = cls._smooth_curve(x, stats_dict["min"], x_dense, clip_min, clip_max)
+        mx = cls._smooth_curve(x, stats_dict["max"], x_dense, clip_min, clip_max)
+
+        # Enforce strict envelope ordering: min <= q25 <= med <= q75 <= max
+        q25 = np.minimum(q25, med)
+        q75 = np.maximum(q75, med)
+        mn = np.minimum(mn, q25)
+        mx = np.maximum(mx, q75)
+        return {"median": med, "q25": q25, "q75": q75, "min": mn, "max": mx}
+
     def _annotate_daily_temp(
         self,
         ax: plt.Axes,
@@ -744,8 +1093,11 @@ class MeteogramRenderer:
             day_str = t.strftime("%Y-%m-%d")
             days_map.setdefault(day_str, []).append(idx)
 
+        dt_hours = (times[1] - times[0]).total_seconds() / 3600.0 if len(times) > 1 else 1.0
+        min_indices_required = max(3, int(6.0 / dt_hours))
+
         for day_str, indices in days_map.items():
-            if len(indices) < 2:
+            if len(indices) < min_indices_required:
                 continue
             day_temps = [median_temp[i] for i in indices]
             min_val = min(day_temps)
@@ -808,4 +1160,159 @@ class MeteogramRenderer:
                 fontweight="bold",
                 color="#0077b6" if daily_sum > 0 else "#6c757d",
                 bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="#90e0ef", lw=0.8, alpha=0.9),
+            )
+
+    def _compute_celestial_data(
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        location_info: Dict[str, Any],
+        astro_data: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Compute high-resolution solar & lunar altitude trajectories and peak passages."""
+        total_seconds = (end_time - start_time).total_seconds()
+        step_sec = 900.0  # 15 minutes
+        n_steps = max(2, int(round(total_seconds / step_sec)))
+        dense_dts = [start_time + timedelta(seconds=i * step_sec) for i in range(n_steps + 1)]
+        dense_nums = [mdates.date2num(t) for t in dense_dts]
+        dense_utcs = [t.astimezone(timezone.utc) for t in dense_dts]
+
+        lat_val = location_info.get("latitude", 0.0)
+        lon_val = location_info.get("longitude", 0.0)
+
+        sun_alts = np.array([get_solar_altitude(t_utc, lat_val, lon_val) for t_utc in dense_utcs])
+        moon_alts = np.array([get_lunar_altitude(t_utc, lat_val, lon_val) for t_utc in dense_utcs])
+
+        sun_above = np.where(sun_alts >= 0.0, sun_alts, np.nan)
+        moon_above = np.where(moon_alts >= 0.0, moon_alts, np.nan)
+
+        # Detect Solar peaks (solar noon)
+        sun_mask = sun_alts >= 0.0
+        sun_passages = []
+        in_pass = False
+        pass_start = 0
+        for idx, is_up in enumerate(sun_mask):
+            if is_up and not in_pass:
+                in_pass = True
+                pass_start = idx
+            elif not is_up and in_pass:
+                in_pass = False
+                sun_passages.append((pass_start, idx))
+        if in_pass:
+            sun_passages.append((pass_start, len(sun_mask)))
+
+        sun_peaks = []
+        for p_s, p_e in sun_passages:
+            if p_e - p_s >= 2:
+                peak_idx = p_s + int(np.argmax(sun_alts[p_s:p_e]))
+                p_alt = sun_alts[peak_idx]
+                if p_alt >= 5.0:
+                    t_str = dense_dts[peak_idx].strftime("%H:%M")
+                    sun_peaks.append((dense_nums[peak_idx], p_alt, t_str))
+
+        # Detect Lunar peaks
+        moon_mask = moon_alts >= 0.0
+        moon_passages = []
+        in_m_pass = False
+        m_pass_start = 0
+        for idx, is_up in enumerate(moon_mask):
+            if is_up and not in_m_pass:
+                in_m_pass = True
+                m_pass_start = idx
+            elif not is_up and in_m_pass:
+                in_m_pass = False
+                moon_passages.append((m_pass_start, idx))
+        if in_m_pass:
+            moon_passages.append((m_pass_start, len(moon_mask)))
+
+        moon_peaks = []
+        for p_s, p_e in moon_passages:
+            if p_e - p_s >= 2:
+                peak_idx = p_s + int(np.argmax(moon_alts[p_s:p_e]))
+                p_alt = moon_alts[peak_idx]
+                if p_alt >= 5.0:
+                    dt_peak = dense_utcs[peak_idx]
+                    d_key = dt_peak.strftime("%Y-%m-%d")
+                    m_phase = 0.0
+                    if astro_data and "daily" in astro_data and d_key in astro_data["daily"]:
+                        m_phase = astro_data["daily"][d_key].get("moon_phase", 0.0)
+                    t_str = dense_dts[peak_idx].strftime("%H:%M")
+                    moon_peaks.append((dense_nums[peak_idx], p_alt, t_str, m_phase))
+
+        return {
+            "dense_nums": dense_nums,
+            "sun_above": sun_above,
+            "moon_above": moon_above,
+            "sun_peaks": sun_peaks,
+            "moon_peaks": moon_peaks,
+        }
+
+    def _draw_celestial_trajectories(
+        self,
+        ax_parent: plt.Axes,
+        forecast_days: float,
+        celestial_data: Dict[str, Any],
+    ):
+        """Draw sun and moon altitude arcs, solar peaks (time & deg), and lunar peaks (icon, time & deg) on a twin axis."""
+        ax_cel = ax_parent.twinx()
+        ax_cel.set_xlim(ax_parent.get_xlim())
+        ax_cel.set_ylim(-5, 95)
+        ax_cel.axis("off")
+
+        # Background curves
+        ax_cel.plot(
+            celestial_data["dense_nums"],
+            celestial_data["sun_above"],
+            color="#f4a261",
+            linestyle="--",
+            linewidth=1.2,
+            alpha=0.45,
+            zorder=2,
+        )
+        ax_cel.plot(
+            celestial_data["dense_nums"],
+            celestial_data["moon_above"],
+            color="#00b4d8",
+            linestyle=":",
+            linewidth=1.3,
+            alpha=0.52,
+            zorder=2,
+        )
+
+        # Solar peaks: time + altitude
+        for x_pos, p_alt, t_str in celestial_data["sun_peaks"]:
+            label_text = f"☀ {t_str} ({p_alt:.0f}°)" if forecast_days <= 10 else f"☀ {p_alt:.0f}°"
+            fs = 6.6 if forecast_days > 8 else 7.2
+            ax_cel.text(
+                x_pos,
+                p_alt + 2.0,
+                label_text,
+                ha="center",
+                va="bottom",
+                fontsize=fs,
+                color="#b45309",
+                fontweight="bold",
+                bbox=dict(boxstyle="round,pad=0.15", fc="#fffbeb", ec="#fde68a", lw=0.6, alpha=0.9),
+                zorder=4,
+            )
+
+        # Lunar peaks: moon phase vector icon + time + altitude
+        for x_pos, p_alt, t_str, m_phase in celestial_data["moon_peaks"]:
+            da = create_moon_icon_box(phase=m_phase, size_pt=13.0)
+            ab = AnnotationBbox(da, (x_pos, p_alt), frameon=False, pad=0.0, zorder=5)
+            ax_cel.add_artist(ab)
+
+            label_text = f"{t_str} ({p_alt:.0f}°)" if forecast_days <= 10 else f"{p_alt:.0f}°"
+            fs = 6.3 if forecast_days > 8 else 6.8
+            ax_cel.text(
+                x_pos,
+                p_alt - 5.5,
+                label_text,
+                ha="center",
+                va="top",
+                fontsize=fs,
+                color="#0284c7",
+                fontweight="bold",
+                bbox=dict(boxstyle="round,pad=0.12", fc="#f0f9ff", ec="#bae6fd", lw=0.5, alpha=0.88),
+                zorder=4,
             )

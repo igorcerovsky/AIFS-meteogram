@@ -119,10 +119,12 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
             if model_param not in ["aifs", "icon_d2", "icon_eu"]:
                 model_param = "aifs"
 
-            # Cache key (includes model and renderer.py mtime to automatically invalidate on style updates)
+            # Cache key (includes model, renderer.py and aifs_client.py mtime to automatically invalidate on updates)
             renderer_file = os.path.join(BASE_DIR, "renderer.py")
+            client_file = os.path.join(BASE_DIR, "aifs_client.py")
             renderer_mtime = int(os.path.getmtime(renderer_file)) if os.path.exists(renderer_file) else 0
-            cache_key = hashlib.md5(f"{loc_param}_{days_param}_{lang_param}_{tz_param}_{model_param}_{renderer_mtime}".encode()).hexdigest()
+            client_mtime = int(os.path.getmtime(client_file)) if os.path.exists(client_file) else 0
+            cache_key = hashlib.md5(f"{loc_param}_{days_param}_{lang_param}_{tz_param}_{model_param}_{renderer_mtime}_{client_mtime}".encode()).hexdigest()
             cache_file = os.path.join(CACHE_DIR, f"{cache_key}.png")
             meta_file = os.path.join(CACHE_DIR, f"{cache_key}.json")
 
@@ -159,7 +161,8 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
                     lat = loc_info["latitude"]
                     lon = loc_info["longitude"]
                     stats = client_inst.fetch_ensemble(lat, lon, days=days_param, model=model_param)
-                    sun_times = client_inst.fetch_sun_times(lat, lon, days=days_param)
+                    astro_data = client_inst.fetch_astronomy_data(lat, lon, days=days_param)
+                    sun_times = astro_data["sun_pairs"]
 
                     renderer = renderer_mod.MeteogramRenderer(lang=lang_param)
                     renderer.render(
@@ -169,6 +172,7 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
                         output_path=cache_file,
                         dpi=170,
                         tz_mode=tz_param,
+                        astro_data=astro_data,
                     )
 
                     actual_model = stats.get("model", model_param)

@@ -141,15 +141,15 @@ class AIFSClient:
             "timezone": res.get("timezone", "auto"),
         }
 
-    def fetch_sun_times(
+    def fetch_astronomy_data(
         self, latitude: float, longitude: float, days: int = 15
-    ) -> List[Tuple[datetime, datetime]]:
-        """Fetch sunrise and sunset times for day/night background bands."""
+    ) -> Dict[str, Any]:
+        """Fetch sunrise, sunset, moonrise, moonset, and moon phase data."""
         params = urllib.parse.urlencode(
             {
                 "latitude": latitude,
                 "longitude": longitude,
-                "daily": "sunrise,sunset",
+                "daily": "sunrise,sunset,moonrise,moonset,moon_phase",
                 "forecast_days": min(days + 2, 16),
                 "timezone": "UTC",
             }
@@ -159,16 +159,50 @@ class AIFSClient:
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode())
 
-        sunrises = data.get("daily", {}).get("sunrise", [])
-        sunsets = data.get("daily", {}).get("sunset", [])
+        daily = data.get("daily", {})
+        sunrises = daily.get("sunrise", [])
+        sunsets = daily.get("sunset", [])
+        moonrises = daily.get("moonrise", [])
+        moonsets = daily.get("moonset", [])
+        moon_phases = daily.get("moon_phase", [])
+        time_strs = daily.get("time", [])
 
-        pairs = []
+        sun_pairs = []
         for rise_str, set_str in zip(sunrises, sunsets):
             if rise_str and set_str:
                 rise = datetime.fromisoformat(rise_str).replace(tzinfo=timezone.utc)
                 sunset = datetime.fromisoformat(set_str).replace(tzinfo=timezone.utc)
-                pairs.append((rise, sunset))
-        return pairs
+                sun_pairs.append((rise, sunset))
+
+        daily_astro = {}
+        import math
+        for i, t_str in enumerate(time_strs):
+            rise = datetime.fromisoformat(sunrises[i]).replace(tzinfo=timezone.utc) if i < len(sunrises) and sunrises[i] else None
+            sset = datetime.fromisoformat(sunsets[i]).replace(tzinfo=timezone.utc) if i < len(sunsets) and sunsets[i] else None
+            mrise = datetime.fromisoformat(moonrises[i]).replace(tzinfo=timezone.utc) if i < len(moonrises) and moonrises[i] else None
+            mset = datetime.fromisoformat(moonsets[i]).replace(tzinfo=timezone.utc) if i < len(moonsets) and moonsets[i] else None
+            phase = float(moon_phases[i]) if i < len(moon_phases) and moon_phases[i] is not None else 0.0
+
+            illum_pct = int(round((1.0 - math.cos(2 * math.pi * phase)) / 2.0 * 100.0))
+            daily_astro[t_str] = {
+                "sunrise": rise,
+                "sunset": sset,
+                "moonrise": mrise,
+                "moonset": mset,
+                "moon_phase": phase,
+                "illum_pct": illum_pct,
+            }
+
+        return {
+            "sun_pairs": sun_pairs,
+            "daily": daily_astro,
+        }
+
+    def fetch_sun_times(
+        self, latitude: float, longitude: float, days: int = 15
+    ) -> List[Tuple[datetime, datetime]]:
+        """Fetch sunrise and sunset times for day/night background bands."""
+        return self.fetch_astronomy_data(latitude, longitude, days=days)["sun_pairs"]
 
     MODEL_MAPPING = {
         "aifs": {
@@ -176,23 +210,26 @@ class AIFSClient:
             "name": "ECMWF AIFS 0.25°",
             "max_days": 16,
             "default_days": 15,
+            "time_res": "hourly",
         },
         "icon_d2": {
             "api_model": "icon_d2",
             "name": "DWD ICON-D2 2.2 km",
             "max_days": 3,
             "default_days": 2,
+            "time_res": "minutely_15",
         },
         "icon_eu": {
             "api_model": "icon_eu",
             "name": "DWD ICON-EU 7.0 km",
             "max_days": 7,
             "default_days": 5,
+            "time_res": "minutely_15",
         },
     }
 
     def _fetch_open_meteo_raw(
-        self, latitude: float, longitude: float, api_model: str, days: int, hourly_vars: List[str]
+        self, latitude: float, longitude: float, api_model: str, days: int, hourly_vars: List[str], time_res: str = "hourly"
     ) -> Dict[str, Any]:
         import re
         params = urllib.parse.urlencode(
@@ -200,7 +237,7 @@ class AIFSClient:
                 "latitude": latitude,
                 "longitude": longitude,
                 "models": api_model,
-                "hourly": ",".join(hourly_vars),
+                time_res: ",".join(hourly_vars),
                 "forecast_days": days,
                 "timezone": "UTC",
             }
@@ -212,7 +249,11 @@ class AIFSClient:
                 raw_content = resp.read().decode()
                 # Open-Meteo returns 'nan' without quotes when coordinates are out of model domain
                 cleaned = re.sub(r':\s*nan\b', ': null', raw_content)
-                return json.loads(cleaned)
+                data = json.loads(cleaned)
+                if time_res != "hourly" and time_res in data and "hourly" not in data:
+                    data["hourly"] = data.pop(time_res)
+                data["time_res"] = time_res
+                return data
         except Exception:
             return {"latitude": None}
 
@@ -257,17 +298,21 @@ class AIFSClient:
 
         cfg = self.MODEL_MAPPING[model_key]
         actual_days = min(days, cfg["max_days"])
+        time_res = cfg.get("time_res", "hourly")
         hourly_vars = [
             "temperature_2m",
             "precipitation",
             "snowfall",
             "cloud_cover",
+            "cloud_cover_low",
+            "cloud_cover_mid",
+            "cloud_cover_high",
             "wind_speed_10m",
             "wind_direction_10m",
             "pressure_msl",
         ]
 
-        raw = self._fetch_open_meteo_raw(latitude, longitude, cfg["api_model"], actual_days, hourly_vars)
+        raw = self._fetch_open_meteo_raw(latitude, longitude, cfg["api_model"], actual_days, hourly_vars, time_res=time_res)
 
         if not self._is_valid_forecast(raw):
             # Model data not available for this location (e.g. icon_d2 for Jasna)
@@ -279,21 +324,70 @@ class AIFSClient:
                 model_key = "icon_eu"
                 cfg = self.MODEL_MAPPING["icon_eu"]
                 actual_days = min(max(days, 5), cfg["max_days"])
-                raw = self._fetch_open_meteo_raw(latitude, longitude, cfg["api_model"], actual_days, hourly_vars)
+                time_res = cfg.get("time_res", "hourly")
+                raw = self._fetch_open_meteo_raw(latitude, longitude, cfg["api_model"], actual_days, hourly_vars, time_res=time_res)
 
             if not self._is_valid_forecast(raw) and model_key in ["icon_d2", "icon_eu"]:
                 fallback_used = True
                 model_key = "aifs"
                 cfg = self.MODEL_MAPPING["aifs"]
                 actual_days = min(max(days, 10), cfg["max_days"])
-                raw = self._fetch_open_meteo_raw(latitude, longitude, cfg["api_model"], actual_days, hourly_vars)
+                time_res = cfg.get("time_res", "hourly")
+                raw = self._fetch_open_meteo_raw(latitude, longitude, cfg["api_model"], actual_days, hourly_vars, time_res=time_res)
 
+        self._fill_missing_cloud_layers(raw, latitude, longitude, cfg["api_model"], actual_days, time_res=time_res)
         stats = self._process_ensemble(raw)
         stats["model"] = model_key
         stats["model_fallback"] = fallback_used
         if fallback_used:
             stats["fallback_from"] = original_model
         return stats
+
+    def _fill_missing_cloud_layers(
+        self, raw: Dict[str, Any], latitude: float, longitude: float, api_model: str, days: int, time_res: str = "hourly"
+    ) -> None:
+        """
+        Open-Meteo ensemble endpoint returns nulls for cloud_cover_low/mid/high
+        on models like ICON-D2 and ICON-EU. We backfill these layers from the deterministic endpoint.
+        """
+        hourly = raw.get("hourly", {})
+        cloud_vars = ["cloud_cover_low", "cloud_cover_mid", "cloud_cover_high"]
+        needs_fetch = False
+        for cvar in cloud_vars:
+            vals = hourly.get(cvar)
+            if not vals or not any(v is not None for v in vals):
+                needs_fetch = True
+                break
+
+        if not needs_fetch:
+            return
+
+        try:
+            params = urllib.parse.urlencode(
+                {
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "models": api_model,
+                    time_res: ",".join(cloud_vars),
+                    "forecast_days": days,
+                    "timezone": "UTC",
+                }
+            )
+            url = f"{self.ASTRONOMY_URL}?{params}"
+            req = urllib.request.Request(url, headers=self.headers)
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                resp_json = json.loads(resp.read().decode())
+                det_data = resp_json.get(time_res) or resp_json.get("hourly", {})
+            for cvar in cloud_vars:
+                if cvar in det_data and det_data[cvar]:
+                    hourly[cvar] = det_data[cvar]
+                    # Strip any null ensemble member keys so they do not pollute stats
+                    for m in range(1, 51):
+                        mkey = f"{cvar}_member{m:02d}"
+                        if mkey in hourly:
+                            del hourly[mkey]
+        except Exception:
+            pass
 
     def fetch_aifs_ensemble(
         self, latitude: float, longitude: float, days: int = 15
@@ -315,6 +409,9 @@ class AIFSClient:
             "precipitation",
             "snowfall",
             "cloud_cover",
+            "cloud_cover_low",
+            "cloud_cover_mid",
+            "cloud_cover_high",
             "wind_speed_10m",
             "wind_direction_10m",
             "pressure_msl",
@@ -342,35 +439,39 @@ class AIFSClient:
                 member_key = f"{var}_member{m:02d}"
                 if member_key in hourly:
                     vals = hourly[member_key]
-                    members_data.append([v if v is not None else np.nan for v in vals])
+                    if vals and any(v is not None for v in vals):
+                        members_data.append([v if v is not None else np.nan for v in vals])
 
             if not members_data:
                 arr = np.zeros((1, num_timesteps))
             else:
                 arr = np.array(members_data, dtype=float)
 
-            # Special case for circular wind direction: use vector averaging for median direction
-            if var == "wind_direction_10m":
-                rad = np.deg2rad(arr)
-                sin_mean = np.nanmean(np.sin(rad), axis=0)
-                cos_mean = np.nanmean(np.cos(rad), axis=0)
-                mean_dir = (np.rad2deg(np.arctan2(sin_mean, cos_mean)) + 360) % 360
-                stats[var] = {
-                    "median": mean_dir,
-                    "q25": np.nanpercentile(arr, 25, axis=0),
-                    "q75": np.nanpercentile(arr, 75, axis=0),
-                    "min": np.nanmin(arr, axis=0),
-                    "max": np.nanmax(arr, axis=0),
-                    "members_count": arr.shape[0],
-                }
-            else:
-                stats[var] = {
-                    "median": np.nanpercentile(arr, 50, axis=0),
-                    "q25": np.nanpercentile(arr, 25, axis=0),
-                    "q75": np.nanpercentile(arr, 75, axis=0),
-                    "min": np.nanmin(arr, axis=0),
-                    "max": np.nanmax(arr, axis=0),
-                    "members_count": arr.shape[0],
-                }
+            import warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                # Special case for circular wind direction: use vector averaging for median direction
+                if var == "wind_direction_10m":
+                    rad = np.deg2rad(arr)
+                    sin_mean = np.nanmean(np.sin(rad), axis=0)
+                    cos_mean = np.nanmean(np.cos(rad), axis=0)
+                    mean_dir = (np.rad2deg(np.arctan2(sin_mean, cos_mean)) + 360) % 360
+                    stats[var] = {
+                        "median": mean_dir,
+                        "q25": np.nanpercentile(arr, 25, axis=0),
+                        "q75": np.nanpercentile(arr, 75, axis=0),
+                        "min": np.nanmin(arr, axis=0),
+                        "max": np.nanmax(arr, axis=0),
+                        "members_count": arr.shape[0],
+                    }
+                else:
+                    stats[var] = {
+                        "median": np.nanpercentile(arr, 50, axis=0),
+                        "q25": np.nanpercentile(arr, 25, axis=0),
+                        "q75": np.nanpercentile(arr, 75, axis=0),
+                        "min": np.nanmin(arr, axis=0),
+                        "max": np.nanmax(arr, axis=0),
+                        "members_count": arr.shape[0],
+                    }
 
         return stats

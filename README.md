@@ -2,7 +2,7 @@
 
 An advanced meteorological visualization system inspired by [SHMÚ's ECMWF EPSGRAM](https://www.shmu.sk/sk/?page=1&id=meteo_epsgramy&nwp_mesto=34031#ecmwf), powered by open forecast data from ECMWF's **AIFS** (*Artificial Intelligence Forecasting System* 0.25° Ensemble — 50 AI members) and DWD's regional high-resolution ensembles (**ICON-EU** and **ICON-D2**).
 
-![ECMWF AIFS Meteogram Preview](assets/meteogram_preview.png)
+![DWD ICON-EU 5-Day High-Resolution Meteogram Preview](assets/meteogram_preview.png)
 
 ---
 
@@ -100,11 +100,14 @@ Generate a publication-quality meteogram directly from the command line:
 # Default location (Bratislava-Koliba, 15 days, English)
 python3 server/meteogram.py
 
-# Specify location and horizon
-python3 server/meteogram.py --location "Liptovsky Mikulas" --days 10 --output liptov.png
+# High-resolution regional 5-day ICON-EU forecast
+python3 server/meteogram.py --location "Bratislava-Koliba" --model icon_eu --days 5 --lang en
 
 # High-resolution regional 2-day ICON-D2 forecast in Slovak
 python3 server/meteogram.py --location "Bratislava-Koliba" --model icon_d2 --days 2 --lang sk
+
+# Specify custom location, duration, and output file
+python3 server/meteogram.py --location "Liptovsky Mikulas" --days 10 --output liptov.png
 
 # Exact GPS coordinates (lat, lon)
 python3 server/meteogram.py --location "48.148,17.107" --output custom_coords.png
@@ -115,7 +118,7 @@ python3 server/meteogram.py --location "48.148,17.107" --output custom_coords.pn
 | Argument | Default | Description |
 | --- | --- | --- |
 | `-l`, `--location` | `Bratislava-Koliba` | City name or `lat,lon` coordinates |
-| `-m`, `--model` | `aifs` | Model: `aifs` (ECMWF AI), `icon_d2` (2.2 km, 48h), `icon_eu` (7.0 km, 5-day) |
+| `-m`, `--model` | `aifs` | Model: `aifs` (ECMWF AI, 7–15d), `icon_eu` (7.0 km, 5d), `icon_d2` (2.2 km, 48h) |
 | `-d`, `--days` | `15` | Forecast duration in days |
 | `-o`, `--output` | `.img/<loc>_meteogram.png` | Output file path (`.png`, `.svg`, `.pdf`) |
 | `--lang` | `en` | Label language: `en` (English) or `sk` (Slovak) |
@@ -134,12 +137,22 @@ python3 server/meteogram.py --location "48.148,17.107" --output custom_coords.pn
 
 ## 📊 Weather Parameters Visualized
 
-1. **2m Air Temperature**: Solid red median line, 25–75% interquartile range (IQR salmon band), full 50-member min-max spread (light pink band), 0°C freezing line, and labeled daily min/max values.
-2. **Precipitation & Snowfall**: 6-hour interval bars for rain and snow, ensemble maximum accumulation ticks, and daily sum totals (`Σ X.X mm`).
-3. **Total Cloud Cover**: Cloud coverage percentage (0–100%) with median curve, IQR band, and spread fill.
-4. **10m Wind Speed & Direction**: Wind speed curve combined with meteorological wind direction arrows pointing where the wind is blowing.
-5. **Mean Sea Level Pressure (MSLP)**: Atmospheric pressure curve (hPa) and ensemble spread.
-6. **Astronomical Day / Night Shading**: Accurate grey background shading for nighttime periods calculated between astronomical sunrise and sunset for each day and timezone.
+1. **2m Air Temperature & Celestial Trajectories**:
+   - Monotonic PCHIP-smoothed median curve (solid dark red), IQR 25–75% band (soft salmon), full ensemble min-max spread (light pink), 0°C freezing line, and daily minimum and maximum labeled values.
+   - **Sun Altitude Trajectory**: Orange dashed curve tracking solar elevation above the horizon with peak culmination time and angle (`☀ HH:MM (XX°)`).
+   - **Moon Altitude Trajectory & Phase**: Cyan dotted curve tracking lunar elevation with peak culmination time and angle (`HH:MM (XX°)`) and rendered custom moon phase disc reflecting actual lunar illumination and waxing/waning direction.
+2. **Precipitation & Snowfall**:
+   - Multi-member accumulation bars for rain and snow, ensemble maximum accumulation ticks, and daily cumulative totals (`Σ X.X mm`).
+3. **Cloud Layers & Total Cloud Cover**:
+   - Four distinct curves: **Total Cloud Cover** (Deep Dark Blue `#1e3a8a`, thick curve) with transparent dark blue percentile ribbons (`alpha=0.10` min-max, `alpha=0.22` IQR), **High Cirrus** (Cyan `#0096c7`), **Medium Altocumulus** (Emerald Teal `#2a9d8f`), and **Low Stratus** (Crimson `#c1121f`).
+4. **10m Wind Speed & Direction**:
+   - Smoothed wind speed curve with IQR and spread envelopes, overlaid with meteorological wind direction arrows pointing where the wind is blowing.
+5. **Mean Sea Level Pressure (MSLP) & Celestial Trajectories**:
+   - Atmospheric pressure curve (hPa) and ensemble spread envelope, complemented by background Sun and Moon altitude trajectories and peak culmination annotations mirroring the top panel.
+6. **Daytime & Night Shading Across All Panels**:
+   - Warm light yellow background (`#fef9c3`) across all 5 panels for daytime hours, contrasted with twilight/night shading (`#343a40`) calculated from astronomical ephemeris for the target coordinates.
+7. **Bottom Timeline Badges**:
+   - Distinct daily badges displaying weekday, calendar date, astronomical sunrise and sunset (`☀ HH:MM – HH:MM`), moonrise and moonset (`☾ HH:MM – HH:MM`), and localized moon phase name with percentage illumination.
 
 ---
 

@@ -67,8 +67,9 @@ def generate_meteogram(
         # Bare filename (e.g. -o output.png) placed inside .img folder
         output = os.path.join(img_dir, output)
 
-    print(f"[*] Fetching sunrise & sunset times for {loc_name}...")
-    sun_times = client.fetch_sun_times(lat, lon, days=days)
+    print(f"[*] Fetching astronomy data (sun times, moon phases) for {loc_name}...")
+    astro_data = client.fetch_astronomy_data(lat, lon, days=days)
+    sun_times = astro_data["sun_pairs"]
 
     print(f"[*] Rendering SHMÚ-style meteogram (Temperature on top, in {lang.upper()}, Time: {tz.upper()})...")
     out_file = renderer.render(
@@ -78,6 +79,7 @@ def generate_meteogram(
         output_path=output,
         dpi=dpi,
         tz_mode=tz,
+        astro_data=astro_data,
     )
     print(f"[SUCCESS] Meteogram generated and saved to: {os.path.abspath(out_file)}")
     return out_file
