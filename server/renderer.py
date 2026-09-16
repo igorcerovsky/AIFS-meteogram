@@ -1170,11 +1170,15 @@ class MeteogramRenderer:
         astro_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Compute high-resolution solar & lunar altitude trajectories and peak passages."""
-        total_seconds = (end_time - start_time).total_seconds()
-        step_sec = 900.0  # 15 minutes
+        # Sample with 5-minute steps, extending slightly before/after to capture natural horizon crossings
+        pad_hours = 18
+        ext_start = start_time - timedelta(hours=pad_hours)
+        ext_end = end_time + timedelta(hours=pad_hours)
+        total_seconds = (ext_end - ext_start).total_seconds()
+        step_sec = 300.0  # 5 minutes
         n_steps = max(2, int(round(total_seconds / step_sec)))
-        dense_dts = [start_time + timedelta(seconds=i * step_sec) for i in range(n_steps + 1)]
-        dense_nums = [mdates.date2num(t) for t in dense_dts]
+        dense_dts = [ext_start + timedelta(seconds=i * step_sec) for i in range(n_steps + 1)]
+        dense_nums = np.array([mdates.date2num(t) for t in dense_dts])
         dense_utcs = [t.astimezone(timezone.utc) for t in dense_dts]
 
         lat_val = location_info.get("latitude", 0.0)
@@ -1183,66 +1187,65 @@ class MeteogramRenderer:
         sun_alts = np.array([get_solar_altitude(t_utc, lat_val, lon_val) for t_utc in dense_utcs])
         moon_alts = np.array([get_lunar_altitude(t_utc, lat_val, lon_val) for t_utc in dense_utcs])
 
-        sun_above = np.where(sun_alts >= 0.0, sun_alts, np.nan)
-        moon_above = np.where(moon_alts >= 0.0, moon_alts, np.nan)
+        def extract_passages(alts: np.ndarray, nums: np.ndarray, dts: List[datetime], is_moon: bool = False):
+            passages = []
+            in_pass = False
+            p_start = 0
+            for i in range(len(alts)):
+                if alts[i] >= 0.0 and not in_pass:
+                    in_pass = True
+                    p_start = i
+                elif alts[i] < 0.0 and in_pass:
+                    in_pass = False
+                    passages.append((p_start, i))
+            if in_pass:
+                passages.append((p_start, len(alts)))
 
-        # Detect Solar peaks (solar noon)
-        sun_mask = sun_alts >= 0.0
-        sun_passages = []
-        in_pass = False
-        pass_start = 0
-        for idx, is_up in enumerate(sun_mask):
-            if is_up and not in_pass:
-                in_pass = True
-                pass_start = idx
-            elif not is_up and in_pass:
-                in_pass = False
-                sun_passages.append((pass_start, idx))
-        if in_pass:
-            sun_passages.append((pass_start, len(sun_mask)))
+            curves = []
+            peaks = []
+            for p_s, p_e in passages:
+                seg_nums = list(nums[p_s:p_e])
+                seg_alts = list(alts[p_s:p_e])
 
-        sun_peaks = []
-        for p_s, p_e in sun_passages:
-            if p_e - p_s >= 2:
-                peak_idx = p_s + int(np.argmax(sun_alts[p_s:p_e]))
-                p_alt = sun_alts[peak_idx]
-                if p_alt >= 5.0:
-                    t_str = dense_dts[peak_idx].strftime("%H:%M")
-                    sun_peaks.append((dense_nums[peak_idx], p_alt, t_str))
+                # Interpolate exact zero-crossing before p_s (rising at horizon = 0.0)
+                if p_s > 0 and alts[p_s - 1] < 0.0:
+                    frac = (0.0 - alts[p_s - 1]) / (alts[p_s] - alts[p_s - 1])
+                    num_zero = nums[p_s - 1] + frac * (nums[p_s] - nums[p_s - 1])
+                    seg_nums.insert(0, num_zero)
+                    seg_alts.insert(0, 0.0)
 
-        # Detect Lunar peaks
-        moon_mask = moon_alts >= 0.0
-        moon_passages = []
-        in_m_pass = False
-        m_pass_start = 0
-        for idx, is_up in enumerate(moon_mask):
-            if is_up and not in_m_pass:
-                in_m_pass = True
-                m_pass_start = idx
-            elif not is_up and in_m_pass:
-                in_m_pass = False
-                moon_passages.append((m_pass_start, idx))
-        if in_m_pass:
-            moon_passages.append((m_pass_start, len(moon_mask)))
+                # Interpolate exact zero-crossing after p_e - 1 (setting at horizon = 0.0)
+                if p_e < len(alts) and alts[p_e] < 0.0:
+                    frac = (0.0 - alts[p_e - 1]) / (alts[p_e] - alts[p_e - 1])
+                    num_zero = nums[p_e - 1] + frac * (nums[p_e] - nums[p_e - 1])
+                    seg_nums.append(num_zero)
+                    seg_alts.append(0.0)
 
-        moon_peaks = []
-        for p_s, p_e in moon_passages:
-            if p_e - p_s >= 2:
-                peak_idx = p_s + int(np.argmax(moon_alts[p_s:p_e]))
-                p_alt = moon_alts[peak_idx]
-                if p_alt >= 5.0:
-                    dt_peak = dense_utcs[peak_idx]
-                    d_key = dt_peak.strftime("%Y-%m-%d")
-                    m_phase = 0.0
-                    if astro_data and "daily" in astro_data and d_key in astro_data["daily"]:
-                        m_phase = astro_data["daily"][d_key].get("moon_phase", 0.0)
-                    t_str = dense_dts[peak_idx].strftime("%H:%M")
-                    moon_peaks.append((dense_nums[peak_idx], p_alt, t_str, m_phase))
+                curves.append((np.array(seg_nums), np.array(seg_alts)))
+
+                peak_idx = p_s + int(np.argmax(alts[p_s:p_e]))
+                p_alt = alts[peak_idx]
+                peak_dt = dts[peak_idx]
+                if p_alt >= 5.0 and start_time <= peak_dt <= end_time:
+                    t_str = peak_dt.strftime("%H:%M")
+                    if is_moon:
+                        dt_peak = dense_utcs[peak_idx]
+                        d_key = dt_peak.strftime("%Y-%m-%d")
+                        m_phase = 0.0
+                        if astro_data and "daily" in astro_data and d_key in astro_data["daily"]:
+                            m_phase = astro_data["daily"][d_key].get("moon_phase", 0.0)
+                        peaks.append((nums[peak_idx], p_alt, t_str, m_phase))
+                    else:
+                        peaks.append((nums[peak_idx], p_alt, t_str))
+
+            return curves, peaks
+
+        sun_curves, sun_peaks = extract_passages(sun_alts, dense_nums, dense_dts, is_moon=False)
+        moon_curves, moon_peaks = extract_passages(moon_alts, dense_nums, dense_dts, is_moon=True)
 
         return {
-            "dense_nums": dense_nums,
-            "sun_above": sun_above,
-            "moon_above": moon_above,
+            "sun_curves": sun_curves,
+            "moon_curves": moon_curves,
             "sun_peaks": sun_peaks,
             "moon_peaks": moon_peaks,
         }
@@ -1256,28 +1259,33 @@ class MeteogramRenderer:
         """Draw sun and moon altitude arcs, solar peaks (time & deg), and lunar peaks (icon, time & deg) on a twin axis."""
         ax_cel = ax_parent.twinx()
         ax_cel.set_xlim(ax_parent.get_xlim())
-        ax_cel.set_ylim(-5, 95)
+        # Y-limits start strictly at 0.0 so altitude=0 (horizon/rise/set) is EXACTLY at the pane bottom
+        ax_cel.set_ylim(0.0, 92.0)
         ax_cel.axis("off")
 
-        # Background curves
-        ax_cel.plot(
-            celestial_data["dense_nums"],
-            celestial_data["sun_above"],
-            color="#f4a261",
-            linestyle="--",
-            linewidth=1.2,
-            alpha=0.45,
-            zorder=2,
-        )
-        ax_cel.plot(
-            celestial_data["dense_nums"],
-            celestial_data["moon_above"],
-            color="#00b4d8",
-            linestyle=":",
-            linewidth=1.3,
-            alpha=0.52,
-            zorder=2,
-        )
+        # Plot sun passages anchored at the bottom
+        for s_nums, s_alts in celestial_data["sun_curves"]:
+            ax_cel.plot(
+                s_nums,
+                s_alts,
+                color="#f4a261",
+                linestyle="--",
+                linewidth=1.2,
+                alpha=0.48,
+                zorder=2,
+            )
+
+        # Plot moon passages anchored at the bottom
+        for m_nums, m_alts in celestial_data["moon_curves"]:
+            ax_cel.plot(
+                m_nums,
+                m_alts,
+                color="#00b4d8",
+                linestyle=":",
+                linewidth=1.3,
+                alpha=0.55,
+                zorder=2,
+            )
 
         # Solar peaks: time + altitude
         for x_pos, p_alt, t_str in celestial_data["sun_peaks"]:
