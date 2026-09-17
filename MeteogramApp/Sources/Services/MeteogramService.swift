@@ -14,6 +14,23 @@ public struct MeteogramFetchResult {
     public let fallbackUsed: Bool
     public let fallbackFrom: String
     public let latencyMs: Double
+    public let isStaticFallback: Bool
+
+    public init(
+        imageData: Data,
+        actualModel: String,
+        fallbackUsed: Bool,
+        fallbackFrom: String,
+        latencyMs: Double,
+        isStaticFallback: Bool = false
+    ) {
+        self.imageData = imageData
+        self.actualModel = actualModel
+        self.fallbackUsed = fallbackUsed
+        self.fallbackFrom = fallbackFrom
+        self.latencyMs = latencyMs
+        self.isStaticFallback = isStaticFallback
+    }
 }
 
 public enum MeteogramServiceError: LocalizedError {
@@ -44,8 +61,62 @@ public class MeteogramService {
         self.session = session
     }
 
-    /// Fetches the meteogram image from the Python server with full metadata headers
+    /// Fetches the meteogram image from the primary server, with automatic GitHub Pages fallback
     public func fetchMeteogram(
+        serverBaseUrl: String,
+        location: String,
+        horizon: ForecastHorizon,
+        language: ForecastLanguage,
+        timeZone: ForecastTimeZone
+    ) async throws -> MeteogramFetchResult {
+        // 1. Try configured server (e.g. localhost or custom cloud URL)
+        do {
+            return try await fetchFromServer(
+                serverBaseUrl: serverBaseUrl,
+                location: location,
+                horizon: horizon,
+                language: language,
+                timeZone: timeZone
+            )
+        } catch {
+            // 2. If primary server is unavailable, attempt GitHub Pages CDN fallback for preset locations
+            if let slug = MeteogramConfig.staticSlug(for: location) {
+                var effectiveModel = horizon.modelParam
+                var fallbackUsed = false
+                var fallbackFrom = ""
+                if horizon == .iconD22 && MeteogramConfig.isOutsideIconD2Domain(location) {
+                    effectiveModel = "icon_eu"
+                    fallbackUsed = true
+                    fallbackFrom = "icon_d2"
+                }
+
+                let staticUrlString = "\(MeteogramConfig.githubPagesBaseUrl)/images/\(slug)_\(effectiveModel)_\(language.rawValue).png"
+                if let staticUrl = URL(string: staticUrlString) {
+                    var request = URLRequest(url: staticUrl)
+                    request.timeoutInterval = 15.0
+                    let startTime = CFAbsoluteTimeGetCurrent()
+                    if let (data, response) = try? await session.data(for: request),
+                       let httpResponse = response as? HTTPURLResponse,
+                       httpResponse.statusCode == 200 {
+                        let elapsedMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
+                        return MeteogramFetchResult(
+                            imageData: data,
+                            actualModel: effectiveModel,
+                            fallbackUsed: fallbackUsed,
+                            fallbackFrom: fallbackFrom,
+                            latencyMs: elapsedMs,
+                            isStaticFallback: true
+                        )
+                    }
+                }
+            }
+
+            // Fallback unavailable or failed; re-throw primary error
+            throw error
+        }
+    }
+
+    private func fetchFromServer(
         serverBaseUrl: String,
         location: String,
         horizon: ForecastHorizon,
@@ -78,7 +149,8 @@ public class MeteogramService {
         }
 
         var request = URLRequest(url: url)
-        request.timeoutInterval = 45.0
+        // If connecting to localhost / local network, fail fast to allow smooth fallback
+        request.timeoutInterval = (base.contains("localhost") || base.contains("127.0.0.1") || base.contains(".local")) ? 6.0 : 35.0
 
         let startTime = CFAbsoluteTimeGetCurrent()
         let (data, response) = try await session.data(for: request)
@@ -102,7 +174,8 @@ public class MeteogramService {
             actualModel: actualModel,
             fallbackUsed: fallbackUsed,
             fallbackFrom: fallbackFrom,
-            latencyMs: elapsedMs
+            latencyMs: elapsedMs,
+            isStaticFallback: false
         )
     }
 

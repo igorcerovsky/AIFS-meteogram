@@ -50,6 +50,7 @@ public class MeteogramViewModel: ObservableObject {
     @Published public var errorMessage: String?
     @Published public var latencyMs: Double = 0
     @Published public var lastUpdated: Date?
+    @Published public var isUsingStaticFallback: Bool = false
 
     // Fallback alert banner
     @Published public var showFallbackAlert: Bool = false
@@ -183,6 +184,7 @@ public class MeteogramViewModel: ObservableObject {
                 self.rawImageData = result.imageData
                 self.latencyMs = result.latencyMs
                 self.lastUpdated = Date()
+                self.isUsingStaticFallback = result.isStaticFallback
                 self.isLoading = false
 
                 if result.fallbackUsed {

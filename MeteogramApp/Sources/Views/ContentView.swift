@@ -206,6 +206,20 @@ public struct ContentView: View {
 
             Spacer()
 
+            if viewModel.isUsingStaticFallback {
+                HStack(spacing: 3) {
+                    Image(systemName: "globe.europe.africa.fill")
+                        .font(.system(size: 8))
+                    Text("GitHub Pages CDN")
+                        .font(.caption2)
+                }
+                .foregroundColor(.cyan)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(Color.cyan.opacity(0.12))
+                .cornerRadius(4)
+            }
+
             if let updated = viewModel.lastUpdated {
                 Text("Updated \(updated.formatted(date: .omitted, time: .standard))")
                     .font(.caption2)
