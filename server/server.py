@@ -32,6 +32,18 @@ renderers = {
 
 
 class MeteogramHandler(SimpleHTTPRequestHandler):
+    def end_headers(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "*")
+        self.send_header("Access-Control-Expose-Headers", "X-Actual-Model, X-Model-Fallback, X-Fallback-From")
+        super().end_headers()
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def log_message(self, format, *args):
         # Clean request logging
         sys.stderr.write(f"[{self.log_date_time_string()}] {format % args}\n")
@@ -208,7 +220,6 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
                 self.send_header("X-Model-Fallback", "true" if fallback_used else "false")
                 if fallback_from:
                     self.send_header("X-Fallback-From", fallback_from)
-                self.send_header("Access-Control-Expose-Headers", "X-Actual-Model, X-Model-Fallback, X-Fallback-From")
                 self.end_headers()
                 self.wfile.write(img_data)
                 return

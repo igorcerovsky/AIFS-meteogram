@@ -485,7 +485,7 @@
       <div class="result-header">
         <h2 id="result-title">Meteogram: Bratislava-Koliba (ECMWF AIFS 15-day)</h2>
         <div class="result-actions">
-          <a id="download-btn" class="btn-secondary" href="/api/image?location=Bratislava-Koliba&days=15&lang=en&tz=local" download="bratislava_koliba_meteogram.png">
+          <a id="download-btn" class="btn-secondary" href="#" download="meteogram.png">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
               <polyline points="7 10 12 15 17 10"></polyline>
@@ -508,9 +508,9 @@
       <div class="image-wrapper">
         <div id="loader" class="loader">
           <div class="spinner"></div>
-          <p id="loader-status">Fetching 50 ECMWF AIFS ensemble members and rendering meteogram...</p>
+          <p id="loader-status">Fetching ensemble forecast and rendering meteogram...</p>
         </div>
-        <img id="meteogram-img" src="/api/image?location=Bratislava-Koliba&days=15&lang=en&tz=local" alt="Meteogram" onload="hideLoader()" onerror="handleError()" />
+        <img id="meteogram-img" src="" alt="Meteogram" onload="hideLoader()" onerror="handleError()" style="display: none;" />
       </div>
     </section>
 
@@ -539,6 +539,13 @@
   </footer>
 
   <script>
+    // Backend API Base URL:
+    // In local development, leave empty string '' to use local server.
+    // In production on GitHub Pages, set to your Render.com web service URL.
+    const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      ? ''
+      : 'https://meteogram-api.onrender.com';
+
     let currentRequestId = 0;
 
     // Fast client-side detection for known locations outside ICON-D2 domain (Germany & Central Europe boundary)
@@ -693,7 +700,7 @@
       // Track request ID to prevent race conditions
       const requestId = ++currentRequestId;
       const t = Date.now();
-      const imageUrl = `/api/image?location=${encodeURIComponent(loc)}&days=${days}&model=${model}&lang=${lang}&tz=${tz}&_t=${t}`;
+      const imageUrl = `${API_BASE}/api/image?location=${encodeURIComponent(loc)}&days=${days}&model=${model}&lang=${lang}&tz=${tz}&_t=${t}`;
 
       // Update download link
       const dl = document.getElementById('download-btn');
@@ -810,9 +817,8 @@
       if (langParam) document.getElementById('lang').value = langParam;
       if (tzParam) document.getElementById('tz').value = tzParam;
 
-      if (locParam && locParam !== 'Bratislava-Koliba') {
-        updateMeteogram();
-      }
+      // Trigger initial load
+      updateMeteogram();
     });
   </script>
 </body>
