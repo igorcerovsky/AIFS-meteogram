@@ -405,7 +405,10 @@
         <p>ECMWF Artificial Intelligence Forecasting System (50 Ensemble Members) — SHMÚ EPSGRAM Style</p>
       </div>
     </div>
-    <span class="badge">AIFS 0.25° Open Data</span>
+    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+      <span id="forecast-run-badge" class="badge" style="display: none; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.3);"></span>
+      <span class="badge">AIFS 0.25° Open Data</span>
+    </div>
   </header>
 
   <main>
@@ -540,11 +543,22 @@
 
   <script>
     // Backend API Base URL:
-    // In local development, leave empty string '' to use local server.
-    // In production on GitHub Pages, set to your Render.com web service URL.
-    const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-      ? ''
-      : 'https://meteogram-api.onrender.com';
+    // When empty (''), uses local server during development, or fast pre-rendered images on GitHub Pages.
+    const API_BASE = '';
+
+    function getStaticSlug(locationName) {
+      if (!locationName) return 'bratislava-koliba';
+      const norm = locationName.trim().toLowerCase();
+      if (norm.includes('koliba') || norm.includes('bratislava')) return 'bratislava-koliba';
+      if (norm.includes('liptov') || norm.includes('mikulas') || norm.includes('mikuláš')) return 'liptovsky-mikulas';
+      if (norm.includes('jasna') || norm.includes('jasná')) return 'jasna';
+      if (norm.includes('plaveck')) return 'plavecke-podhradie';
+      if (norm.includes('kosic') || norm.includes('košic')) return 'kosice';
+      if (norm.includes('poprad') || norm.includes('tatr')) return 'poprad';
+      if (norm.includes('vienna') || norm.includes('vieden') || norm.includes('viedeň')) return 'vienna';
+      if (norm.includes('prag') || norm.includes('praha')) return 'prague';
+      return null;
+    }
 
     let currentRequestId = 0;
 
@@ -697,6 +711,41 @@
       newUrl.searchParams.set('tz', tz);
       window.history.replaceState({}, '', newUrl.toString());
 
+      // Check if running on static host (e.g. GitHub Pages) without an external API
+      const isLocalDev = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+      if (!isLocalDev && !API_BASE) {
+        const staticSlug = getStaticSlug(loc);
+        if (staticSlug) {
+          showLoader('Loading forecast meteogram...');
+          let effectiveModel = model;
+          if (model === 'icon_d2' && isKnownOutsideIconD2(loc)) {
+            effectiveModel = 'icon_eu';
+            document.getElementById('days').value = 'icon_eu_5';
+            showAlert(loc, 'icon_d2', 'icon_eu', lang);
+          } else if (!isKnownOutsideIconD2(loc)) {
+            hideAlert();
+          }
+
+          const staticUrl = `images/${staticSlug}_${effectiveModel}_${lang}.png`;
+          const img = document.getElementById('meteogram-img');
+          const dl = document.getElementById('download-btn');
+          img.src = staticUrl;
+          dl.href = staticUrl;
+          dl.download = `${staticSlug}_${effectiveModel}_meteogram.png`;
+
+          let modelLabel = effectiveModel === 'aifs' ? 'ECMWF AIFS (15-day)' : (effectiveModel === 'icon_d2' ? 'DWD ICON-D2 (2-day, 2.2 km)' : 'DWD ICON-EU (5-day, 7.0 km)');
+          document.getElementById('result-title').innerText = `Meteogram: ${loc} (${modelLabel})`;
+          return;
+        } else {
+          // Custom un-rendered location on static GitHub Pages
+          document.getElementById('loader').style.display = 'flex';
+          document.getElementById('loader-status').innerHTML = `Location "<strong>${loc}</strong>" is not a pre-rendered preset.<br/><br/>On GitHub Pages, 8 preset locations (Bratislava, Tatry, Jasná, Košice, etc.) update automatically every 6 hours.<br/><br/>To generate forecasts for any coordinate in the world on-demand, run the local Python server or desktop app.`;
+          document.getElementById('meteogram-img').style.display = 'none';
+          document.getElementById('generate-btn').disabled = false;
+          return;
+        }
+      }
+
       // Track request ID to prevent race conditions
       const requestId = ++currentRequestId;
       const t = Date.now();
@@ -816,6 +865,21 @@
       }
       if (langParam) document.getElementById('lang').value = langParam;
       if (tzParam) document.getElementById('tz').value = tzParam;
+
+      // Fetch manifest to display forecast run timestamp if present
+      fetch('images/manifest.json')
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data && data.generated_at_human) {
+            const badge = document.getElementById('forecast-run-badge');
+            if (badge) {
+              badge.innerText = `Forecast: ${data.generated_at_human}`;
+              badge.style.display = 'inline-block';
+              badge.title = 'Pre-rendered meteogram dataset updated via GitHub Actions';
+            }
+          }
+        })
+        .catch(() => {});
 
       // Trigger initial load
       updateMeteogram();

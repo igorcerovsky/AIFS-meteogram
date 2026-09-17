@@ -1,0 +1,246 @@
+{
+  "generated_at": "2026-09-17T18:44:23.590398+00:00",
+  "generated_at_human": "2026-09-17 18:44 UTC",
+  "images": {
+    "bratislava-koliba_aifs_sk": {
+      "file": "bratislava-koliba_aifs_sk.png",
+      "location": "Bratislava-Koliba",
+      "slug": "bratislava-koliba",
+      "model": "aifs",
+      "requested_model": "aifs",
+      "lang": "sk"
+    },
+    "bratislava-koliba_aifs_en": {
+      "file": "bratislava-koliba_aifs_en.png",
+      "location": "Bratislava-Koliba",
+      "slug": "bratislava-koliba",
+      "model": "aifs",
+      "requested_model": "aifs",
+      "lang": "en"
+    },
+    "bratislava-koliba_icon_d2_sk": {
+      "file": "bratislava-koliba_icon_d2_sk.png",
+      "location": "Bratislava-Koliba",
+      "slug": "bratislava-koliba",
+      "model": "icon_d2",
+      "requested_model": "icon_d2",
+      "lang": "sk"
+    },
+    "bratislava-koliba_icon_d2_en": {
+      "file": "bratislava-koliba_icon_d2_en.png",
+      "location": "Bratislava-Koliba",
+      "slug": "bratislava-koliba",
+      "model": "icon_d2",
+      "requested_model": "icon_d2",
+      "lang": "en"
+    },
+    "bratislava-koliba_icon_eu_sk": {
+      "file": "bratislava-koliba_icon_eu_sk.png",
+      "location": "Bratislava-Koliba",
+      "slug": "bratislava-koliba",
+      "model": "icon_eu",
+      "requested_model": "icon_eu",
+      "lang": "sk"
+    },
+    "bratislava-koliba_icon_eu_en": {
+      "file": "bratislava-koliba_icon_eu_en.png",
+      "location": "Bratislava-Koliba",
+      "slug": "bratislava-koliba",
+      "model": "icon_eu",
+      "requested_model": "icon_eu",
+      "lang": "en"
+    },
+    "liptovsky-mikulas_aifs_sk": {
+      "file": "liptovsky-mikulas_aifs_sk.png",
+      "location": "Liptovsky Mikulas",
+      "slug": "liptovsky-mikulas",
+      "model": "aifs",
+      "requested_model": "aifs",
+      "lang": "sk"
+    },
+    "liptovsky-mikulas_aifs_en": {
+      "file": "liptovsky-mikulas_aifs_en.png",
+      "location": "Liptovsky Mikulas",
+      "slug": "liptovsky-mikulas",
+      "model": "aifs",
+      "requested_model": "aifs",
+      "lang": "en"
+    },
+    "liptovsky-mikulas_icon_d2_sk": {
+      "file": "liptovsky-mikulas_icon_d2_sk.png",
+      "location": "Liptovsky Mikulas",
+      "slug": "liptovsky-mikulas",
+      "model": "icon_eu",
+      "requested_model": "icon_d2",
+      "lang": "sk"
+    },
+    "liptovsky-mikulas_icon_d2_en": {
+      "file": "liptovsky-mikulas_icon_d2_en.png",
+      "location": "Liptovsky Mikulas",
+      "slug": "liptovsky-mikulas",
+      "model": "icon_eu",
+      "requested_model": "icon_d2",
+      "lang": "en"
+    },
+    "liptovsky-mikulas_icon_eu_sk": {
+      "file": "liptovsky-mikulas_icon_eu_sk.png",
+      "location": "Liptovsky Mikulas",
+      "slug": "liptovsky-mikulas",
+      "model": "icon_eu",
+      "requested_model": "icon_eu",
+      "lang": "sk"
+    },
+    "liptovsky-mikulas_icon_eu_en": {
+      "file": "liptovsky-mikulas_icon_eu_en.png",
+      "location": "Liptovsky Mikulas",
+      "slug": "liptovsky-mikulas",
+      "model": "icon_eu",
+      "requested_model": "icon_eu",
+      "lang": "en"
+    },
+    "jasna_aifs_sk": {
+      "file": "jasna_aifs_sk.png",
+      "location": "Jasna",
+      "slug": "jasna",
+      "model": "aifs",
+      "requested_model": "aifs",
+      "lang": "sk"
+    },
+    "jasna_aifs_en": {
+      "file": "jasna_aifs_en.png",
+      "location": "Jasna",
+      "slug": "jasna",
+      "model": "aifs",
+      "requested_model": "aifs",
+      "lang": "en"
+    },
+    "jasna_icon_d2_sk": {
+      "file": "jasna_icon_d2_sk.png",
+      "location": "Jasna",
+      "slug": "jasna",
+      "model": "icon_eu",
+      "requested_model": "icon_d2",
+      "lang": "sk"
+    },
+    "jasna_icon_d2_en": {
+      "file": "jasna_icon_d2_en.png",
+      "location": "Jasna",
+      "slug": "jasna",
+      "model": "icon_eu",
+      "requested_model": "icon_d2",
+      "lang": "en"
+    },
+    "jasna_icon_eu_sk": {
+      "file": "jasna_icon_eu_sk.png",
+      "location": "Jasna",
+      "slug": "jasna",
+      "model": "icon_eu",
+      "requested_model": "icon_eu",
+      "lang": "sk"
+    },
+    "jasna_icon_eu_en": {
+      "file": "jasna_icon_eu_en.png",
+      "location": "Jasna",
+      "slug": "jasna",
+      "model": "icon_eu",
+      "requested_model": "icon_eu",
+      "lang": "en"
+    },
+    "plavecke-podhradie_aifs_sk": {
+      "file": "plavecke-podhradie_aifs_sk.png",
+      "location": "Plavecke Podhradie",
+      "slug": "plavecke-podhradie",
+      "model": "aifs",
+      "requested_model": "aifs",
+      "lang": "sk"
+    },
+    "plavecke-podhradie_aifs_en": {
+      "file": "plavecke-podhradie_aifs_en.png",
+      "location": "Plavecke Podhradie",
+      "slug": "plavecke-podhradie",
+      "model": "aifs",
+      "requested_model": "aifs",
+      "lang": "en"
+    },
+    "plavecke-podhradie_icon_d2_sk": {
+      "file": "plavecke-podhradie_icon_d2_sk.png",
+      "location": "Plavecke Podhradie",
+      "slug": "plavecke-podhradie",
+      "model": "icon_d2",
+      "requested_model": "icon_d2",
+      "lang": "sk"
+    },
+    "plavecke-podhradie_icon_d2_en": {
+      "file": "plavecke-podhradie_icon_d2_en.png",
+      "location": "Plavecke Podhradie",
+      "slug": "plavecke-podhradie",
+      "model": "icon_d2",
+      "requested_model": "icon_d2",
+      "lang": "en"
+    },
+    "plavecke-podhradie_icon_eu_sk": {
+      "file": "plavecke-podhradie_icon_eu_sk.png",
+      "location": "Plavecke Podhradie",
+      "slug": "plavecke-podhradie",
+      "model": "icon_eu",
+      "requested_model": "icon_eu",
+      "lang": "sk"
+    },
+    "plavecke-podhradie_icon_eu_en": {
+      "file": "plavecke-podhradie_icon_eu_en.png",
+      "location": "Plavecke Podhradie",
+      "slug": "plavecke-podhradie",
+      "model": "icon_eu",
+      "requested_model": "icon_eu",
+      "lang": "en"
+    },
+    "kosice_aifs_sk": {
+      "file": "kosice_aifs_sk.png",
+      "location": "Ko\u0161ice",
+      "slug": "kosice",
+      "model": "aifs",
+      "requested_model": "aifs",
+      "lang": "sk"
+    },
+    "kosice_aifs_en": {
+      "file": "kosice_aifs_en.png",
+      "location": "Ko\u0161ice",
+      "slug": "kosice",
+      "model": "aifs",
+      "requested_model": "aifs",
+      "lang": "en"
+    },
+    "kosice_icon_d2_sk": {
+      "file": "kosice_icon_d2_sk.png",
+      "location": "Ko\u0161ice",
+      "slug": "kosice",
+      "model": "icon_eu",
+      "requested_model": "icon_d2",
+      "lang": "sk"
+    },
+    "kosice_icon_d2_en": {
+      "file": "kosice_icon_d2_en.png",
+      "location": "Ko\u0161ice",
+      "slug": "kosice",
+      "model": "icon_eu",
+      "requested_model": "icon_d2",
+      "lang": "en"
+    },
+    "kosice_icon_eu_sk": {
+      "file": "kosice_icon_eu_sk.png",
+      "location": "Ko\u0161ice",
+      "slug": "kosice",
+      "model": "icon_eu",
+      "requested_model": "icon_eu",
+      "lang": "sk"
+    },
+    "kosice_icon_eu_en": {
+      "file": "kosice_icon_eu_en.png",
+      "location": "Ko\u0161ice",
+      "slug": "kosice",
+      "model": "icon_eu",
+      "requested_model": "icon_eu",
+      "lang": "en"
+    }
+  }
+}
