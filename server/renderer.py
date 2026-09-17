@@ -23,8 +23,23 @@ import matplotlib.transforms as mtransforms
 from matplotlib.lines import Line2D
 from matplotlib.patches import Circle, Patch, Polygon
 from matplotlib.offsetbox import AnnotationBbox, DrawingArea
+import matplotlib.colors as mcolors
 import numpy as np
 from scipy.interpolate import PchipInterpolator
+
+# Continuous dark colormap for wind speed in m/s (high contrast on daylight and night backgrounds)
+WIND_PALETTE_HEX = [
+    "#2b2d42",  # 0-2 m/s: calm / charcoal
+    "#1d3557",  # 2-5 m/s: light / dark navy
+    "#006466",  # 5-8 m/s: gentle / deep petrol
+    "#2d6a4f",  # 8-12 m/s: moderate / forest green
+    "#b45309",  # 12-16 m/s: fresh / dark amber
+    "#9a3412",  # 16-20 m/s: strong / rust
+    "#780000",  # 20-25 m/s: gale / deep crimson
+    "#4c061d",  # >25 m/s: storm / deep wine
+]
+WIND_CMAP = mcolors.LinearSegmentedColormap.from_list("dark_wind", WIND_PALETTE_HEX)
+WIND_NORM = mcolors.Normalize(vmin=0.0, vmax=24.0)
 
 
 LANG_TEXTS = {
@@ -717,39 +732,100 @@ class MeteogramRenderer:
 
         y_max_wind = max(35.0, float(np.nanmax(wind_spd["max"])) * 1.3)
         ax_wind.set_ylim(0, y_max_wind)
-        arrow_y = y_max_wind * 0.88
+        # Draw clean, thin meteorological wind arrows distributed vertically by azimuth
+        # Start of vector: North (0°) at top, South (180°) at bottom
+        # Arrow length scaled by wind speed in m/s (reference: 10 m/s)
+        ref_spd_ms = 10.0
+        ref_len_x = 0.016 * (num_times[-1] - num_times[0])
+        ref_len_y = y_max_wind * 0.10
+        max_scale = 1.9
 
-        # Draw clean meteorological wind arrows along the top of wind plot
+        # Margins ensure the vector in any orientation stays comfortably within the pane bounds
+        margin_y = ref_len_y * max_scale * 1.08
+        y_top = y_max_wind - margin_y
+        y_bottom = margin_y
+        y_mid = (y_top + y_bottom) / 2.0
+        y_span = (y_top - y_bottom) / 2.0
+
         dt_hours = (times[1] - times[0]).total_seconds() / 3600.0 if len(times) > 1 else 1.0
         if forecast_days <= 2.5:
-            target_arrow_interval_hours = 1.0  # hourly arrows for short horizon (ICON-D2)
+            target_arrow_interval_hours = 2.0  # clean sparse 2h steps for 48h
         elif forecast_days <= 5.5:
-            target_arrow_interval_hours = 2.0  # every 2h for ICON-EU
+            target_arrow_interval_hours = 3.5  # clean sparse steps for 5d
         else:
-            target_arrow_interval_hours = max(3.0, (forecast_days * 24.0) / 28.0)
+            target_arrow_interval_hours = max(6.0, (forecast_days * 24.0) / 24.0)
         step = max(1, int(round(target_arrow_interval_hours / dt_hours)))
+
         for i in range(0, len(num_times), step):
             t_val = num_times[i]
             deg = wind_dir["median"][i]
+            spd_kmh = wind_spd["median"][i]
+            spd_ms = spd_kmh / 3.6
+
+            # Scale arrow length proportional to speed in m/s
+            scale = max(0.25, min(max_scale, spd_ms / ref_spd_ms))
+            u_len = ref_len_x * scale
+            v_len = ref_len_y * scale
+
+            # Vector start anchored by azimuth: North (0 deg) -> top, South (180 deg) -> bottom
+            y_start = y_mid + y_span * np.cos(np.deg2rad(deg))
+
             # Meteorological convention: arrow points in direction wind blows to
             blow_to_rad = np.deg2rad(270 - deg)
-            arrow_len = 0.014 * (num_times[-1] - num_times[0])
-            u = arrow_len * np.cos(blow_to_rad)
-            v = arrow_len * np.sin(blow_to_rad) * (y_max_wind / 5.5)
+            u = u_len * np.cos(blow_to_rad)
+            v = v_len * np.sin(blow_to_rad)
+
+            arrow_color = WIND_CMAP(WIND_NORM(spd_ms))
 
             ax_wind.annotate(
                 "",
-                xy=(t_val + u, arrow_y + v),
-                xytext=(t_val - u, arrow_y - v),
+                xy=(t_val + u, y_start + v),
+                xytext=(t_val, y_start),
                 arrowprops=dict(
-                    arrowstyle="->",
-                    color="#2b1810",
-                    lw=1.4,
+                    arrowstyle="->,head_width=0.22,head_length=0.32",
+                    color=arrow_color,
+                    lw=0.9,
                     shrinkA=0,
                     shrinkB=0,
                 ),
                 zorder=5,
             )
+
+        # Wind speed reference arrow length legend in m/s at top-left of pane
+        ref_ax_len = 0.016  # exactly matches ref_len_x in axis fraction
+        color_10 = WIND_CMAP(WIND_NORM(10.0))
+
+        ax_wind.text(
+            0.014, 0.91,
+            " " * 20,
+            transform=ax_wind.transAxes,
+            fontsize=8.5,
+            va="center",
+            bbox=dict(boxstyle="round,pad=0.28", fc="#ffffff", ec="#ced4da", lw=0.7, alpha=0.92),
+            zorder=6,
+        )
+        ax_wind.annotate(
+            "",
+            xy=(0.019 + ref_ax_len, 0.91),
+            xytext=(0.019, 0.91),
+            xycoords="axes fraction",
+            arrowprops=dict(
+                arrowstyle="->,head_width=0.22,head_length=0.32",
+                color=color_10,
+                lw=1.0,
+            ),
+            zorder=7,
+        )
+        ax_wind.text(
+            0.019 + ref_ax_len + 0.005, 0.91,
+            "10 m/s",
+            transform=ax_wind.transAxes,
+            fontsize=7.8,
+            fontweight="bold",
+            color="#343a40",
+            va="center",
+            zorder=7,
+        )
 
         ax_wind.set_ylabel(self.t["wind_title"], fontsize=10, fontweight="bold", color="#7f4f24")
         ax_wind.grid(True, linestyle=":", alpha=0.55, color="#6c757d")
