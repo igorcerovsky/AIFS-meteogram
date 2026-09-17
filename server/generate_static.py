@@ -72,6 +72,7 @@ def main():
 
         lat = loc_info["latitude"]
         lon = loc_info["longitude"]
+        location_cache = {}
 
         for model_cfg in MODELS:
             model_id = model_cfg["id"]
@@ -84,15 +85,27 @@ def main():
                 target_model = "icon_eu"
                 days = 5
 
-            print(f"  -> Fetching {target_model} data for {loc_name} ({days} days)...")
-            time.sleep(1.2)  # Respect Open-Meteo API rate limits
-            try:
-                stats = client.fetch_ensemble(lat, lon, days=days, model=target_model)
-                astro_data = client.fetch_astronomy_data(lat, lon, days=days)
-                sun_times = astro_data["sun_pairs"]
-            except Exception as e:
-                print(f"[-] Fetch error for {loc_name} {target_model}: {e}")
-                continue
+            cache_key = (target_model, days)
+            if cache_key in location_cache:
+                print(f"  -> Reusing cached {target_model} data for {loc_name} ({days} days)...")
+                stats, astro_data, sun_times = location_cache[cache_key]
+            else:
+                time.sleep(2.0)  # Pacing to avoid hitting Open-Meteo rate limits
+                print(f"  -> Fetching {target_model} data for {loc_name} ({days} days)...")
+                try:
+                    stats = client.fetch_ensemble(lat, lon, days=days, model=target_model)
+                    astro_data = client.fetch_astronomy_data(lat, lon, days=days)
+                    sun_times = astro_data["sun_pairs"]
+                    location_cache[cache_key] = (stats, astro_data, sun_times)
+                except Exception as e:
+                    print(f"[-] Fetch error for {loc_name} {target_model}: {e}")
+                    continue
+
+            # Verify cloud layers on regional models
+            if target_model in ["icon_eu", "icon_d2"]:
+                c_low = stats.get("cloud_cover_low")
+                if c_low is None or ("median" in c_low and hasattr(c_low["median"], "__len__") and len(c_low["median"]) > 0 and (c_low["median"] == 0).all()):
+                    print(f"    [!] WARNING: Cloud cover layers missing or flat for {loc_name} ({target_model})")
 
             actual_model = stats.get("model", target_model)
 

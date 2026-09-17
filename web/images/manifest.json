@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-09-17T18:44:23.590398+00:00",
-  "generated_at_human": "2026-09-17 18:44 UTC",
+  "generated_at": "2026-09-17T19:23:18.510126+00:00",
+  "generated_at_human": "2026-09-17 19:23 UTC",
   "images": {
     "bratislava-koliba_aifs_sk": {
       "file": "bratislava-koliba_aifs_sk.png",
@@ -238,6 +238,150 @@
       "file": "kosice_icon_eu_en.png",
       "location": "Ko\u0161ice",
       "slug": "kosice",
+      "model": "icon_eu",
+      "requested_model": "icon_eu",
+      "lang": "en"
+    },
+    "poprad_aifs_sk": {
+      "file": "poprad_aifs_sk.png",
+      "location": "Poprad",
+      "slug": "poprad",
+      "model": "aifs",
+      "requested_model": "aifs",
+      "lang": "sk"
+    },
+    "poprad_aifs_en": {
+      "file": "poprad_aifs_en.png",
+      "location": "Poprad",
+      "slug": "poprad",
+      "model": "aifs",
+      "requested_model": "aifs",
+      "lang": "en"
+    },
+    "poprad_icon_d2_sk": {
+      "file": "poprad_icon_d2_sk.png",
+      "location": "Poprad",
+      "slug": "poprad",
+      "model": "icon_eu",
+      "requested_model": "icon_d2",
+      "lang": "sk"
+    },
+    "poprad_icon_d2_en": {
+      "file": "poprad_icon_d2_en.png",
+      "location": "Poprad",
+      "slug": "poprad",
+      "model": "icon_eu",
+      "requested_model": "icon_d2",
+      "lang": "en"
+    },
+    "poprad_icon_eu_sk": {
+      "file": "poprad_icon_eu_sk.png",
+      "location": "Poprad",
+      "slug": "poprad",
+      "model": "icon_eu",
+      "requested_model": "icon_eu",
+      "lang": "sk"
+    },
+    "poprad_icon_eu_en": {
+      "file": "poprad_icon_eu_en.png",
+      "location": "Poprad",
+      "slug": "poprad",
+      "model": "icon_eu",
+      "requested_model": "icon_eu",
+      "lang": "en"
+    },
+    "vienna_aifs_sk": {
+      "file": "vienna_aifs_sk.png",
+      "location": "Vienna",
+      "slug": "vienna",
+      "model": "aifs",
+      "requested_model": "aifs",
+      "lang": "sk"
+    },
+    "vienna_aifs_en": {
+      "file": "vienna_aifs_en.png",
+      "location": "Vienna",
+      "slug": "vienna",
+      "model": "aifs",
+      "requested_model": "aifs",
+      "lang": "en"
+    },
+    "vienna_icon_d2_sk": {
+      "file": "vienna_icon_d2_sk.png",
+      "location": "Vienna",
+      "slug": "vienna",
+      "model": "icon_d2",
+      "requested_model": "icon_d2",
+      "lang": "sk"
+    },
+    "vienna_icon_d2_en": {
+      "file": "vienna_icon_d2_en.png",
+      "location": "Vienna",
+      "slug": "vienna",
+      "model": "icon_d2",
+      "requested_model": "icon_d2",
+      "lang": "en"
+    },
+    "vienna_icon_eu_sk": {
+      "file": "vienna_icon_eu_sk.png",
+      "location": "Vienna",
+      "slug": "vienna",
+      "model": "icon_eu",
+      "requested_model": "icon_eu",
+      "lang": "sk"
+    },
+    "vienna_icon_eu_en": {
+      "file": "vienna_icon_eu_en.png",
+      "location": "Vienna",
+      "slug": "vienna",
+      "model": "icon_eu",
+      "requested_model": "icon_eu",
+      "lang": "en"
+    },
+    "prague_aifs_sk": {
+      "file": "prague_aifs_sk.png",
+      "location": "Prague",
+      "slug": "prague",
+      "model": "aifs",
+      "requested_model": "aifs",
+      "lang": "sk"
+    },
+    "prague_aifs_en": {
+      "file": "prague_aifs_en.png",
+      "location": "Prague",
+      "slug": "prague",
+      "model": "aifs",
+      "requested_model": "aifs",
+      "lang": "en"
+    },
+    "prague_icon_d2_sk": {
+      "file": "prague_icon_d2_sk.png",
+      "location": "Prague",
+      "slug": "prague",
+      "model": "icon_d2",
+      "requested_model": "icon_d2",
+      "lang": "sk"
+    },
+    "prague_icon_d2_en": {
+      "file": "prague_icon_d2_en.png",
+      "location": "Prague",
+      "slug": "prague",
+      "model": "icon_d2",
+      "requested_model": "icon_d2",
+      "lang": "en"
+    },
+    "prague_icon_eu_sk": {
+      "file": "prague_icon_eu_sk.png",
+      "location": "Prague",
+      "slug": "prague",
+      "model": "icon_eu",
+      "requested_model": "icon_eu",
+      "lang": "sk"
+    },
+    "prague_icon_eu_en": {
+      "file": "prague_icon_eu_en.png",
+      "location": "Prague",
+      "slug": "prague",
       "model": "icon_eu",
       "requested_model": "icon_eu",
       "lang": "en"

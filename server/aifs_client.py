@@ -94,7 +94,47 @@ class AIFSClient:
     ASTRONOMY_URL = "https://api.open-meteo.com/v1/forecast"
 
     def __init__(self):
-        self.headers = {"User-Agent": "Meteogram-AIFS/1.0 (ECMWF-AI-Meteogram)"}
+        self.headers = {"User-Agent": "Meteogram-AIFS/1.0 (ECMWF-AI-Meteogram; Contact: https://github.com/igorcerovsky/AIFS-meteogram)"}
+
+    def _http_get_json(self, url: str, timeout: int = 15, max_retries: int = 4) -> Optional[Dict[str, Any]]:
+        """
+        Robust HTTP GET request handler with automatic retries and exponential backoff
+        specifically handling Open-Meteo HTTP 429 (rate-limit) and transient errors.
+        """
+        import random
+        import re
+        import time
+        import urllib.error
+
+        req = urllib.request.Request(url, headers=self.headers)
+        for attempt in range(max_retries):
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    raw_content = resp.read().decode("utf-8")
+                    # Clean unquoted NaN responses from Open-Meteo
+                    cleaned = re.sub(r':\s*nan\b', ': null', raw_content)
+                    return json.loads(cleaned)
+            except urllib.error.HTTPError as e:
+                if e.code == 429 or 500 <= e.code < 600:
+                    retry_after = e.headers.get("Retry-After")
+                    if retry_after and retry_after.isdigit():
+                        backoff = float(retry_after) + random.uniform(0.5, 1.5)
+                    else:
+                        backoff = (2.0 ** attempt) * 1.5 + random.uniform(0.5, 1.5)
+                    print(f"[!] Open-Meteo HTTP {e.code} (attempt {attempt + 1}/{max_retries}). Backing off {backoff:.1f}s...")
+                    time.sleep(backoff)
+                else:
+                    print(f"[-] HTTP error {e.code} fetching {url}: {e.reason}")
+                    return None
+            except (urllib.error.URLError, TimeoutError) as e:
+                backoff = (2.0 ** attempt) * 1.0 + random.uniform(0.5, 1.0)
+                print(f"[!] Network/timeout error (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {backoff:.1f}s...")
+                time.sleep(backoff)
+            except Exception as e:
+                print(f"[-] Unexpected error fetching {url}: {e}")
+                return None
+        print(f"[-] Max retries ({max_retries}) exceeded for {url}")
+        return None
 
     def geocode(self, query: str) -> Dict[str, Any]:
         """Geocode a city or location name to lat, lon, elevation, name, country."""
@@ -123,9 +163,9 @@ class AIFSClient:
             {"name": query, "count": 1, "language": "en", "format": "json"}
         )
         url = f"{self.GEOCODING_URL}?{params}"
-        req = urllib.request.Request(url, headers=self.headers)
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read().decode())
+        data = self._http_get_json(url, timeout=10, max_retries=3)
+        if not data or not isinstance(data, dict):
+            raise ValueError(f"Geocoding network error for query: '{query}'")
 
         results = data.get("results", [])
         if not results:
@@ -155,9 +195,9 @@ class AIFSClient:
             }
         )
         url = f"{self.ASTRONOMY_URL}?{params}"
-        req = urllib.request.Request(url, headers=self.headers)
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read().decode())
+        data = self._http_get_json(url, timeout=15, max_retries=4)
+        if not data or not isinstance(data, dict):
+            data = {}
 
         daily = data.get("daily", {})
         sunrises = daily.get("sunrise", [])
@@ -231,7 +271,6 @@ class AIFSClient:
     def _fetch_open_meteo_raw(
         self, latitude: float, longitude: float, api_model: str, days: int, hourly_vars: List[str], time_res: str = "hourly"
     ) -> Dict[str, Any]:
-        import re
         params = urllib.parse.urlencode(
             {
                 "latitude": latitude,
@@ -243,19 +282,13 @@ class AIFSClient:
             }
         )
         url = f"{self.ENSEMBLE_URL}?{params}"
-        req = urllib.request.Request(url, headers=self.headers)
-        try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                raw_content = resp.read().decode()
-                # Open-Meteo returns 'nan' without quotes when coordinates are out of model domain
-                cleaned = re.sub(r':\s*nan\b', ': null', raw_content)
-                data = json.loads(cleaned)
-                if time_res != "hourly" and time_res in data and "hourly" not in data:
-                    data["hourly"] = data.pop(time_res)
-                data["time_res"] = time_res
-                return data
-        except Exception:
+        data = self._http_get_json(url, timeout=20, max_retries=4)
+        if not data or not isinstance(data, dict):
             return {"latitude": None}
+        if time_res != "hourly" and time_res in data and "hourly" not in data:
+            data["hourly"] = data.pop(time_res)
+        data["time_res"] = time_res
+        return data
 
     def _is_valid_forecast(self, raw: Dict[str, Any]) -> bool:
         import math
@@ -362,32 +395,30 @@ class AIFSClient:
         if not needs_fetch:
             return
 
-        try:
-            params = urllib.parse.urlencode(
-                {
-                    "latitude": latitude,
-                    "longitude": longitude,
-                    "models": api_model,
-                    time_res: ",".join(cloud_vars),
-                    "forecast_days": days,
-                    "timezone": "UTC",
-                }
-            )
-            url = f"{self.ASTRONOMY_URL}?{params}"
-            req = urllib.request.Request(url, headers=self.headers)
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                resp_json = json.loads(resp.read().decode())
-                det_data = resp_json.get(time_res) or resp_json.get("hourly", {})
-            for cvar in cloud_vars:
-                if cvar in det_data and det_data[cvar]:
-                    hourly[cvar] = det_data[cvar]
-                    # Strip any null ensemble member keys so they do not pollute stats
-                    for m in range(1, 51):
-                        mkey = f"{cvar}_member{m:02d}"
-                        if mkey in hourly:
-                            del hourly[mkey]
-        except Exception:
-            pass
+        params = urllib.parse.urlencode(
+            {
+                "latitude": latitude,
+                "longitude": longitude,
+                "models": api_model,
+                time_res: ",".join(cloud_vars),
+                "forecast_days": days,
+                "timezone": "UTC",
+            }
+        )
+        url = f"{self.ASTRONOMY_URL}?{params}"
+        resp_json = self._http_get_json(url, timeout=15, max_retries=4)
+        if not resp_json:
+            print(f"[!] Warning: Failed to backfill cloud layers from deterministic endpoint for {api_model}.")
+            return
+
+        det_data = resp_json.get(time_res) or resp_json.get("hourly", {})
+        for cvar in cloud_vars:
+            if cvar in det_data and det_data[cvar]:
+                hourly[cvar] = det_data[cvar]
+                # Strip any null ensemble member keys so they do not pollute stats
+                for k in list(hourly.keys()):
+                    if k.startswith(f"{cvar}_member"):
+                        del hourly[k]
 
     def fetch_aifs_ensemble(
         self, latitude: float, longitude: float, days: int = 15
@@ -443,6 +474,9 @@ class AIFSClient:
                         members_data.append([v if v is not None else np.nan for v in vals])
 
             if not members_data:
+                if var in ["cloud_cover_low", "cloud_cover_mid", "cloud_cover_high"]:
+                    stats[var] = None
+                    continue
                 arr = np.zeros((1, num_timesteps))
             else:
                 arr = np.array(members_data, dtype=float)
