@@ -306,13 +306,13 @@ class MeteogramChart {
       const dt = this.times[i];
       const dKey = this._formatDateKey(dt);
       if (!this.dailyPrecipSums[dKey]) {
-        this.dailyPrecipSums[dKey] = { rain: 0.0, snow: 0.0, maxIdx: i, midIdx: i };
+        this.dailyPrecipSums[dKey] = { rain: 0.0, snow: 0.0, startIdx: i, endIdx: i };
       }
       const rVal = (pMedian && pMedian[i] != null) ? pMedian[i] : 0.0;
       const sVal = (pSnow && pSnow[i] != null) ? pSnow[i] : 0.0;
       this.dailyPrecipSums[dKey].rain += rVal;
       this.dailyPrecipSums[dKey].snow += sVal;
-      this.dailyPrecipSums[dKey].maxIdx = i;
+      this.dailyPrecipSums[dKey].endIdx = i;
     }
 
     // Precalculate solar & lunar altitude timeseries for HUD
@@ -995,35 +995,39 @@ class MeteogramChart {
       }
     }
 
-    // Daily precipitation accumulation badges
-    ctx.textAlign = "center";
-    ctx.font = "bold 9px 'Inter', sans-serif";
-    for (const [dKey, agg] of Object.entries(this.dailyPrecipSums)) {
-      if (agg.rain > 0.1 || agg.snow > 0.1) {
-        const x = this._timeToX(this.times[agg.maxIdx].getTime()) - (this.plotWidth / nTimes) * 1.5;
-        if (x > this.marginLeft + 15 && x < this.marginLeft + this.plotWidth - 15) {
-          ctx.fillStyle = "rgba(37, 99, 235, 0.12)";
-          const label = `Σ ${agg.rain.toFixed(1)} mm${agg.snow > 0.1 ? ` (❄${agg.snow.toFixed(1)}cm)` : ""}`;
-          const textW = ctx.measureText(label).width;
-          ctx.fillRect(x - textW / 2 - 3, p.top + 4, textW + 6, 14);
-          ctx.strokeStyle = "#93c5fd";
-          ctx.lineWidth = 0.8;
-          ctx.strokeRect(x - textW / 2 - 3, p.top + 4, textW + 6, 14);
-          ctx.fillStyle = "#1e3a8a";
-          ctx.fillText(label, x, p.top + 14);
-        }
-      }
-    }
-
-    // Title & Legend
+    // Title & Legend (top strip)
     ctx.textAlign = "left";
     ctx.fillStyle = "#1e293b";
     ctx.font = "bold 11px 'Inter', sans-serif";
     ctx.fillText(t.precip, this.marginLeft + 8, p.top + 14);
 
-    this._drawLegendBadge(this.marginLeft + 230, p.top + 9, "#2563eb", t.rain, true);
-    this._drawLegendBadge(this.marginLeft + 295, p.top + 9, "#06b6d4", t.snow, true);
-    this._drawLegendBadge(this.marginLeft + 360, p.top + 9, "#1e40af", "Max member tick", false, [0, 0]);
+    this._drawLegendBadge(this.marginLeft + 245, p.top + 9, "#2563eb", t.rain, true);
+    this._drawLegendBadge(this.marginLeft + 310, p.top + 9, "#06b6d4", t.snow, true);
+    this._drawLegendBadge(this.marginLeft + 380, p.top + 9, "#1e40af", "Max member tick", false, [0, 0]);
+
+    // Daily precipitation accumulation badges (placed below the legend strip at p.top + 28)
+    ctx.textAlign = "center";
+    ctx.font = "bold 8.5px 'Inter', sans-serif";
+    for (const [dKey, agg] of Object.entries(this.dailyPrecipSums)) {
+      if (agg.rain > 0.05 || agg.snow > 0.05) {
+        const midTime = Math.floor((this.times[agg.startIdx].getTime() + this.times[agg.endIdx].getTime()) / 2);
+        const x = this._timeToX(midTime);
+        if (x > this.marginLeft + 20 && x < this.marginLeft + this.plotWidth - 20) {
+          const label = `Σ ${agg.rain.toFixed(1)} mm${agg.snow > 0.1 ? ` (❄${agg.snow.toFixed(1)}cm)` : ""}`;
+          const textW = ctx.measureText(label).width;
+          const badgeY = p.top + 28;
+
+          ctx.fillStyle = "rgba(255, 255, 255, 0.94)";
+          ctx.fillRect(x - textW / 2 - 3, badgeY - 10, textW + 6, 13);
+          ctx.strokeStyle = "#93c5fd";
+          ctx.lineWidth = 0.8;
+          ctx.strokeRect(x - textW / 2 - 3, badgeY - 10, textW + 6, 13);
+
+          ctx.fillStyle = "#0284c7";
+          ctx.fillText(label, x, badgeY - 1);
+        }
+      }
+    }
 
     ctx.restore();
     this.panels.p2.valToY = valToY;
