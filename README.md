@@ -13,13 +13,14 @@ The repository is structured into three clean, dedicated components:
 ```
 meteogram/
 ├── server/           # ⚡ Python backend server, CLI generator & rendering engine
-│   ├── server.py     # HTTP server & API (/api/image, /api/check_location)
+│   ├── server.py     # HTTP server & API (/api/forecast, /api/image, /api/check_location)
 │   ├── renderer.py   # High-resolution matplotlib EPSGRAM rendering engine
 │   ├── aifs_client.py# Open-Meteo ensemble API client & geocoder
 │   ├── meteogram.py  # Standalone CLI generation tool
 │   └── requirements.txt
 ├── web/              # 🌐 Web dashboard frontend (HTML5, CSS3, Vanilla JS)
-│   └── index.html    # Interactive client with search, presets & model alert banner
+│   ├── index.html    # Interactive client with search, presets, model alerts & theme adaptation
+│   └── meteogram-chart.js # Dynamic Retina canvas engine with HUD crosshair & direct API fallback
 └── MeteogramApp/     # 📱 Native Apple Multiplatform App (iOS, iPadOS & macOS)
     ├── MeteogramApp.xcodeproj
     ├── Sources/      # SwiftUI views, models, services & viewmodels
@@ -42,7 +43,7 @@ pip install -r server/requirements.txt
 
 ### 2. Launch the Backend Server
 
-Start the lightweight Python server (serves both the Web UI and the Apple App API):
+Start the lightweight Python server (serves the Web UI, JSON forecast API, and Apple App API):
 
 ```bash
 python3 server/server.py 8080
@@ -50,19 +51,24 @@ python3 server/server.py 8080
 
 ---
 
-## 🌐 1. Web Dashboard (`web/`)
+## 🌐 1. Interactive Web Dashboard (`web/`)
 
 Open [http://localhost:8080](http://localhost:8080) in your browser once the server is running.
 
 ### Key Features
+- **Dynamic HTML5 Canvas Engine (`web/meteogram-chart.js`)**:
+  - Automatically scales with `devicePixelRatio` for razor-sharp rendering on Retina and HiDPI displays.
+  - Interactive crosshair tracking across all 5 synchronized panels with real-time value indicators.
+  - Floating glassmorphism HUD tooltip showing exact temperature, precipitation, cloud breakdown, wind speed/direction, pressure, and celestial altitudes at the hovered timestamp.
 - **Search & Quick Presets**: Type any city name or GPS coordinates (`lat, lon`), or tap preset chips (*Bratislava-Koliba, Jasná, Liptovský Mikuláš, Plavecké Podhradie, Košice, Poprad/Tatry, Vienna, Prague*).
 - **Model Selection**:
   - **ECMWF AIFS Global Ensemble**: 15 days, 10 days, 7 days (50 AI members).
   - **DWD ICON-EU Regional Ensemble**: 5 days (7.0 km resolution, 40 members).
   - **DWD ICON-D2 High-Resolution Ensemble**: 2 days / 48h (2.2 km resolution, 20 members).
-- **Intelligent Fallback Alert**: Automatic detection when a location is outside the Central Europe ICON-D2 domain, seamlessly transitioning to ICON-EU with an informative notification banner.
-- **Language & Time Zone**: Full support for English (`en`) and Slovak (`sk`), and Local Time or UTC.
-- **Instant Export**: Download high-resolution PNGs or open full-size graphs in a new tab.
+- **Automatic Browser Theme Matching**: Seamlessly adapts backgrounds, borders, chips, and typography to system dark or light mode preferences (`prefers-color-scheme`).
+- **Zero-Backend GitHub Pages Fallback**: Includes a client-side direct fetch engine that queries Open-Meteo's CORS-enabled API directly, allowing the interactive meteogram to run statically on GitHub Pages for any global coordinate without requiring a backend server.
+- **Language & Timezone Switching**: Instant client-side re-rendering when toggling between English (`en`) and Slovak (`sk`), or Local Time and UTC.
+- **Intelligent Fallback Alert**: Automatic notification when coordinates lie outside the ICON-D2 Central Europe boundary, seamlessly switching to ICON-EU.
 
 ---
 
@@ -127,32 +133,36 @@ python3 server/meteogram.py --location "48.148,17.107" --output custom_coords.pn
 
 ### HTTP API (`server/server.py`)
 
-- **`GET /api/image`**: Generates and serves dynamic PNG meteograms.
+- **`GET /api/forecast`**: Serves structured forecast JSON data, ensemble statistics (median, IQR, min/max spreads), and astronomical ephemeris for the dynamic web canvas.
+  - Parameters: `location`, `days`, `model`, `lang`, `tz`.
+  - Caching: Automatic server-side disk cache with 1-hour validity ($< 1\text{ ms}$ response).
+- **`GET /api/image`**: Generates and serves high-resolution raster PNG meteograms for native apps or static embedding.
   - Parameters: `location`, `days`, `model`, `lang`, `tz`.
   - Response Headers: `X-Actual-Model`, `X-Model-Fallback`, `X-Fallback-From`.
-  - Caching: Automated caching in `.cache/` with 1-hour expiry and auto-invalidation on renderer updates.
-- **`GET /api/check_location`**: Geocodes locations, determines altitude, and checks DWD ICON-D2 domain boundaries.
+- **`GET /api/check_location`**: Geocodes locations, resolves elevation, and validates DWD ICON-D2 domain boundaries.
 
 ---
 
 ## 📊 Weather Parameters Visualized
 
-1. **2m Air Temperature & Celestial Trajectories**:
-   - Monotonic PCHIP-smoothed median curve (solid dark red), IQR 25–75% band (soft salmon), full ensemble min-max spread (light pink), 0°C freezing line, and daily minimum and maximum labeled values.
-   - **Sun Altitude Trajectory**: Orange dashed curve tracking solar elevation above the horizon with peak culmination time and angle (`☀ HH:MM (XX°)`).
-   - **Moon Altitude Trajectory & Phase**: Cyan dotted curve tracking lunar elevation with peak culmination time and angle (`HH:MM (XX°)`) and rendered custom moon phase disc reflecting actual lunar illumination and waxing/waning direction.
-2. **Precipitation & Snowfall**:
-   - Multi-member accumulation bars for rain and snow, ensemble maximum accumulation ticks, and daily cumulative totals (`Σ X.X mm`).
-3. **Cloud Layers & Total Cloud Cover**:
-   - Four distinct curves: **Total Cloud Cover** (Deep Dark Blue `#1e3a8a`, thick curve) with transparent dark blue percentile ribbons (`alpha=0.10` min-max, `alpha=0.22` IQR), **High Cirrus** (Cyan `#0096c7`), **Medium Altocumulus** (Emerald Teal `#2a9d8f`), and **Low Stratus** (Crimson `#c1121f`).
+1. **2m Air Temperature (°C)**:
+   - Median trajectory curve, interquartile 25–75% band, and full ensemble min-max spread.
+   - **Colored Threshold Grid Lines**: Distinctive reference levels at $-10^\circ\text{C}$ (light blue), $0^\circ\text{C}$ (freezing level blue), $+10^\circ\text{C}$ (yellow), $+20^\circ\text{C}$ (orange), and $+30^\circ\text{C}$ (red).
+   - **Sun & Moon Celestial Trajectories**: Continuous elevation arcs rising from and landing strictly at the bottom horizon line, annotated with culmination peak badges (`☀ HH:MM (XX°)`, `☾ HH:MM (XX°)`).
+   - **Right Y-Axis Celestial Degree Scale**: Dedicated $0^\circ$, $45^\circ$, $90^\circ$ `[Alt]` reference ticks.
+2. **Precipitation & Snowfall (mm)**:
+   - Liquid rain bars, snowfall bars, max-member tick caps, and separate daily cumulative sum badges (`Σ X.X mm`) arranged cleanly below the legend.
+3. **Multi-layer Cloud Cover (%)**:
+   - **Total Cloud Cover**: Yellow vertical percentile bars with light yellow min-max spread, warm yellow Q25–Q75 interquartile bars, and golden median ticks and trajectory line.
+   - **Cloud Layers (Single Curves)**: High Cirrus (cyan `#06b6d4`), Medium Alto (emerald `#10b981`), and Low Stratus (crimson `#e11d48`) rendered as clean single median lines.
 4. **10m Wind Speed & Direction**:
-   - Smoothed wind speed curve with IQR and spread envelopes, overlaid with meteorological wind direction arrows pointing where the wind is blowing.
-5. **Mean Sea Level Pressure (MSLP) & Celestial Trajectories**:
-   - Atmospheric pressure curve (hPa) and ensemble spread envelope, complemented by background Sun and Moon altitude trajectories and peak culmination annotations mirroring the top panel.
+   - Median curve and ensemble spread, Beaufort scale reference lines (Bft 4, 6, 8), and rotating meteorological wind direction arrows color-coded by speed.
+5. **Mean Sea Level Pressure (MSLP, hPa)**:
+   - Atmospheric pressure curve and ensemble spread, $1013.25\text{ hPa}$ standard atmosphere reference line, and synchronized Sun/Moon celestial elevation trajectories with the right-axis `[Alt]` scale.
 6. **Daytime & Night Shading Across All Panels**:
-   - Warm light yellow background (`#fef9c3`) across all 5 panels for daytime hours, contrasted with twilight/night shading (`#343a40`) calculated from astronomical ephemeris for the target coordinates.
-7. **Bottom Timeline Badges**:
-   - Distinct daily badges displaying weekday, calendar date, astronomical sunrise and sunset (`☀ HH:MM – HH:MM`), moonrise and moonset (`☾ HH:MM – HH:MM`), and localized moon phase name with percentage illumination.
+   - Daytime shading contrasted with twilight/night bands calculated from astronomical solar altitude.
+7. **Astronomical Ephemeris Timeline**:
+   - Daily cards displaying weekday, calendar date, sunrise and sunset (`☀ HH:MM – HH:MM`), moonrise and moonset (`☾ HH:MM – HH:MM`), and illuminated vector Moon phase discs with illumination percentages.
 
 ---
 
