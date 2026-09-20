@@ -715,16 +715,6 @@ class MeteogramChart {
         ctx.font = "10px 'Inter', monospace";
       }
       ctx.fillText(`${v > 0 ? `+${v}` : v} °C`, this.marginLeft - 6, y);
-
-      // Right axis colored badge / label (e.g. 10°C, 20°C, 30°C)
-      if (lvl) {
-        ctx.save();
-        ctx.textAlign = "left";
-        ctx.fillStyle = lvl.color;
-        ctx.font = "bold 9.5px 'Inter', sans-serif";
-        ctx.fillText(` ${lvl.lbl}`, this.marginLeft + this.plotWidth + 3, y);
-        ctx.restore();
-      }
     }
 
     // Celestial altitude curves (Sun and Moon)
@@ -883,6 +873,35 @@ class MeteogramChart {
       ctx.fillStyle = "#0369a1";
       ctx.fillText(label, x, y + 21);
     }
+
+    // 5. Right axis: Celestial altitudes (0° .. 90°)
+    const rightEdge = this.marginLeft + this.plotWidth;
+    ctx.save();
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#d97706";
+    ctx.font = "9px 'Inter', sans-serif";
+
+    const y90 = altToY(90);
+    const y45 = altToY(45);
+    const y0 = altToY(0);
+
+    // Subtle right tick marks
+    ctx.strokeStyle = "#d97706";
+    ctx.lineWidth = 0.8;
+    [y90, y45, y0].forEach(y => {
+      ctx.beginPath();
+      ctx.moveTo(rightEdge, y);
+      ctx.lineTo(rightEdge + 3, y);
+      ctx.stroke();
+    });
+
+    ctx.fillText("90°", rightEdge + 6, Math.max(p.top + 7, y90));
+    ctx.fillText("45°", rightEdge + 6, y45);
+    ctx.fillText("0°", rightEdge + 6, y0 - 4);
+    ctx.fillStyle = "#92400e";
+    ctx.fillText("[Alt]", rightEdge + 24, y0 - 4);
+    ctx.restore();
 
     ctx.restore();
   }
