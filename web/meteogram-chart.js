@@ -443,7 +443,7 @@ class MeteogramChart {
     const dpr = window.devicePixelRatio || 1;
     const rect = this.container.getBoundingClientRect();
     const cssWidth = Math.max(880, Math.floor(rect.width));
-    const cssHeight = 900;
+    const cssHeight = 915;
 
     this.canvas.width = Math.floor(cssWidth * dpr);
     this.canvas.height = Math.floor(cssHeight * dpr);
@@ -467,14 +467,14 @@ class MeteogramChart {
     // P3: Clouds (h: 130)
     // P4: Wind (h: 140)
     // P5: MSLP (h: 110)
-    // Timeline / Ephemeris (h: 85)
+    // Timeline / Ephemeris (h: 95)
     this.panels = {
       p1: { top: 45, height: 220, bottom: 265, name: "temp" },
       p2: { top: 275, height: 125, bottom: 400, name: "precip" },
       p3: { top: 410, height: 130, bottom: 540, name: "clouds" },
       p4: { top: 550, height: 135, bottom: 685, name: "wind" },
       p5: { top: 695, height: 110, bottom: 805, name: "pressure" },
-      timeline: { top: 805, height: 85, bottom: 890, name: "timeline" },
+      timeline: { top: 805, height: 95, bottom: 900, name: "timeline" },
     };
 
     this._drawBackground();
@@ -1465,32 +1465,48 @@ class MeteogramChart {
         }
       }
 
-      // Astronomical Badges (Sunrise, Sunset, Moon Phase)
+      // Astronomical Badges (Sunrise, Sunset, Moonrise, Moonset, Moon Phase)
       const astroItem = astroDaily[d.key];
-      if (astroItem && dayWidth > 45) {
-        ctx.font = "9px 'Inter', sans-serif";
-        ctx.fillStyle = "#b45309"; // amber for sun
+      if (astroItem && dayWidth > 38) {
+        const fs = dayWidth < 65 ? "8px" : "8.5px";
+        ctx.font = `${fs} 'Inter', sans-serif`;
 
-        let sunText = "";
+        const formatTime = (iso) => {
+          if (!iso) return "--:--";
+          const dt = new Date(iso);
+          if (isNaN(dt.getTime())) return "--:--";
+          const h = String(tz === "utc" ? dt.getUTCHours() : dt.getHours()).padStart(2, "0");
+          const m = String(tz === "utc" ? dt.getUTCMinutes() : dt.getMinutes()).padStart(2, "0");
+          return `${h}:${m}`;
+        };
+
+        // 1. Sun rise & set
         if (astroItem.sunrise && astroItem.sunset) {
-          const rD = new Date(astroItem.sunrise);
-          const sD = new Date(astroItem.sunset);
-          const rH = String(tz === "utc" ? rD.getUTCHours() : rD.getHours()).padStart(2, "0");
-          const rM = String(tz === "utc" ? rD.getUTCMinutes() : rD.getMinutes()).padStart(2, "0");
-          const sH = String(tz === "utc" ? sD.getUTCHours() : sD.getHours()).padStart(2, "0");
-          const sM = String(tz === "utc" ? sD.getUTCMinutes() : sD.getMinutes()).padStart(2, "0");
-          sunText = `☀ ${rH}:${rM}  ☽ ${sH}:${sM}`;
-          ctx.fillText(sunText, midX, p.top + 48);
+          const rStr = formatTime(astroItem.sunrise);
+          const sStr = formatTime(astroItem.sunset);
+          ctx.fillStyle = "#b45309"; // amber for sun
+          ctx.textAlign = "center";
+          ctx.fillText(`☀ ${rStr} – ${sStr}`, midX, p.top + 46);
         }
 
-        // Moon phase vector badge & illumination
+        // 2. Moon rise & set (as in static version)
+        if (astroItem.moonrise || astroItem.moonset) {
+          const mrStr = formatTime(astroItem.moonrise);
+          const msStr = formatTime(astroItem.moonset);
+          ctx.fillStyle = "#0284c7"; // blue for moon
+          ctx.textAlign = "center";
+          ctx.fillText(`☾ ${mrStr} – ${msStr}`, midX, p.top + 60);
+        }
+
+        // 3. Moon phase vector badge & illumination
         if (astroItem.moon_phase != null) {
           const phase = astroItem.moon_phase;
           const illum = astroItem.illum_pct != null ? `${astroItem.illum_pct}%` : "";
-          this._drawMoonPhaseBadge(midX - 18, p.top + 64, phase, 7);
+          this._drawMoonPhaseBadge(midX - 16, p.top + 77, phase, 6.5);
           ctx.fillStyle = "#475569";
           ctx.textAlign = "left";
-          ctx.fillText(illum, midX - 6, p.top + 68);
+          ctx.font = `${fs} 'Inter', sans-serif`;
+          ctx.fillText(illum, midX - 5, p.top + 80);
         }
       }
     }
