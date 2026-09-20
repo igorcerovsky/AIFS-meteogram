@@ -794,8 +794,13 @@ class MeteogramChart {
     // Y-scale starts strictly at 0.0 so altitude=0.0 (rise/set at horizon) is EXACTLY at p.bottom!
     const altToY = (altDeg) => p.bottom - (Math.max(0, altDeg) / 92.0) * p.height;
 
+    // 1. Clip strictly to the graph plot bounds so trajectories never extend out of the graph
     ctx.save();
-    // 1. Plot Sun passages (anchored strictly at p.bottom)
+    ctx.beginPath();
+    ctx.rect(this.marginLeft, p.top, this.plotWidth, p.height);
+    ctx.clip();
+
+    // 2. Plot Sun passages (anchored strictly at p.bottom)
     ctx.strokeStyle = "#f4a261";
     ctx.lineWidth = 1.3;
     ctx.setLineDash([4, 3]);
@@ -816,7 +821,7 @@ class MeteogramChart {
       ctx.stroke();
     }
 
-    // 2. Plot Moon passages (anchored strictly at p.bottom)
+    // 3. Plot Moon passages (anchored strictly at p.bottom)
     ctx.strokeStyle = "#00b4d8";
     ctx.lineWidth = 1.2;
     ctx.setLineDash([2, 3]);
@@ -838,7 +843,7 @@ class MeteogramChart {
     }
     ctx.setLineDash([]);
 
-    // 3. Solar Peaks (time + degree badge at crest)
+    // 4. Solar Peaks (time + degree badge at crest)
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     for (const peak of this.celestialData.sun.peaks) {
@@ -860,7 +865,7 @@ class MeteogramChart {
       ctx.fillText(label, x, y - 9.5);
     }
 
-    // 4. Lunar Peaks (mini moon icon + time + degree badge at crest)
+    // 5. Lunar Peaks (mini moon icon + time + degree badge at crest)
     for (const peak of this.celestialData.moon.peaks) {
       const x = this._timeToX(peak.timeMs);
       if (x < this.marginLeft + 12 || x > this.marginLeft + this.plotWidth - 12) continue;
@@ -874,7 +879,10 @@ class MeteogramChart {
       ctx.fillText(label, x, y + 21);
     }
 
-    // 5. Right axis: Celestial altitudes (0° .. 90°)
+    // Restore from plot clip so right axis labels can be rendered in the margin
+    ctx.restore();
+
+    // 6. Right axis: Celestial altitudes (0° .. 90°)
     const rightEdge = this.marginLeft + this.plotWidth;
     ctx.save();
     ctx.textAlign = "left";
@@ -901,8 +909,6 @@ class MeteogramChart {
     ctx.fillText("0°", rightEdge + 6, y0 - 4);
     ctx.fillStyle = "#92400e";
     ctx.fillText("[Alt]", rightEdge + 24, y0 - 4);
-    ctx.restore();
-
     ctx.restore();
   }
 
