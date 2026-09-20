@@ -2,7 +2,7 @@
 
 An advanced meteorological visualization system inspired by [SHMÚ's ECMWF EPSGRAM](https://www.shmu.sk/sk/?page=1&id=meteo_epsgramy&nwp_mesto=34031#ecmwf), powered by open forecast data from ECMWF's **AIFS** (*Artificial Intelligence Forecasting System* 0.25° Ensemble — 50 AI members) and DWD's regional high-resolution ensembles (**ICON-EU** and **ICON-D2**).
 
-![DWD ICON-EU 5-Day High-Resolution Meteogram Preview](assets/meteogram_preview.png)
+![ECMWF AIFS 15-Day High-Resolution Meteogram Preview](assets/meteogram_preview.png)
 
 ---
 
@@ -54,6 +54,8 @@ python3 server/server.py 8080
 ## 🌐 1. Interactive Web Dashboard (`web/`)
 
 Open [http://localhost:8080](http://localhost:8080) in your browser once the server is running.
+
+![ECMWF AIFS Interactive Web Dashboard Preview](assets/web_dashboard_preview.png)
 
 ### Key Features
 - **Dynamic HTML5 Canvas Engine (`web/meteogram-chart.js`)**:

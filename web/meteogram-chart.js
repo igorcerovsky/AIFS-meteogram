@@ -1472,6 +1472,8 @@ class MeteogramChart {
       const midX = (startX + endX) / 2;
       const dayWidth = endX - startX;
 
+      if (dayWidth < 30) continue;
+
       const sampleDate = this.times[d.startIdx];
       const dayName = t.days_short[tz === "utc" ? sampleDate.getUTCDay() : sampleDate.getDay()];
       const dayNum = tz === "utc" ? sampleDate.getUTCDate() : sampleDate.getDate();
