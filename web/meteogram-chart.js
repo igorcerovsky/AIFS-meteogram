@@ -1062,30 +1062,59 @@ class MeteogramChart {
       ctx.fillText(`${v}%`, this.marginLeft - 6, y);
     }
 
-    // Total Cloud Cover (amber fill and curve)
+    // 1. Total Cloud Cover Bars with Percentiles (Yellow color)
     const cTotal = stats.cloud_cover;
+    const nTimes = this.times.length;
+    const barWidth = Math.max(2.5, (this.plotWidth / nTimes) * 0.72);
+
     if (cTotal && cTotal.median) {
-      ctx.fillStyle = "rgba(245, 158, 11, 0.2)";
+      for (let i = 0; i < nTimes; i++) {
+        const x = this._timeToX(this.times[i].getTime());
+        const minVal = cTotal.min ? cTotal.min[i] : null;
+        const maxVal = cTotal.max ? cTotal.max[i] : null;
+        const q25 = cTotal.q25 ? cTotal.q25[i] : null;
+        const q75 = cTotal.q75 ? cTotal.q75[i] : null;
+        const med = cTotal.median ? cTotal.median[i] : null;
+
+        if (med == null) continue;
+
+        if (minVal != null && maxVal != null && (maxVal > 0 || minVal > 0)) {
+          // Full ensemble spread: Min - Max (light translucent yellow)
+          const yMin = valToY(minVal);
+          const yMax = valToY(maxVal);
+          ctx.fillStyle = "rgba(254, 240, 138, 0.52)"; // #fef08a
+          ctx.fillRect(x - barWidth / 2, yMax, barWidth, Math.max(1.5, yMin - yMax));
+
+          // 50% interquartile spread: Q25 - Q75 (rich warm yellow)
+          if (q25 != null && q75 != null) {
+            const yQ25 = valToY(q25);
+            const yQ75 = valToY(q75);
+            ctx.fillStyle = "rgba(250, 204, 21, 0.82)"; // #facc15
+            ctx.fillRect(x - barWidth / 2, yQ75, barWidth, Math.max(1.5, yQ25 - yQ75));
+          }
+
+          // Median tick mark across the bar
+          const yMed = valToY(med);
+          ctx.strokeStyle = "#ca8a04"; // golden yellow
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          ctx.moveTo(x - barWidth / 2, yMed);
+          ctx.lineTo(x + barWidth / 2, yMed);
+          ctx.stroke();
+        } else if (med > 0) {
+          // Deterministic / single member: bar from 0 up to median
+          const yMed = valToY(med);
+          ctx.fillStyle = "rgba(250, 204, 21, 0.82)";
+          ctx.fillRect(x - barWidth / 2, yMed, barWidth, Math.max(1.5, p.bottom - yMed));
+        }
+      }
+
+      // Median trajectory line connecting the medians across the bars
+      ctx.strokeStyle = "#ca8a04";
+      ctx.lineWidth = 1.8;
       ctx.beginPath();
       let started = false;
-      for (let i = 0; i < this.times.length; i++) {
-        const v = cTotal.median[i];
-        if (v == null) continue;
-        const x = this._timeToX(this.times[i].getTime());
-        const y = valToY(v);
-        if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
-      }
-      ctx.lineTo(this.marginLeft + this.plotWidth, p.bottom);
-      ctx.lineTo(this.marginLeft, p.bottom);
-      ctx.closePath();
-      ctx.fill();
-
-      // Total cloud line
-      ctx.strokeStyle = "#d97706";
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      started = false;
-      for (let i = 0; i < this.times.length; i++) {
+      for (let i = 0; i < nTimes; i++) {
         const v = cTotal.median[i];
         if (v == null) continue;
         const x = this._timeToX(this.times[i].getTime());
@@ -1095,14 +1124,14 @@ class MeteogramChart {
       ctx.stroke();
     }
 
-    // High Clouds (cyan)
-    this._drawCurve(stats.cloud_cover_high, valToY, "#06b6d4", 1.6);
+    // 2. High Clouds (cyan curve, median only)
+    this._drawCurve(stats.cloud_cover_high, valToY, "#06b6d4", 1.8);
 
-    // Mid Clouds (emerald teal)
-    this._drawCurve(stats.cloud_cover_mid, valToY, "#10b981", 1.6);
+    // 3. Mid Clouds (emerald green curve, median only)
+    this._drawCurve(stats.cloud_cover_mid, valToY, "#10b981", 1.8);
 
-    // Low Clouds (crimson)
-    this._drawCurve(stats.cloud_cover_low, valToY, "#e11d48", 1.6);
+    // 4. Low Clouds (crimson curve, median only)
+    this._drawCurve(stats.cloud_cover_low, valToY, "#e11d48", 1.8);
 
     // Title & Legend
     ctx.textAlign = "left";
@@ -1110,10 +1139,10 @@ class MeteogramChart {
     ctx.font = "bold 11px 'Inter', sans-serif";
     ctx.fillText(t.clouds, this.marginLeft + 8, p.top + 14);
 
-    this._drawLegendBadge(this.marginLeft + 130, p.top + 9, "#d97706", t.total_clouds, false);
-    this._drawLegendBadge(this.marginLeft + 220, p.top + 9, "#06b6d4", t.high_clouds, false);
-    this._drawLegendBadge(this.marginLeft + 340, p.top + 9, "#10b981", t.mid_clouds, false);
-    this._drawLegendBadge(this.marginLeft + 465, p.top + 9, "#e11d48", t.low_clouds, false);
+    this._drawLegendBadge(this.marginLeft + 130, p.top + 9, "#facc15", t.total_clouds, true);
+    this._drawLegendBadge(this.marginLeft + 235, p.top + 9, "#06b6d4", t.high_clouds, false);
+    this._drawLegendBadge(this.marginLeft + 355, p.top + 9, "#10b981", t.mid_clouds, false);
+    this._drawLegendBadge(this.marginLeft + 480, p.top + 9, "#e11d48", t.low_clouds, false);
 
     ctx.restore();
     this.panels.p3.valToY = valToY;
@@ -1749,6 +1778,10 @@ class MeteogramChart {
     const pMaxMember = stats.precipitation?.max?.[idx] || 0.0;
 
     const cTotal = stats.cloud_cover?.median?.[idx];
+    const cTotalQ25 = stats.cloud_cover?.q25?.[idx];
+    const cTotalQ75 = stats.cloud_cover?.q75?.[idx];
+    const cTotalMin = stats.cloud_cover?.min?.[idx];
+    const cTotalMax = stats.cloud_cover?.max?.[idx];
     const cHigh = stats.cloud_cover_high?.median?.[idx];
     const cMid = stats.cloud_cover_mid?.median?.[idx];
     const cLow = stats.cloud_cover_low?.median?.[idx];
@@ -1793,13 +1826,15 @@ class MeteogramChart {
 
         <div>
           <span style="color: #94a3b8; font-size: 11px;">☁ ${t.clouds.split("[")[0]}</span>
-          <div style="font-size: 13px; font-weight: 600; color: #fbbf24;">
+          <div style="font-size: 13px; font-weight: 600; color: #facc15;">
             ${cTotal != null ? `${Math.round(cTotal)}%` : "-"}
+            ${cTotalQ25 != null && cTotalQ75 != null ? `<span style="font-size: 10px; font-weight: normal; color: #cbd5e1;"> (${Math.round(cTotalQ25)}–${Math.round(cTotalQ75)}%)</span>` : ""}
           </div>
           <div style="font-size: 10px; color: #cbd5e1;">
             H: ${cHigh != null ? `${Math.round(cHigh)}%` : "-"} | 
             M: ${cMid != null ? `${Math.round(cMid)}%` : "-"} | 
             L: ${cLow != null ? `${Math.round(cLow)}%` : "-"}
+            ${cTotalMin != null && cTotalMax != null ? `<br/><span style="color: #94a3b8;">Spread: ${Math.round(cTotalMin)}–${Math.round(cTotalMax)}%</span>` : ""}
           </div>
         </div>
 
