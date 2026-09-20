@@ -1501,33 +1501,78 @@ class MeteogramChart {
   _drawMoonPhaseBadge(cx, cy, phase, radius) {
     const ctx = this.ctx;
     ctx.save();
+
+    const p = ((phase % 1.0) + 1.0) % 1.0;
+    const darkColor = "#1e293b"; // dark unlit moon base
+    const litColor = "#fef08a";  // luminous warm moonish pearl-gold
+    const strokeColor = "#64748b";
+
+    // 1. Full Moon (p ~ 0.50): fully lit disk in luminous moonish color
+    if (Math.abs(p - 0.5) < 0.035) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
+      ctx.fillStyle = litColor;
+      ctx.fill();
+      ctx.strokeStyle = "#ca8a04"; // subtle warm rim
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+
+    // 2. New Moon (p ~ 0.0 or 1.0): dark unlit disk with delicate perimeter
+    if (p < 0.035 || p > 0.965) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
+      ctx.fillStyle = darkColor;
+      ctx.fill();
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+
+    // 3. Intermediate phases: draw dark disk background first
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
-    ctx.fillStyle = "#1e293b"; // dark moon base
+    ctx.fillStyle = darkColor;
     ctx.fill();
-    ctx.strokeStyle = "#94a3b8";
+    ctx.strokeStyle = strokeColor;
     ctx.lineWidth = 0.8;
     ctx.stroke();
 
-    // Lit portion
-    const p = ((phase % 1.0) + 1.0) % 1.0;
-    ctx.fillStyle = "#fef08a"; // soft warm light
+    // 4. Construct illuminated polygon patch (outer limb + inner terminator curve)
+    const n = 36;
+    const k = Math.cos(2 * Math.PI * p);
+    ctx.beginPath();
+    let started = false;
 
-    if (p < 0.5) {
-      // Waxing (right side illuminated)
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius, -Math.PI / 2, Math.PI / 2, false);
-      const k = Math.cos(2 * Math.PI * p);
-      ctx.ellipse(cx, cy, radius * Math.abs(k), radius, 0, Math.PI / 2, -Math.PI / 2, k < 0);
-      ctx.fill();
-    } else {
-      // Waning (left side illuminated)
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius, Math.PI / 2, -Math.PI / 2, false);
-      const k = Math.cos(2 * Math.PI * p);
-      ctx.ellipse(cx, cy, radius * Math.abs(k), radius, 0, -Math.PI / 2, Math.PI / 2, k < 0);
-      ctx.fill();
+    // Outer limb arc from -pi/2 (top) to +pi/2 (bottom)
+    for (let i = 0; i <= n; i++) {
+      const phi = -Math.PI / 2 + (Math.PI * i) / n;
+      const x = cx + (p < 0.5 ? 1 : -1) * radius * Math.cos(phi);
+      const y = cy + radius * Math.sin(phi);
+      if (!started) {
+        ctx.moveTo(x, y);
+        started = true;
+      } else {
+        ctx.lineTo(x, y);
+      }
     }
+
+    // Terminator curve from +pi/2 (bottom) back to -pi/2 (top)
+    for (let i = n; i >= 0; i--) {
+      const phi = -Math.PI / 2 + (Math.PI * i) / n;
+      const x = cx + (p < 0.5 ? 1 : -1) * radius * k * Math.cos(phi);
+      const y = cy + radius * Math.sin(phi);
+      ctx.lineTo(x, y);
+    }
+
+    ctx.closePath();
+    ctx.fillStyle = litColor;
+    ctx.fill();
+
     ctx.restore();
   }
 
