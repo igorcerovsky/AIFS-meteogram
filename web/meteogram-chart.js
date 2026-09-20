@@ -539,7 +539,7 @@ class MeteogramChart {
 
     const t = METEO_TRANSLATIONS[this.options.lang] || METEO_TRANSLATIONS.en;
 
-    // Y-Scale calculation
+    // Y-Scale calculation: Ensure -10, 0, 10, 20, 30°C are prominently visible
     let minVal = 999, maxVal = -999;
     const mins = tStats.min || [];
     const maxs = tStats.max || [];
@@ -547,13 +547,28 @@ class MeteogramChart {
       if (mins[i] != null && mins[i] < minVal) minVal = mins[i];
       if (maxs[i] != null && maxs[i] > maxVal) maxVal = maxs[i];
     }
-    if (minVal === 999) { minVal = -5; maxVal = 25; }
+    if (minVal === 999) { minVal = -2; maxVal = 25; }
 
-    const yMin = Math.floor((minVal - 3) / 5) * 5;
-    const yMax = Math.ceil((maxVal + 3) / 5) * 5;
+    // Range matching SHMÚ EPSGRAM layout (covers -10 to +30°C consistently)
+    let yMin = Math.min(-2.0, minVal - 2.0);
+    if (minVal < -8.0) yMin = Math.min(-12.0, minVal - 2.0);
+    let yMax = Math.max(32.0, maxVal + 3.0);
+
+    yMin = Math.floor(yMin / 5) * 5;
+    yMax = Math.ceil(yMax / 5) * 5;
     const yRange = yMax - yMin;
 
     const valToY = (v) => p.bottom - ((v - yMin) / yRange) * p.height;
+
+    // Distinctive colored reference lines:
+    // -10°C: light blue, 0°C: blue, 10°C: yellow, 20°C: orange, 30°C: red
+    const tempLevels = {
+      "-10": { color: "#38bdf8", lbl: "-10°C" },
+      "0":   { color: "#0284c7", lbl: "0°C" },
+      "10":  { color: "#eab308", lbl: "10°C" },
+      "20":  { color: "#f97316", lbl: "20°C" },
+      "30":  { color: "#ef4444", lbl: "30°C" },
+    };
 
     // Grid lines & labels
     ctx.save();
@@ -565,15 +580,17 @@ class MeteogramChart {
       const y = valToY(v);
       if (y < p.top || y > p.bottom) continue;
 
-      if (v === 0) {
-        // Freezing 0°C line (blue dashed)
-        ctx.strokeStyle = "#3b82f6";
-        ctx.lineWidth = 1.3;
-        ctx.setLineDash([4, 4]);
+      const lvl = tempLevels[String(v)];
+      if (lvl) {
+        // Distinctive colored thicker dashed line (10, 20, 30°C etc.)
+        ctx.strokeStyle = lvl.color;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 4]);
       } else {
+        // Minor grid line (e.g. 5, 15, 25°C)
         ctx.strokeStyle = "#e2e8f0";
         ctx.lineWidth = 0.8;
-        ctx.setLineDash([2, 2]);
+        ctx.setLineDash([2, 3]);
       }
 
       ctx.beginPath();
@@ -582,20 +599,26 @@ class MeteogramChart {
       ctx.stroke();
       ctx.setLineDash([]);
 
-      ctx.fillStyle = v === 0 ? "#2563eb" : "#64748b";
-      ctx.font = v === 0 ? "bold 10px 'Inter', monospace" : "10px 'Inter', monospace";
+      // Left axis label
+      if (lvl) {
+        ctx.fillStyle = lvl.color;
+        ctx.font = "bold 10px 'Inter', monospace";
+      } else {
+        ctx.fillStyle = "#64748b";
+        ctx.font = "10px 'Inter', monospace";
+      }
       ctx.fillText(`${v > 0 ? `+${v}` : v} °C`, this.marginLeft - 6, y);
-    }
 
-    // Right axis: Celestial altitudes (0° .. 90°)
-    ctx.textAlign = "left";
-    ctx.fillStyle = "#d97706";
-    ctx.font = "9px 'Inter', sans-serif";
-    ctx.fillText("90°", this.marginLeft + this.plotWidth + 6, p.top + 8);
-    ctx.fillText("45°", this.marginLeft + this.plotWidth + 6, p.top + p.height / 2);
-    ctx.fillText("0°", this.marginLeft + this.plotWidth + 6, p.bottom - 4);
-    ctx.fillStyle = "#92400e";
-    ctx.fillText("[Alt]", this.marginLeft + this.plotWidth + 24, p.bottom - 4);
+      // Right axis colored badge / label (e.g. 10°C, 20°C, 30°C)
+      if (lvl) {
+        ctx.save();
+        ctx.textAlign = "left";
+        ctx.fillStyle = lvl.color;
+        ctx.font = "bold 9.5px 'Inter', sans-serif";
+        ctx.fillText(` ${lvl.lbl}`, this.marginLeft + this.plotWidth + 3, y);
+        ctx.restore();
+      }
+    }
 
     // Celestial altitude curves (Sun and Moon)
     this._drawCelestialCurves(p);
