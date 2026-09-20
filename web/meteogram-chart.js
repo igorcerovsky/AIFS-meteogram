@@ -280,7 +280,10 @@ class MeteogramChart {
 
   setOptions(newOptions) {
     Object.assign(this.options, newOptions);
-    if (this.data) this.render();
+    if (this.data) {
+      this._processData();
+      this.render();
+    }
   }
 
   _processData() {
@@ -312,11 +315,115 @@ class MeteogramChart {
       this.dailyPrecipSums[dKey].maxIdx = i;
     }
 
-    // Precalculate solar & lunar altitude timeseries
+    // Precalculate solar & lunar altitude timeseries for HUD
     const lat = (this.data.location && this.data.location.latitude) || 48.15;
     const lon = (this.data.location && this.data.location.longitude) || 17.10;
     this.sunAlts = this.times.map(t => calculateSolarAltitude(t, lat, lon));
     this.moonAlts = this.times.map(t => calculateLunarAltitude(t, lat, lon));
+
+    // Calculate dense celestial passages starting and ending strictly at the bottom (horizon = 0.0°)
+    const padMs = 18 * 3600 * 1000;
+    const denseStart = this.tStart - padMs;
+    const denseEnd = this.tEnd + padMs;
+    const stepMs = 300 * 1000; // 5-minute steps for smooth trajectory arcs
+    const nSteps = Math.floor((denseEnd - denseStart) / stepMs);
+
+    const denseTimes = [];
+    const denseSunAlts = [];
+    const denseMoonAlts = [];
+
+    for (let i = 0; i <= nSteps; i++) {
+      const t = new Date(denseStart + i * stepMs);
+      denseTimes.push(t);
+      denseSunAlts.push(calculateSolarAltitude(t, lat, lon));
+      denseMoonAlts.push(calculateLunarAltitude(t, lat, lon));
+    }
+
+    const extractPassages = (alts, isMoon = false) => {
+      const passages = [];
+      let inPass = false;
+      let pStart = 0;
+
+      for (let i = 0; i < alts.length; i++) {
+        if (alts[i] >= 0.0 && !inPass) {
+          inPass = true;
+          pStart = i;
+        } else if (alts[i] < 0.0 && inPass) {
+          inPass = false;
+          passages.push({ start: pStart, end: i });
+        }
+      }
+      if (inPass) passages.push({ start: pStart, end: alts.length });
+
+      const curves = [];
+      const peaks = [];
+
+      for (const pass of passages) {
+        const segTimes = [];
+        const segAlts = [];
+
+        // Exact rising zero-crossing before pass.start (horizon = 0.0 -> bottom of graph)
+        if (pass.start > 0 && alts[pass.start - 1] < 0.0) {
+          const prevAlt = alts[pass.start - 1];
+          const currAlt = alts[pass.start];
+          const frac = (0.0 - prevAlt) / (currAlt - prevAlt);
+          const tZero = denseTimes[pass.start - 1].getTime() + frac * (denseTimes[pass.start].getTime() - denseTimes[pass.start - 1].getTime());
+          segTimes.push(tZero);
+          segAlts.push(0.0); // Starts strictly at the bottom!
+        }
+
+        for (let i = pass.start; i < pass.end; i++) {
+          segTimes.push(denseTimes[i].getTime());
+          segAlts.push(alts[i]);
+        }
+
+        // Exact setting zero-crossing after pass.end - 1 (horizon = 0.0 -> bottom of graph)
+        if (pass.end < alts.length && alts[pass.end] < 0.0) {
+          const prevAlt = alts[pass.end - 1];
+          const currAlt = alts[pass.end];
+          const frac = (0.0 - prevAlt) / (currAlt - prevAlt);
+          const tZero = denseTimes[pass.end - 1].getTime() + frac * (denseTimes[pass.end].getTime() - denseTimes[pass.end - 1].getTime());
+          segTimes.push(tZero);
+          segAlts.push(0.0); // Ends strictly at the bottom!
+        }
+
+        curves.push({ times: segTimes, alts: segAlts });
+
+        // Calculate peak altitude for this passage
+        let maxAlt = -999;
+        let maxIdx = pass.start;
+        for (let i = pass.start; i < pass.end; i++) {
+          if (alts[i] > maxAlt) {
+            maxAlt = alts[i];
+            maxIdx = i;
+          }
+        }
+
+        const peakTime = denseTimes[maxIdx];
+        if (maxAlt >= 5.0 && peakTime.getTime() >= this.tStart && peakTime.getTime() <= this.tEnd) {
+          const tz = this.options.tz;
+          const pHour = String(tz === "utc" ? peakTime.getUTCHours() : peakTime.getHours()).padStart(2, "0");
+          const pMin = String(tz === "utc" ? peakTime.getUTCMinutes() : peakTime.getMinutes()).padStart(2, "0");
+          const tStr = `${pHour}:${pMin}`;
+
+          let moonPhase = 0.0;
+          if (isMoon) {
+            const dKey = this._formatDateKey(peakTime);
+            if (this.data.astro && this.data.astro.daily && this.data.astro.daily[dKey]) {
+              moonPhase = this.data.astro.daily[dKey].moon_phase || 0.0;
+            }
+          }
+          peaks.push({ timeMs: peakTime.getTime(), alt: maxAlt, tStr, moonPhase });
+        }
+      }
+
+      return { curves, peaks };
+    };
+
+    this.celestialData = {
+      sun: extractPassages(denseSunAlts, false),
+      moon: extractPassages(denseMoonAlts, true),
+    };
   }
 
   _formatDateKey(d) {
@@ -692,39 +799,91 @@ class MeteogramChart {
   }
 
   _drawCelestialCurves(p) {
+    if (!this.celestialData) return;
     const ctx = this.ctx;
-    const altToY = (altDeg) => p.bottom - (Math.max(0, altDeg) / 90.0) * p.height;
+    // Y-scale starts strictly at 0.0 so altitude=0.0 (rise/set at horizon) is EXACTLY at p.bottom!
+    const altToY = (altDeg) => p.bottom - (Math.max(0, altDeg) / 92.0) * p.height;
 
     ctx.save();
-    // Solar altitude curve (golden orange dashed)
-    ctx.strokeStyle = "#f59e0b";
+    // 1. Plot Sun passages (anchored strictly at p.bottom)
+    ctx.strokeStyle = "#f4a261";
     ctx.lineWidth = 1.3;
-    ctx.setLineDash([3, 3]);
-    ctx.beginPath();
-    let started = false;
-    for (let i = 0; i < this.times.length; i++) {
-      const alt = this.sunAlts[i];
-      if (alt <= 0) { started = false; continue; }
-      const x = this._timeToX(this.times[i].getTime());
-      const y = altToY(alt);
-      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
-    }
-    ctx.stroke();
+    ctx.setLineDash([4, 3]);
 
-    // Lunar altitude curve (soft blue dashed)
-    ctx.strokeStyle = "#60a5fa";
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    started = false;
-    for (let i = 0; i < this.times.length; i++) {
-      const alt = this.moonAlts[i];
-      if (alt <= 0) { started = false; continue; }
-      const x = this._timeToX(this.times[i].getTime());
-      const y = altToY(alt);
-      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+    for (const curve of this.celestialData.sun.curves) {
+      ctx.beginPath();
+      let started = false;
+      for (let i = 0; i < curve.times.length; i++) {
+        const x = this._timeToX(curve.times[i]);
+        const y = altToY(curve.alts[i]);
+        if (!started) {
+          ctx.moveTo(x, y);
+          started = true;
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      ctx.stroke();
     }
-    ctx.stroke();
+
+    // 2. Plot Moon passages (anchored strictly at p.bottom)
+    ctx.strokeStyle = "#00b4d8";
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([2, 3]);
+
+    for (const curve of this.celestialData.moon.curves) {
+      ctx.beginPath();
+      let started = false;
+      for (let i = 0; i < curve.times.length; i++) {
+        const x = this._timeToX(curve.times[i]);
+        const y = altToY(curve.alts[i]);
+        if (!started) {
+          ctx.moveTo(x, y);
+          started = true;
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      ctx.stroke();
+    }
     ctx.setLineDash([]);
+
+    // 3. Solar Peaks (time + degree badge at crest)
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (const peak of this.celestialData.sun.peaks) {
+      const x = this._timeToX(peak.timeMs);
+      if (x < this.marginLeft + 12 || x > this.marginLeft + this.plotWidth - 12) continue;
+      const y = altToY(peak.alt);
+
+      const label = `☀ ${peak.tStr} (${Math.round(peak.alt)}°)`;
+      ctx.font = "bold 9px 'Inter', sans-serif";
+      const tw = ctx.measureText(label).width;
+
+      ctx.fillStyle = "rgba(255, 251, 235, 0.94)";
+      ctx.fillRect(x - tw / 2 - 3, y - 16, tw + 6, 13);
+      ctx.strokeStyle = "#fde68a";
+      ctx.lineWidth = 0.8;
+      ctx.strokeRect(x - tw / 2 - 3, y - 16, tw + 6, 13);
+
+      ctx.fillStyle = "#b45309";
+      ctx.fillText(label, x, y - 9.5);
+    }
+
+    // 4. Lunar Peaks (mini moon icon + time + degree badge at crest)
+    for (const peak of this.celestialData.moon.peaks) {
+      const x = this._timeToX(peak.timeMs);
+      if (x < this.marginLeft + 12 || x > this.marginLeft + this.plotWidth - 12) continue;
+      const y = altToY(peak.alt);
+
+      this._drawMoonPhaseBadge(x, y + 8, peak.moonPhase, 5.5);
+
+      const label = `${peak.tStr} (${Math.round(peak.alt)}°)`;
+      ctx.font = "bold 8.5px 'Inter', sans-serif";
+      ctx.fillStyle = "#0369a1";
+      ctx.fillText(label, x, y + 21);
+    }
+
     ctx.restore();
   }
 
@@ -1203,6 +1362,11 @@ class MeteogramChart {
 
     this._drawLegendBadge(this.marginLeft + 310, p.top + 9, "#7c3aed", t.median);
     this._drawLegendBadge(this.marginLeft + 385, p.top + 9, "rgba(168, 85, 247, 0.5)", t.spread_100, true);
+    this._drawLegendBadge(this.marginLeft + 520, p.top + 9, "#f4a261", t.sun_alt, false, [4, 3]);
+    this._drawLegendBadge(this.marginLeft + 630, p.top + 9, "#00b4d8", t.moon_alt, false, [2, 3]);
+
+    // Draw Sun and Moon trajectories anchored at the bottom
+    this._drawCelestialCurves(p);
 
     ctx.restore();
     this.panels.p5.valToY = valToY;
