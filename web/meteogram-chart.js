@@ -1520,17 +1520,17 @@ class MeteogramChart {
 
     const p = ((phase % 1.0) + 1.0) % 1.0;
     const darkColor = "#1e293b"; // dark unlit moon base
-    const litColor = "#fef08a";  // luminous warm moonish pearl-gold
+    const litColor = "#ffffff";  // luminous moonish pearl white
     const strokeColor = "#64748b";
 
-    // 1. Full Moon (p ~ 0.50): fully lit disk in luminous moonish color
+    // 1. Full Moon (p ~ 0.50): fully lit disk in luminous moonish white
     if (Math.abs(p - 0.5) < 0.035) {
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
       ctx.fillStyle = litColor;
       ctx.fill();
-      ctx.strokeStyle = "#ca8a04"; // subtle warm rim
-      ctx.lineWidth = 0.8;
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 0.9;
       ctx.stroke();
       ctx.restore();
       return;
@@ -1588,6 +1588,13 @@ class MeteogramChart {
     ctx.closePath();
     ctx.fillStyle = litColor;
     ctx.fill();
+
+    // Outer rim stroke
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
 
     ctx.restore();
   }
