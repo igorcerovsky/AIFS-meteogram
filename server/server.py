@@ -53,16 +53,32 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
         path = parsed.path
         query = urllib.parse.parse_qs(parsed.query)
 
-        # Route / -> web/index.html
-        if path == "/" or path == "/index.html":
-            index_file = os.path.join(REPO_ROOT, "web", "index.html")
-            if not os.path.exists(index_file):
-                index_file = os.path.join(BASE_DIR, "web", "index.html")
+        # Serve files from web directory (index.html, meteogram-chart.js, etc.)
+        rel_path = path.lstrip("/")
+        web_file = os.path.join(REPO_ROOT, "web", rel_path)
+        if not rel_path or path in ["/", "/index.html"]:
+            web_file = os.path.join(REPO_ROOT, "web", "index.html")
+
+        if os.path.isfile(web_file) and not path.startswith("/api/"):
+            content_type = "application/octet-stream"
+            if web_file.endswith(".html"):
+                content_type = "text/html; charset=utf-8"
+            elif web_file.endswith(".js"):
+                content_type = "application/javascript; charset=utf-8"
+            elif web_file.endswith(".css"):
+                content_type = "text/css; charset=utf-8"
+            elif web_file.endswith(".png"):
+                content_type = "image/png"
+            elif web_file.endswith(".json"):
+                content_type = "application/json"
+            elif web_file.endswith(".svg"):
+                content_type = "image/svg+xml"
+
             try:
-                with open(index_file, "rb") as f:
+                with open(web_file, "rb") as f:
                     content = f.read()
                 self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", str(len(content)))
                 self.end_headers()
                 self.wfile.write(content)
@@ -71,7 +87,7 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
                 return
             except Exception as e:
                 try:
-                    self.send_error(500, f"Failed to read index.html: {e}")
+                    self.send_error(500, f"Failed to read file: {e}")
                 except Exception:
                     pass
                 return
@@ -112,6 +128,103 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 try:
                     self.send_error(400, f"Error checking location: {e}")
+                except Exception:
+                    pass
+                return
+
+        # API: /api/forecast (JSON endpoint for interactive client-side meteogram)
+        if path == "/api/forecast":
+            loc_param = query.get("location", ["Bratislava-Koliba"])[0].strip()
+            days_param = int(query.get("days", ["15"])[0])
+            model_param = query.get("model", ["aifs"])[0].lower()
+            if model_param not in ["aifs", "icon_d2", "icon_eu"]:
+                model_param = "aifs"
+
+            client_file = os.path.join(BASE_DIR, "aifs_client.py")
+            client_mtime = int(os.path.getmtime(client_file)) if os.path.exists(client_file) else 0
+            cache_key = hashlib.md5(f"forecast_{loc_param}_{days_param}_{model_param}_{client_mtime}".encode()).hexdigest()
+            cache_file = os.path.join(CACHE_DIR, f"{cache_key}.json")
+
+            use_cache = False
+            if os.path.exists(cache_file):
+                import time
+                if time.time() - os.path.getmtime(cache_file) < 3600:
+                    use_cache = True
+
+            if use_cache:
+                try:
+                    with open(cache_file, "rb") as f:
+                        body = f.read()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.send_header("Cache-Control", "public, max-age=1800")
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                except Exception:
+                    use_cache = False
+
+            try:
+                import importlib
+                import aifs_client
+                import numpy as np
+                importlib.reload(aifs_client)
+
+                client_inst = aifs_client.AIFSClient()
+                loc_info = client_inst.geocode(loc_param)
+                lat = loc_info["latitude"]
+                lon = loc_info["longitude"]
+                stats = client_inst.fetch_ensemble(lat, lon, days=days_param, model=model_param)
+                astro_data = client_inst.fetch_astronomy_data(lat, lon, days=days_param)
+
+                def serialize_val(val):
+                    if val is None:
+                        return None
+                    if isinstance(val, (list, tuple)):
+                        return [serialize_val(x) for x in val]
+                    if isinstance(val, dict):
+                        return {k: serialize_val(v) for k, v in val.items()}
+                    if hasattr(val, "isoformat"):
+                        return val.isoformat()
+                    if isinstance(val, np.ndarray):
+                        return [None if np.isnan(x) else round(float(x), 2) for x in val.tolist()]
+                    if isinstance(val, (np.floating, float)):
+                        return None if np.isnan(val) else round(float(val), 2)
+                    if isinstance(val, (np.integer, int)):
+                        return int(val)
+                    return val
+
+                payload = {
+                    "location": loc_info,
+                    "model": stats.get("model", model_param),
+                    "model_fallback": stats.get("model_fallback", False),
+                    "fallback_from": stats.get("fallback_from", ""),
+                    "stats": serialize_val(stats),
+                    "astro": serialize_val(astro_data),
+                }
+
+                body = json.dumps(payload).encode("utf-8")
+                try:
+                    with open(cache_file, "wb") as f:
+                        f.write(body)
+                except Exception:
+                    pass
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "public, max-age=1800")
+                self.send_header("X-Actual-Model", payload["model"])
+                self.send_header("X-Model-Fallback", "true" if payload["model_fallback"] else "false")
+                if payload["fallback_from"]:
+                    self.send_header("X-Fallback-From", payload["fallback_from"])
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            except Exception as e:
+                try:
+                    self.send_error(400, f"Error fetching forecast: {e}")
                 except Exception:
                     pass
                 return

@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <script src="meteogram-chart.js"></script>
   <style>
     :root {
       --bg: #0d1117;
@@ -488,32 +489,19 @@
       <div class="result-header">
         <h2 id="result-title">Meteogram: Bratislava-Koliba (ECMWF AIFS 15-day)</h2>
         <div class="result-actions">
-          <a id="download-btn" class="btn-secondary" href="#" download="meteogram.png">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
-            Download PNG
-          </a>
-          <button type="button" class="btn-secondary" onclick="openFullSize()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="15 3 21 3 21 9"></polyline>
-              <polyline points="9 21 3 21 3 15"></polyline>
-              <line x1="21" y1="3" x2="14" y2="10"></line>
-              <line x1="3" y1="21" x2="10" y2="14"></line>
-            </svg>
-            Full Size
-          </button>
+          <span class="badge" style="background: rgba(63, 185, 80, 0.15); color: #3fb950; border-color: rgba(63, 185, 80, 0.3); font-size: 0.8rem; padding: 0.35rem 0.75rem; display: inline-flex; align-items: center; gap: 6px;">
+            <span style="width: 7px; height: 7px; background: #3fb950; border-radius: 50%; display: inline-block;"></span>
+            Interactive Mode
+          </span>
         </div>
       </div>
 
-      <div class="image-wrapper">
-        <div id="loader" class="loader">
+      <div class="image-wrapper" style="position: relative; overflow-x: auto; background: #ffffff; min-height: 500px;">
+        <div id="loader" class="loader" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 20; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(4px); display: flex;">
           <div class="spinner"></div>
           <p id="loader-status">Fetching ensemble forecast and rendering meteogram...</p>
         </div>
-        <img id="meteogram-img" src="" alt="Meteogram" onload="hideLoader()" onerror="handleError()" style="display: none;" />
+        <div id="meteogram-chart-container" style="width: 100%; min-width: 880px;"></div>
       </div>
     </section>
 
@@ -542,24 +530,8 @@
   </footer>
 
   <script>
-    // Backend API Base URL:
-    // When empty (''), uses local server during development, or fast pre-rendered images on GitHub Pages.
-    const API_BASE = '';
-
-    function getStaticSlug(locationName) {
-      if (!locationName) return 'bratislava-koliba';
-      const norm = locationName.trim().toLowerCase();
-      if (norm.includes('koliba') || norm.includes('bratislava')) return 'bratislava-koliba';
-      if (norm.includes('liptov') || norm.includes('mikulas') || norm.includes('mikuláš')) return 'liptovsky-mikulas';
-      if (norm.includes('jasna') || norm.includes('jasná')) return 'jasna';
-      if (norm.includes('plaveck')) return 'plavecke-podhradie';
-      if (norm.includes('kosic') || norm.includes('košic')) return 'kosice';
-      if (norm.includes('poprad') || norm.includes('tatr')) return 'poprad';
-      if (norm.includes('vienna') || norm.includes('vieden') || norm.includes('viedeň')) return 'vienna';
-      if (norm.includes('prag') || norm.includes('praha')) return 'prague';
-      return null;
-    }
-
+    let chart = null;
+    let currentData = null;
     let currentRequestId = 0;
 
     // Fast client-side detection for known locations outside ICON-D2 domain (Germany & Central Europe boundary)
@@ -626,42 +598,44 @@
     function setLoc(name) {
       document.getElementById('location').value = name;
       checkLocationAndSyncDropdown(name);
-      updateMeteogram();
+      updateMeteogram(false);
     }
 
     function showLoader(text) {
       document.getElementById('loader-status').innerText = text || 'Rendering meteogram...';
       document.getElementById('loader').style.display = 'flex';
-      document.getElementById('meteogram-img').style.display = 'none';
       document.getElementById('generate-btn').disabled = true;
     }
 
     function hideLoader() {
       document.getElementById('loader').style.display = 'none';
-      document.getElementById('meteogram-img').style.display = 'block';
       document.getElementById('generate-btn').disabled = false;
     }
 
-    function handleError() {
+    function handleError(msg) {
       document.getElementById('loader').style.display = 'flex';
-      document.getElementById('loader-status').innerText = 'Error generating meteogram. Please check the location name or network.';
+      document.getElementById('loader-status').innerHTML = msg || 'Error loading forecast. Please check location name or network.';
       document.getElementById('generate-btn').disabled = false;
     }
 
-    function openFullSize() {
-      const img = document.getElementById('meteogram-img');
-      if (img && img.src) {
-        window.open(img.src, '_blank');
-      }
-    }
-
-    async function updateMeteogram() {
+    async function updateMeteogram(optionsOnly = false) {
       const locInput = document.getElementById('location');
       const loc = locInput.value.trim();
       let rawHorizon = document.getElementById('days').value;
       const lang = document.getElementById('lang').value;
       const tz = document.getElementById('tz').value;
       if (!loc) return;
+
+      // Fast-path: If only language or timezone changed and we already have forecast data,
+      // update canvas instantaneously without refetching from server!
+      if (optionsOnly && chart && currentData) {
+        chart.setOptions({ lang, tz });
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.set('lang', lang);
+        newUrl.searchParams.set('tz', tz);
+        window.history.replaceState({}, '', newUrl.toString());
+        return;
+      }
 
       // Proactive check: if user picked 2-day on a location known outside ICON-D2 domain, switch to closest model
       if (rawHorizon === 'icon_d2_2' && isKnownOutsideIconD2(loc)) {
@@ -690,7 +664,7 @@
 
       // Update UI title and show loading animation
       document.getElementById('result-title').innerText = `Meteogram: ${loc} (${modelLabel})`;
-      showLoader(`Fetching ensemble forecast for ${loc} (${modelLabel})...`);
+      showLoader(`Loading forecast data for ${loc} (${modelLabel})...`);
 
       // Update active chip highlight
       document.querySelectorAll('.chip').forEach(btn => {
@@ -711,109 +685,46 @@
       newUrl.searchParams.set('tz', tz);
       window.history.replaceState({}, '', newUrl.toString());
 
-      // Check if running on static host (e.g. GitHub Pages) without an external API
-      const isLocalDev = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-      if (!isLocalDev && !API_BASE) {
-        const staticSlug = getStaticSlug(loc);
-        if (staticSlug) {
-          showLoader('Loading forecast meteogram...');
-          let effectiveModel = model;
-          if (model === 'icon_d2' && isKnownOutsideIconD2(loc)) {
-            effectiveModel = 'icon_eu';
-            document.getElementById('days').value = 'icon_eu_5';
-            showAlert(loc, 'icon_d2', 'icon_eu', lang);
-          } else if (!isKnownOutsideIconD2(loc)) {
-            hideAlert();
-          }
-
-          const staticUrl = `images/${staticSlug}_${effectiveModel}_${lang}.png`;
-          const img = document.getElementById('meteogram-img');
-          const dl = document.getElementById('download-btn');
-          img.src = staticUrl;
-          dl.href = staticUrl;
-          dl.download = `${staticSlug}_${effectiveModel}_meteogram.png`;
-
-          let modelLabel = effectiveModel === 'aifs' ? 'ECMWF AIFS (15-day)' : (effectiveModel === 'icon_d2' ? 'DWD ICON-D2 (2-day, 2.2 km)' : 'DWD ICON-EU (5-day, 7.0 km)');
-          document.getElementById('result-title').innerText = `Meteogram: ${loc} (${modelLabel})`;
-          return;
-        } else {
-          // Custom un-rendered location on static GitHub Pages
-          document.getElementById('loader').style.display = 'flex';
-          document.getElementById('loader-status').innerHTML = `Location "<strong>${loc}</strong>" is not a pre-rendered preset.<br/><br/>On GitHub Pages, 8 preset locations (Bratislava, Tatry, Jasná, Košice, etc.) update automatically every 6 hours.<br/><br/>To generate forecasts for any coordinate in the world on-demand, run the local Python server or desktop app.`;
-          document.getElementById('meteogram-img').style.display = 'none';
-          document.getElementById('generate-btn').disabled = false;
-          return;
-        }
-      }
-
-      // Track request ID to prevent race conditions
       const requestId = ++currentRequestId;
-      const t = Date.now();
-      const imageUrl = `${API_BASE}/api/image?location=${encodeURIComponent(loc)}&days=${days}&model=${model}&lang=${lang}&tz=${tz}&_t=${t}`;
-
-      // Update download link
-      const dl = document.getElementById('download-btn');
-      dl.href = imageUrl;
-      dl.download = `${loc.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${model}_meteogram.png`;
 
       try {
-        const response = await fetch(imageUrl);
-        if (!response.ok) {
-          throw new Error(`Server returned HTTP ${response.status}`);
-        }
+        const data = await MeteogramAPI.fetchForecast(loc, days, model);
         if (requestId !== currentRequestId) return;
 
-        const actualModel = response.headers.get('X-Actual-Model') || model;
-        const fallbackUsed = response.headers.get('X-Model-Fallback') === 'true';
-        const fallbackFrom = response.headers.get('X-Fallback-From') || 'icon_d2';
+        currentData = data;
 
-        if (fallbackUsed) {
-          // Automatic switch to closest available model!
+        // Automatic switch to closest available model if fallback triggered
+        if (data.model_fallback) {
           let newHorizonVal = 'icon_eu_5';
           let newModelLabel = 'DWD ICON-EU (7.0 km, 5-day)';
-          if (actualModel === 'icon_eu') {
+          if (data.model === 'icon_eu') {
             newHorizonVal = 'icon_eu_5';
             newModelLabel = 'DWD ICON-EU (7.0 km, 5-day)';
-          } else if (actualModel === 'aifs') {
+          } else if (data.model === 'aifs') {
             newHorizonVal = '15';
             newModelLabel = 'ECMWF AIFS (15-day)';
           }
 
-          // 1. Update dropdown
           document.getElementById('days').value = newHorizonVal;
-
-          // 2. Update result title
           document.getElementById('result-title').innerText = `Meteogram: ${loc} (${newModelLabel})`;
-
-          // 3. Update URL query parameters
-          const updatedUrl = new URL(window.location.href);
-          updatedUrl.searchParams.set('location', loc);
-          updatedUrl.searchParams.set('days', newHorizonVal);
-          updatedUrl.searchParams.set('model', actualModel);
-          updatedUrl.searchParams.set('lang', lang);
-          updatedUrl.searchParams.set('tz', tz);
-          window.history.replaceState({}, '', updatedUrl.toString());
-
-          // 4. Update download link
-          dl.download = `${loc.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${actualModel}_meteogram.png`;
-
-          // 5. Show alert message
-          showAlert(loc, fallbackFrom, actualModel, lang);
+          showAlert(loc, data.fallback_from || 'icon_d2', data.model, lang);
         } else if (!isKnownOutsideIconD2(loc)) {
           hideAlert();
         }
 
-        const blob = await response.blob();
-        if (requestId !== currentRequestId) return;
+        // Initialize or update canvas chart
+        if (!chart) {
+          chart = new MeteogramChart(document.getElementById('meteogram-chart-container'), { lang, tz });
+        } else {
+          chart.setOptions({ lang, tz });
+        }
 
-        const objectUrl = URL.createObjectURL(blob);
-        const img = document.getElementById('meteogram-img');
-        img.src = objectUrl;
+        chart.setData(data);
         hideLoader();
       } catch (err) {
         if (requestId === currentRequestId) {
           console.error(err);
-          handleError();
+          handleError(`Failed to load forecast for <strong>${loc}</strong>.<br/><br/>${err.message || 'Please check network connection.'}`);
         }
       }
     }
@@ -823,7 +734,7 @@
       if (e.key === 'Enter') {
         e.preventDefault();
         checkLocationAndSyncDropdown(this.value);
-        updateMeteogram();
+        updateMeteogram(false);
       }
     });
 
@@ -838,10 +749,12 @@
         this.value = 'icon_eu_5';
         showAlert(loc, 'icon_d2', 'icon_eu', document.getElementById('lang').value);
       }
-      updateMeteogram();
+      updateMeteogram(false);
     });
-    document.getElementById('lang').addEventListener('change', updateMeteogram);
-    document.getElementById('tz').addEventListener('change', updateMeteogram);
+
+    // Instant local redraw on Language or Timezone toggle
+    document.getElementById('lang').addEventListener('change', () => updateMeteogram(true));
+    document.getElementById('tz').addEventListener('change', () => updateMeteogram(true));
 
     // Initial page load checking URL params
     window.addEventListener('DOMContentLoaded', () => {
@@ -866,23 +779,8 @@
       if (langParam) document.getElementById('lang').value = langParam;
       if (tzParam) document.getElementById('tz').value = tzParam;
 
-      // Fetch manifest to display forecast run timestamp if present
-      fetch('images/manifest.json')
-        .then(res => res.ok ? res.json() : null)
-        .then(data => {
-          if (data && data.generated_at_human) {
-            const badge = document.getElementById('forecast-run-badge');
-            if (badge) {
-              badge.innerText = `Forecast: ${data.generated_at_human}`;
-              badge.style.display = 'inline-block';
-              badge.title = 'Pre-rendered meteogram dataset updated via GitHub Actions';
-            }
-          }
-        })
-        .catch(() => {});
-
       // Trigger initial load
-      updateMeteogram();
+      updateMeteogram(false);
     });
   </script>
 </body>
