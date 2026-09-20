@@ -10,16 +10,49 @@
   <script src="meteogram-chart.js"></script>
   <style>
     :root {
-      --bg: #0d1117;
-      --card-bg: rgba(22, 27, 34, 0.85);
-      --card-border: rgba(48, 54, 61, 0.8);
-      --text-main: #f0f6fc;
-      --text-muted: #8b949e;
-      --accent-blue: #388bfd;
-      --accent-hover: #58a6ff;
-      --accent-red: #f85149;
-      --accent-green: #3fb950;
-      --input-bg: #161b22;
+      /* Default Light Theme */
+      --bg: #f8fafc;
+      --bg-gradient-1: rgba(37, 99, 235, 0.06);
+      --bg-gradient-2: rgba(225, 29, 72, 0.04);
+      --card-bg: rgba(255, 255, 255, 0.95);
+      --card-border: rgba(203, 213, 225, 0.8);
+      --header-bg: rgba(255, 255, 255, 0.85);
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --accent-blue: #2563eb;
+      --accent-hover: #1d4ed8;
+      --accent-red: #dc2626;
+      --accent-green: #16a34a;
+      --input-bg: #ffffff;
+      --chip-bg: rgba(241, 245, 249, 0.9);
+      --chip-border: #cbd5e1;
+      --feature-bg: rgba(248, 250, 252, 0.8);
+      --chart-box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
+      --loader-bg: rgba(255, 255, 255, 0.9);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        /* Dark Theme */
+        --bg: #0d1117;
+        --bg-gradient-1: rgba(56, 139, 253, 0.08);
+        --bg-gradient-2: rgba(248, 81, 73, 0.05);
+        --card-bg: rgba(22, 27, 34, 0.85);
+        --card-border: rgba(48, 54, 61, 0.8);
+        --header-bg: rgba(13, 17, 23, 0.7);
+        --text-main: #f0f6fc;
+        --text-muted: #8b949e;
+        --accent-blue: #388bfd;
+        --accent-hover: #58a6ff;
+        --accent-red: #f85149;
+        --accent-green: #3fb950;
+        --input-bg: #161b22;
+        --chip-bg: rgba(48, 54, 61, 0.5);
+        --chip-border: rgba(48, 54, 61, 0.8);
+        --feature-bg: rgba(22, 27, 34, 0.5);
+        --chart-box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        --loader-bg: rgba(22, 27, 34, 0.9);
+      }
     }
 
     * {
@@ -36,14 +69,15 @@
       display: flex;
       flex-direction: column;
       background-image: 
-        radial-gradient(circle at 10% 20%, rgba(56, 139, 253, 0.08) 0%, transparent 40%),
-        radial-gradient(circle at 90% 80%, rgba(248, 81, 73, 0.05) 0%, transparent 40%);
+        radial-gradient(circle at 10% 20%, var(--bg-gradient-1) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, var(--bg-gradient-2) 0%, transparent 40%);
+      transition: background-color 0.25s ease, color 0.25s ease;
     }
 
     header {
       padding: 1.5rem 2rem;
       border-bottom: 1px solid var(--card-border);
-      background: rgba(13, 17, 23, 0.7);
+      background: var(--header-bg);
       backdrop-filter: blur(12px);
       display: flex;
       justify-content: space-between;
@@ -196,14 +230,21 @@
     }
 
     .chip {
-      background: rgba(48, 54, 61, 0.5);
-      border: 1px solid var(--card-border);
+      background: var(--chip-bg);
+      border: 1px solid var(--chip-border);
       color: var(--text-main);
       border-radius: 20px;
       padding: 0.3rem 0.8rem;
       font-size: 0.8rem;
       cursor: pointer;
       transition: all 0.15s;
+    }
+
+    .chip.active-preset {
+      background: rgba(37, 99, 235, 0.15);
+      border-color: var(--accent-blue);
+      color: var(--accent-hover);
+      font-weight: 600;
     }
 
     .chip:hover {
@@ -311,7 +352,7 @@
     }
 
     .feature-card {
-      background: rgba(22, 27, 34, 0.5);
+      background: var(--feature-bg);
       border: 1px solid var(--card-border);
       border-radius: 10px;
       padding: 1rem 1.25rem;
@@ -496,8 +537,8 @@
         </div>
       </div>
 
-      <div class="image-wrapper" style="position: relative; overflow-x: auto; background: #ffffff; min-height: 500px;">
-        <div id="loader" class="loader" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 20; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(4px); display: flex;">
+      <div class="image-wrapper" style="position: relative; overflow-x: auto; background: #ffffff; min-height: 500px; border: 1px solid var(--card-border); border-radius: 10px; box-shadow: var(--chart-box-shadow);">
+        <div id="loader" class="loader" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--loader-bg); backdrop-filter: blur(4px); display: flex;">
           <div class="spinner"></div>
           <p id="loader-status">Fetching ensemble forecast and rendering meteogram...</p>
         </div>
@@ -778,6 +819,13 @@
       }
       if (langParam) document.getElementById('lang').value = langParam;
       if (tzParam) document.getElementById('tz').value = tzParam;
+
+      // Listen to browser color theme preference change
+      if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+          if (chart) chart.render();
+        });
+      }
 
       // Trigger initial load
       updateMeteogram(false);
