@@ -1111,8 +1111,9 @@ class MeteogramChart {
     ctx.restore();
   }
 
-  _drawCelestialCurves(p) {
+  _drawCelestialCurves(p, options = {}) {
     if (!this.celestialData) return;
+    const iconsOnly = options.iconsOnly === true;
     const ctx = this.ctx;
     // Y-scale starts strictly at 0.0 so altitude=0.0 (rise/set at horizon) is EXACTLY at p.bottom!
     const altToY = (altDeg) => p.bottom - (Math.max(0, altDeg) / 92.0) * p.height;
@@ -1166,7 +1167,7 @@ class MeteogramChart {
     }
     ctx.setLineDash([]);
 
-    // 4. Solar Peaks (time + degree badge at crest)
+    // 4. Solar Peaks (time + degree badge or icon only at crest)
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     for (const peak of this.celestialData.sun.peaks) {
@@ -1174,21 +1175,27 @@ class MeteogramChart {
       if (x < this.marginLeft + 12 || x > this.marginLeft + this.plotWidth - 12) continue;
       const y = altToY(peak.alt);
 
-      const label = `☀ ${peak.tStr} (${Math.round(peak.alt)}°)`;
-      ctx.font = "bold 9px 'Inter', sans-serif";
-      const tw = ctx.measureText(label).width;
+      if (iconsOnly) {
+        ctx.font = "bold 13px 'Inter', sans-serif";
+        ctx.fillStyle = "#b45309";
+        ctx.fillText("☀", x, y - 8);
+      } else {
+        const label = `☀ ${peak.tStr} (${Math.round(peak.alt)}°)`;
+        ctx.font = "bold 9px 'Inter', sans-serif";
+        const tw = ctx.measureText(label).width;
 
-      ctx.fillStyle = "rgba(255, 251, 235, 0.94)";
-      ctx.fillRect(x - tw / 2 - 3, y - 16, tw + 6, 13);
-      ctx.strokeStyle = "#fde68a";
-      ctx.lineWidth = 0.8;
-      ctx.strokeRect(x - tw / 2 - 3, y - 16, tw + 6, 13);
+        ctx.fillStyle = "rgba(255, 251, 235, 0.94)";
+        ctx.fillRect(x - tw / 2 - 3, y - 16, tw + 6, 13);
+        ctx.strokeStyle = "#fde68a";
+        ctx.lineWidth = 0.8;
+        ctx.strokeRect(x - tw / 2 - 3, y - 16, tw + 6, 13);
 
-      ctx.fillStyle = "#b45309";
-      ctx.fillText(label, x, y - 9.5);
+        ctx.fillStyle = "#b45309";
+        ctx.fillText(label, x, y - 9.5);
+      }
     }
 
-    // 5. Lunar Peaks (mini moon icon + time + degree badge at crest)
+    // 5. Lunar Peaks (mini moon icon + time + degree badge at crest or icon only)
     for (const peak of this.celestialData.moon.peaks) {
       const x = this._timeToX(peak.timeMs);
       if (x < this.marginLeft + 12 || x > this.marginLeft + this.plotWidth - 12) continue;
@@ -1196,10 +1203,12 @@ class MeteogramChart {
 
       this._drawMoonPhaseBadge(x, y + 8, peak.moonPhase, 5.5);
 
-      const label = `${peak.tStr} (${Math.round(peak.alt)}°)`;
-      ctx.font = "bold 8.5px 'Inter', sans-serif";
-      ctx.fillStyle = "#0369a1";
-      ctx.fillText(label, x, y + 21);
+      if (!iconsOnly) {
+        const label = `${peak.tStr} (${Math.round(peak.alt)}°)`;
+        ctx.font = "bold 8.5px 'Inter', sans-serif";
+        ctx.fillStyle = "#0369a1";
+        ctx.fillText(label, x, y + 21);
+      }
     }
 
     // Restore from plot clip so right axis labels can be rendered in the margin
@@ -1790,8 +1799,8 @@ class MeteogramChart {
     this._drawLegendBadge(this.marginLeft + 520, p.top + 9, "#f4a261", t.sun_alt, false, [4, 3]);
     this._drawLegendBadge(this.marginLeft + 630, p.top + 9, "#00b4d8", t.moon_alt, false, [2, 3]);
 
-    // Draw Sun and Moon trajectories anchored at the bottom
-    this._drawCelestialCurves(p);
+    // Draw Sun and Moon trajectories anchored at the bottom (icons only, no time or max degrees)
+    this._drawCelestialCurves(p, { iconsOnly: true });
 
     ctx.restore();
     this.panels.p5.valToY = valToY;

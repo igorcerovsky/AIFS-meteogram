@@ -876,8 +876,8 @@ class MeteogramRenderer:
         ax_press.set_ylabel(self.t["pressure_title"], fontsize=9.5, fontweight="bold", color="#2d6a4f")
         ax_press.grid(True, linestyle=":", alpha=0.55, color="#6c757d")
 
-        # Celestial altitude trajectories on twin axis in pressure panel
-        self._draw_celestial_trajectories(ax_press, forecast_days, celestial_data)
+        # Celestial altitude trajectories on twin axis in pressure panel (icons only)
+        self._draw_celestial_trajectories(ax_press, forecast_days, celestial_data, icons_only=True)
 
         handles, labels = ax_press.get_legend_handles_labels()
         sun_line = Line2D([], [], color="#f4a261", linestyle="--", linewidth=1.2, alpha=0.85, label=self.t["sun_alt"])
@@ -1338,6 +1338,7 @@ class MeteogramRenderer:
         ax_parent: plt.Axes,
         forecast_days: float,
         celestial_data: Dict[str, Any],
+        icons_only: bool = False,
     ):
         """Draw sun and moon altitude arcs, solar peaks (time & deg), and lunar peaks (icon, time & deg) on a twin axis."""
         ax_cel = ax_parent.twinx()
@@ -1370,40 +1371,54 @@ class MeteogramRenderer:
                 zorder=2,
             )
 
-        # Solar peaks: time + altitude
+        # Solar peaks: time + altitude (or icon only)
         for x_pos, p_alt, t_str in celestial_data["sun_peaks"]:
-            label_text = f"☀ {t_str} ({p_alt:.0f}°)" if forecast_days <= 10 else f"☀ {p_alt:.0f}°"
-            fs = 6.6 if forecast_days > 8 else 7.2
-            ax_cel.text(
-                x_pos,
-                p_alt + 2.0,
-                label_text,
-                ha="center",
-                va="bottom",
-                fontsize=fs,
-                color="#b45309",
-                fontweight="bold",
-                bbox=dict(boxstyle="round,pad=0.15", fc="#fffbeb", ec="#fde68a", lw=0.6, alpha=0.9),
-                zorder=4,
-            )
+            if icons_only:
+                ax_cel.text(
+                    x_pos,
+                    p_alt + 1.2,
+                    "☀",
+                    ha="center",
+                    va="bottom",
+                    fontsize=9.5,
+                    color="#b45309",
+                    fontweight="bold",
+                    zorder=4,
+                )
+            else:
+                label_text = f"☀ {t_str} ({p_alt:.0f}°)" if forecast_days <= 10 else f"☀ {p_alt:.0f}°"
+                fs = 6.6 if forecast_days > 8 else 7.2
+                ax_cel.text(
+                    x_pos,
+                    p_alt + 2.0,
+                    label_text,
+                    ha="center",
+                    va="bottom",
+                    fontsize=fs,
+                    color="#b45309",
+                    fontweight="bold",
+                    bbox=dict(boxstyle="round,pad=0.15", fc="#fffbeb", ec="#fde68a", lw=0.6, alpha=0.9),
+                    zorder=4,
+                )
 
-        # Lunar peaks: moon phase vector icon + time + altitude
+        # Lunar peaks: moon phase vector icon + time + altitude (or icon only)
         for x_pos, p_alt, t_str, m_phase in celestial_data["moon_peaks"]:
             da = create_moon_icon_box(phase=m_phase, size_pt=13.0)
             ab = AnnotationBbox(da, (x_pos, p_alt), frameon=False, pad=0.0, zorder=5)
             ax_cel.add_artist(ab)
 
-            label_text = f"{t_str} ({p_alt:.0f}°)" if forecast_days <= 10 else f"{p_alt:.0f}°"
-            fs = 6.3 if forecast_days > 8 else 6.8
-            ax_cel.text(
-                x_pos,
-                p_alt - 5.5,
-                label_text,
-                ha="center",
-                va="top",
-                fontsize=fs,
-                color="#0284c7",
-                fontweight="bold",
-                bbox=dict(boxstyle="round,pad=0.12", fc="#f0f9ff", ec="#bae6fd", lw=0.5, alpha=0.88),
-                zorder=4,
-            )
+            if not icons_only:
+                label_text = f"{t_str} ({p_alt:.0f}°)" if forecast_days <= 10 else f"{p_alt:.0f}°"
+                fs = 6.3 if forecast_days > 8 else 6.8
+                ax_cel.text(
+                    x_pos,
+                    p_alt - 5.5,
+                    label_text,
+                    ha="center",
+                    va="top",
+                    fontsize=fs,
+                    color="#0284c7",
+                    fontweight="bold",
+                    bbox=dict(boxstyle="round,pad=0.12", fc="#f0f9ff", ec="#bae6fd", lw=0.5, alpha=0.88),
+                    zorder=4,
+                )
