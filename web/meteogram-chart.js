@@ -1652,11 +1652,15 @@ class MeteogramChart {
         const x2 = this._timeToX(this.times[i + 1].getTime());
 
         // Variable curve thickness according to wind speed (PoC):
+        // Variable curve thickness according to wind speed:
         // 1.2px for light winds (< 2 m/s), up to ~5.5px for strong winds (>= 15 m/s)
         const spd1 = wSpeed.median[i] != null ? wSpeed.median[i] : 0;
         const spd2 = wSpeed.median[i + 1] != null ? wSpeed.median[i + 1] : spd1;
         const avgSpd = (spd1 + spd2) / 2.0;
         ctx.lineWidth = Math.max(1.2, Math.min(5.8, 1.2 + (avgSpd / 15.0) * 4.0));
+
+        const col1 = this._getWindSpeedColor(spd1);
+        const col2 = this._getWindSpeedColor(spd2);
 
         // Handle wrap-around across North (360° / 0°)
         if (dir1 - dir2 > 180) {
@@ -1665,18 +1669,20 @@ class MeteogramChart {
           const xMid = x1 + (x2 - x1) * frac;
           const y1 = dirToY(dir1);
           const y2 = dirToY(dir2);
+          const spdMid = spd1 + (spd2 - spd1) * frac;
+          const colMid = this._getWindSpeedColor(spdMid);
 
           // Sub-segment 1: to top N (360°)
           const grad1 = ctx.createLinearGradient(x1, y1, xMid, yTop);
-          grad1.addColorStop(0, this._getWindDirColor(dir1));
-          grad1.addColorStop(1, this._getWindDirColor(360));
+          grad1.addColorStop(0, col1);
+          grad1.addColorStop(1, colMid);
           ctx.strokeStyle = grad1;
           ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(xMid, yTop); ctx.stroke();
 
           // Sub-segment 2: from bottom N (0°)
           const grad2 = ctx.createLinearGradient(xMid, yBottom, x2, y2);
-          grad2.addColorStop(0, this._getWindDirColor(0));
-          grad2.addColorStop(1, this._getWindDirColor(dir2));
+          grad2.addColorStop(0, colMid);
+          grad2.addColorStop(1, col2);
           ctx.strokeStyle = grad2;
           ctx.beginPath(); ctx.moveTo(xMid, yBottom); ctx.lineTo(x2, y2); ctx.stroke();
         } else if (dir2 - dir1 > 180) {
@@ -1685,18 +1691,20 @@ class MeteogramChart {
           const xMid = x1 + (x2 - x1) * frac;
           const y1 = dirToY(dir1);
           const y2 = dirToY(dir2);
+          const spdMid = spd1 + (spd2 - spd1) * frac;
+          const colMid = this._getWindSpeedColor(spdMid);
 
           // Sub-segment 1: to bottom N (0°)
           const grad1 = ctx.createLinearGradient(x1, y1, xMid, yBottom);
-          grad1.addColorStop(0, this._getWindDirColor(dir1));
-          grad1.addColorStop(1, this._getWindDirColor(0));
+          grad1.addColorStop(0, col1);
+          grad1.addColorStop(1, colMid);
           ctx.strokeStyle = grad1;
           ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(xMid, yBottom); ctx.stroke();
 
           // Sub-segment 2: from top N (360°)
           const grad2 = ctx.createLinearGradient(xMid, yTop, x2, y2);
-          grad2.addColorStop(0, this._getWindDirColor(360));
-          grad2.addColorStop(1, this._getWindDirColor(dir2));
+          grad2.addColorStop(0, colMid);
+          grad2.addColorStop(1, col2);
           ctx.strokeStyle = grad2;
           ctx.beginPath(); ctx.moveTo(xMid, yTop); ctx.lineTo(x2, y2); ctx.stroke();
         } else {
@@ -1704,8 +1712,8 @@ class MeteogramChart {
           const y1 = dirToY(dir1);
           const y2 = dirToY(dir2);
           const grad = ctx.createLinearGradient(x1, y1, x2, y2);
-          grad.addColorStop(0, this._getWindDirColor(dir1));
-          grad.addColorStop(1, this._getWindDirColor(dir2));
+          grad.addColorStop(0, col1);
+          grad.addColorStop(1, col2);
           ctx.strokeStyle = grad;
           ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
         }
@@ -1810,8 +1818,10 @@ class MeteogramChart {
 
     // Gradient filling the tapered wedge matching speed scale colors
     const wedgeGrad = ctx.createLinearGradient(wedgeX1, centerY, wedgeX2, centerY);
-    wedgeGrad.addColorStop(0, "#10b981");
+    wedgeGrad.addColorStop(0, "#94a3b8");
+    wedgeGrad.addColorStop(0.2, "#10b981");
     wedgeGrad.addColorStop(0.5, "#2563eb");
+    wedgeGrad.addColorStop(0.8, "#f59e0b");
     wedgeGrad.addColorStop(1, "#ef4444");
     ctx.fillStyle = wedgeGrad;
     ctx.fill();
@@ -1823,6 +1833,41 @@ class MeteogramChart {
 
     ctx.restore();
     this.panels.p4.valToY = valToY;
+  }
+
+  _getWindSpeedColor(spd) {
+    if (spd == null || isNaN(spd)) return "#94a3b8";
+    // Speed stops matching the standard meteorological tiers:
+    // < 2: Slate (#94a3b8)
+    // 2-5: Emerald Green (#10b981)
+    // 5-10: Royal Blue (#2563eb)
+    // 10-15: Amber / Orange (#f59e0b)
+    // >= 15: Coral Red / Crimson (#ef4444)
+    const stops = [
+      { s: 0.0,  r: 148, g: 163, b: 184 }, // 0 m/s: Slate (#94a3b8)
+      { s: 2.0,  r: 148, g: 163, b: 184 }, // 2 m/s: Slate (#94a3b8)
+      { s: 4.0,  r: 16,  g: 185, b: 129 }, // 4 m/s: Emerald (#10b981)
+      { s: 7.5,  r: 37,  g: 99,  b: 235 }, // 7.5 m/s: Royal Blue (#2563eb)
+      { s: 12.0, r: 245, g: 158, b: 11  }, // 12 m/s: Amber (#f59e0b)
+      { s: 16.0, r: 239, g: 68,  b: 68  }, // 16+ m/s: Coral Red (#ef4444)
+      { s: 25.0, r: 220, g: 38,  b: 38  }  // 25+ m/s: Crimson (#dc2626)
+    ];
+    if (spd <= stops[0].s) return `rgb(${stops[0].r}, ${stops[0].g}, ${stops[0].b})`;
+    let i = 0;
+    while (i < stops.length - 1 && spd > stops[i + 1].s) {
+      i++;
+    }
+    if (i >= stops.length - 1) {
+      const last = stops[stops.length - 1];
+      return `rgb(${last.r}, ${last.g}, ${last.b})`;
+    }
+    const s1 = stops[i];
+    const s2 = stops[i + 1];
+    const t = (spd - s1.s) / (s2.s - s1.s);
+    const r = Math.round(s1.r + (s2.r - s1.r) * t);
+    const g = Math.round(s1.g + (s2.g - s1.g) * t);
+    const b = Math.round(s1.b + (s2.b - s1.b) * t);
+    return `rgb(${r}, ${g}, ${b})`;
   }
 
   _getWindDirColor(dir) {
@@ -1859,12 +1904,8 @@ class MeteogramChart {
     // Meteorological: arrow points where the wind is blowing towards
     ctx.rotate(dirDeg * Math.PI / 180.0);
 
-    // Color by speed tier matching scale bar
-    let col = "#94a3b8"; // light < 2
-    if (speedMs >= 15) col = "#ef4444"; // strong/gale
-    else if (speedMs >= 10) col = "#f59e0b"; // fresh
-    else if (speedMs >= 5) col = "#2563eb"; // moderate
-    else if (speedMs >= 2) col = "#10b981"; // gentle
+    // Color by speed matching scale bar and curve
+    const col = this._getWindSpeedColor(speedMs);
 
     // Dynamic length: shorter for low winds (8px), longer for high winds (up to 28px)
     const arrowLen = Math.max(8, Math.min(28, 7 + speedMs * 1.3));
