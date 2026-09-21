@@ -27,7 +27,7 @@ LOCATIONS = [
     {"name": "Liptovsky Mikulas", "slug": "liptovsky-mikulas"},
     {"name": "Jasna", "slug": "jasna"},
     {"name": "Plavecke Podhradie", "slug": "plavecke-podhradie"},
-    {"name": "Košice", "slug": "kosice"},
+    {"name": "Repiska", "slug": "repiska"},
     {"name": "Poprad", "slug": "poprad"},
     {"name": "Vienna", "slug": "vienna"},
     {"name": "Prague", "slug": "prague"},

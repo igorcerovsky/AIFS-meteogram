@@ -23,7 +23,7 @@ public struct MeteogramConfig {
         PresetLocation(name: "Liptovsky Mikulas", displayName: "📍 Liptovský Mikuláš", isMajor: true),
         PresetLocation(name: "Jasna", displayName: "📍 Jasná", isMajor: true),
         PresetLocation(name: "Plavecke Podhradie", displayName: "📍 Plavecké Podhradie", isMajor: true),
-        PresetLocation(name: "Košice", displayName: "Košice"),
+        PresetLocation(name: "Repiska", displayName: "📍 Repiská", isMajor: true),
         PresetLocation(name: "Poprad", displayName: "Poprad / Tatry"),
         PresetLocation(name: "Vienna", displayName: "Vienna"),
         PresetLocation(name: "Prague", displayName: "Prague")
@@ -36,6 +36,7 @@ public struct MeteogramConfig {
         if norm.contains("liptov") || norm.contains("mikulas") || norm.contains("mikuláš") { return "liptovsky-mikulas" }
         if norm.contains("jasna") || norm.contains("jasná") { return "jasna" }
         if norm.contains("plaveck") { return "plavecke-podhradie" }
+        if norm.contains("repisk") || norm.contains("demanov") || norm.contains("demänov") { return "repiska" }
         if norm.contains("kosic") || norm.contains("košic") { return "kosice" }
         if norm.contains("poprad") || norm.contains("tatr") { return "poprad" }
         if norm.contains("vienna") || norm.contains("vieden") || norm.contains("viedeň") { return "vienna" }
@@ -47,6 +48,7 @@ public struct MeteogramConfig {
     public static func isOutsideIconD2Domain(_ locationName: String) -> Bool {
         let norm = locationName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let outsideKeywords = [
+            "repiska", "repiská", "demanovska", "demänovská",
             "jasna", "jasná",
             "liptovsky mikulas", "liptovský mikuláš", "mikulas", "mikuláš",
             "poprad", "tatry", "tatras", "vysoke tatry", "nizke tatry",

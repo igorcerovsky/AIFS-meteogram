@@ -97,9 +97,21 @@ public class MeteogramViewModel: ObservableObject {
         #endif
         self.serverUrl = UserDefaults.standard.string(forKey: "serverUrl") ?? defaultUrl
 
-        self.favoriteLocations = UserDefaults.standard.stringArray(forKey: "favoriteLocations") ?? [
-            "Bratislava-Koliba", "Jasna", "Liptovsky Mikulas", "Poprad"
+        var loadedFavorites = UserDefaults.standard.stringArray(forKey: "favoriteLocations") ?? [
+            "Bratislava-Koliba", "Jasna", "Liptovsky Mikulas", "Repiska"
         ]
+        var favsUpdated = false
+        if let kosiceIdx = loadedFavorites.firstIndex(where: { $0.lowercased().contains("kosic") || $0.lowercased().contains("košic") }) {
+            loadedFavorites[kosiceIdx] = "Repiska"
+            favsUpdated = true
+        } else if !loadedFavorites.contains("Repiska") && !loadedFavorites.contains("Repiská") {
+            loadedFavorites.append("Repiska")
+            favsUpdated = true
+        }
+        if favsUpdated {
+            UserDefaults.standard.set(loadedFavorites, forKey: "favoriteLocations")
+        }
+        self.favoriteLocations = loadedFavorites
 
         // Instantly restore cached forecast on launch so the app is NEVER blank!
         if let cached = ForecastCacheManager.shared.loadForecast(location: self.location, horizon: self.horizon.rawValue, lang: self.language.rawValue) {

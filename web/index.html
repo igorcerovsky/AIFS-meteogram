@@ -887,7 +887,7 @@
           <button type="button" class="chip" onclick="setLoc('Liptovsky Mikulas')">📍 Liptovský Mikuláš</button>
           <button type="button" class="chip" onclick="setLoc('Jasna')">📍 Jasná</button>
           <button type="button" class="chip" onclick="setLoc('Plavecke Podhradie')">📍 Plavecké Podhradie</button>
-          <button type="button" class="chip" onclick="setLoc('Košice')">Košice</button>
+          <button type="button" class="chip" onclick="setLoc('Repiska')">📍 Repiská</button>
           <button type="button" class="chip" onclick="setLoc('Poprad')">Poprad / Tatry</button>
           <button type="button" class="chip" onclick="setLoc('Vienna')">Vienna</button>
           <button type="button" class="chip" onclick="setLoc('Prague')">Prague</button>
@@ -963,6 +963,7 @@
       const norm = locationName.trim().toLowerCase();
       // ICON-D2 cuts off east of approx 18.35°E. Jasná, Liptovský Mikuláš, Poprad, Košice, etc. are outside.
       const outsideKeywords = [
+        'repiska', 'repiská', 'demanovska', 'demänovská',
         'jasna', 'jasná',
         'liptovsky mikulas', 'liptovský mikuláš', 'mikulas', 'mikuláš',
         'poprad', 'tatry', 'tatras', 'vysoke tatry', 'nizke tatry',
