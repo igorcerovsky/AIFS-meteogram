@@ -194,6 +194,16 @@ public class MeteogramService {
         let fallbackUsed = httpResponse.value(forHTTPHeaderField: "X-Model-Fallback")?.lowercased() == "true"
         let fallbackFrom = httpResponse.value(forHTTPHeaderField: "X-Fallback-From") ?? "icon_d2"
 
+        ForecastCacheManager.shared.saveImage(
+            data: data,
+            actualModel: actualModel,
+            fallbackUsed: fallbackUsed,
+            fallbackFrom: fallbackFrom,
+            location: location,
+            horizon: horizon.rawValue,
+            lang: language.rawValue
+        )
+
         return MeteogramFetchResult(
             imageData: data,
             actualModel: actualModel,
@@ -261,6 +271,14 @@ public class MeteogramService {
         let fallbackUsed = forecast.modelFallback ?? false
         let fallbackFrom = forecast.fallbackFrom ?? "icon_d2"
 
+        // Cache structured forecast response for offline resilience
+        ForecastCacheManager.shared.saveForecast(
+            forecast,
+            location: location,
+            horizon: horizon.rawValue,
+            lang: language.rawValue
+        )
+
         return ForecastFetchResult(
             forecast: forecast,
             timeSeries: timeSeries,
@@ -301,5 +319,175 @@ public class MeteogramService {
         } catch {
             return (false, 0, error.localizedDescription)
         }
+    }
+}
+
+// MARK: - Offline Forecast Cache Manager
+
+public struct CachedForecastRecord: Codable, Sendable {
+    public let forecast: ForecastResponse
+    public let cachedAt: Date
+    public let locationKey: String
+    public let horizonKey: String
+    public let languageKey: String
+}
+
+public final class ForecastCacheManager: @unchecked Sendable {
+    public static let shared = ForecastCacheManager()
+
+    private let fileManager = FileManager.default
+    private let cacheDir: URL
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+
+    // In-memory hot cache
+    private var memoryForecasts: [String: (forecast: ForecastResponse, date: Date)] = [:]
+    private var memoryImages: [String: (data: Data, actualModel: String, fallbackUsed: Bool, fallbackFrom: String, date: Date)] = [:]
+    private let lock = NSLock()
+
+    public init() {
+        let baseDir = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first ?? fileManager.temporaryDirectory
+        self.cacheDir = baseDir.appendingPathComponent("MeteogramForecastCache", isDirectory: true)
+        try? fileManager.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+    }
+
+    public func cacheKey(location: String, horizon: String, lang: String = "en") -> String {
+        let cleanLoc = location.lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: " ", with: "_")
+            .replacingOccurrences(of: "/", with: "_")
+        return "\(cleanLoc)_\(horizon)_\(lang)"
+    }
+
+    // MARK: - Forecast JSON Caching
+
+    public func saveForecast(_ forecast: ForecastResponse, location: String, horizon: String, lang: String = "en") {
+        let key = cacheKey(location: location, horizon: horizon, lang: lang)
+        let now = Date()
+
+        lock.lock()
+        memoryForecasts[key] = (forecast, now)
+        lock.unlock()
+
+        let record = CachedForecastRecord(
+            forecast: forecast,
+            cachedAt: now,
+            locationKey: location,
+            horizonKey: horizon,
+            languageKey: lang
+        )
+        let fileURL = cacheDir.appendingPathComponent("fc_\(key).json")
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self = self else { return }
+            if let data = try? self.encoder.encode(record) {
+                try? data.write(to: fileURL, options: .atomic)
+            }
+        }
+    }
+
+    public func loadForecast(location: String, horizon: String, lang: String = "en") -> (forecast: ForecastResponse, cachedAt: Date)? {
+        let key = cacheKey(location: location, horizon: horizon, lang: lang)
+
+        lock.lock()
+        if let mem = memoryForecasts[key] {
+            lock.unlock()
+            return (mem.forecast, mem.date)
+        }
+        lock.unlock()
+
+        let fileURL = cacheDir.appendingPathComponent("fc_\(key).json")
+        guard let data = try? Data(contentsOf: fileURL),
+              let record = try? decoder.decode(CachedForecastRecord.self, from: data) else {
+            return nil
+        }
+
+        lock.lock()
+        memoryForecasts[key] = (record.forecast, record.cachedAt)
+        lock.unlock()
+
+        return (record.forecast, record.cachedAt)
+    }
+
+    public func hasCachedForecast(location: String, horizon: String, lang: String = "en") -> Bool {
+        let key = cacheKey(location: location, horizon: horizon, lang: lang)
+        lock.lock()
+        if memoryForecasts[key] != nil {
+            lock.unlock()
+            return true
+        }
+        lock.unlock()
+        let fileURL = cacheDir.appendingPathComponent("fc_\(key).json")
+        return fileManager.fileExists(atPath: fileURL.path)
+    }
+
+    /// Searches for ANY cached forecast for a given location across all known horizons
+    public func findAnyCachedForecast(for location: String, preferredOrder: [ForecastHorizon] = ForecastHorizon.displayOrder) -> (horizon: ForecastHorizon, forecast: ForecastResponse, cachedAt: Date)? {
+        for h in preferredOrder {
+            if let cached = loadForecast(location: location, horizon: h.rawValue) {
+                return (h, cached.forecast, cached.cachedAt)
+            }
+        }
+        return nil
+    }
+
+    // MARK: - Raster Image Caching
+
+    public func saveImage(data: Data, actualModel: String, fallbackUsed: Bool, fallbackFrom: String, location: String, horizon: String, lang: String = "en") {
+        let key = cacheKey(location: location, horizon: horizon, lang: lang)
+        let now = Date()
+
+        lock.lock()
+        memoryImages[key] = (data, actualModel, fallbackUsed, fallbackFrom, now)
+        lock.unlock()
+
+        let imgURL = cacheDir.appendingPathComponent("img_\(key).png")
+        let metaURL = cacheDir.appendingPathComponent("meta_\(key).json")
+
+        DispatchQueue.global(qos: .utility).async {
+            try? data.write(to: imgURL, options: .atomic)
+            let meta: [String: Any] = [
+                "time": now.timeIntervalSince1970,
+                "model": actualModel,
+                "fallbackUsed": fallbackUsed,
+                "fallbackFrom": fallbackFrom
+            ]
+            if let metaData = try? JSONSerialization.data(withJSONObject: meta) {
+                try? metaData.write(to: metaURL, options: .atomic)
+            }
+        }
+    }
+
+    public func loadImage(location: String, horizon: String, lang: String = "en") -> (data: Data, actualModel: String, fallbackUsed: Bool, fallbackFrom: String, cachedAt: Date)? {
+        let key = cacheKey(location: location, horizon: horizon, lang: lang)
+
+        lock.lock()
+        if let mem = memoryImages[key] {
+            lock.unlock()
+            return (mem.data, mem.actualModel, mem.fallbackUsed, mem.fallbackFrom, mem.date)
+        }
+        lock.unlock()
+
+        let imgURL = cacheDir.appendingPathComponent("img_\(key).png")
+        let metaURL = cacheDir.appendingPathComponent("meta_\(key).json")
+
+        guard let data = try? Data(contentsOf: imgURL) else { return nil }
+        var date = Date()
+        var actualModel = horizon
+        var fallbackUsed = false
+        var fallbackFrom = ""
+
+        if let metaData = try? Data(contentsOf: metaURL),
+           let obj = try? JSONSerialization.jsonObject(with: metaData) as? [String: Any] {
+            if let t = obj["time"] as? Double { date = Date(timeIntervalSince1970: t) }
+            if let m = obj["model"] as? String { actualModel = m }
+            if let fb = obj["fallbackUsed"] as? Bool { fallbackUsed = fb }
+            if let ff = obj["fallbackFrom"] as? String { fallbackFrom = ff }
+        }
+
+        lock.lock()
+        memoryImages[key] = (data, actualModel, fallbackUsed, fallbackFrom, date)
+        lock.unlock()
+
+        return (data, actualModel, fallbackUsed, fallbackFrom, date)
     }
 }

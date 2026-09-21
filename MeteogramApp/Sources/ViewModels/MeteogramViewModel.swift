@@ -63,6 +63,10 @@ public class MeteogramViewModel: ObservableObject {
     @Published public var fallbackFromModel: String = ""
     @Published public var fallbackToModel: String = ""
 
+    // Cache & Offline State
+    @Published public var isOfflineCached: Bool = false
+    @Published public var offlineCacheNotice: String?
+
     // User favorites
     @Published public var favoriteLocations: [String] {
         didSet {
@@ -96,6 +100,31 @@ public class MeteogramViewModel: ObservableObject {
         self.favoriteLocations = UserDefaults.standard.stringArray(forKey: "favoriteLocations") ?? [
             "Bratislava-Koliba", "Jasna", "Liptovsky Mikulas", "Poprad"
         ]
+
+        // Instantly restore cached forecast on launch so the app is NEVER blank!
+        if let cached = ForecastCacheManager.shared.loadForecast(location: self.location, horizon: self.horizon.rawValue, lang: self.language.rawValue) {
+            self.forecastData = cached.forecast
+            self.timeSeries = cached.forecast.toTimeSeriesPoints()
+            self.lastUpdated = cached.cachedAt
+            self.isOfflineCached = true
+            self.offlineCacheNotice = "Showing cached forecast (\(self.formatRelativeTime(cached.cachedAt)))"
+        } else if let anyCached = ForecastCacheManager.shared.findAnyCachedForecast(for: self.location) {
+            self.horizon = anyCached.horizon
+            self.forecastData = anyCached.forecast
+            self.timeSeries = anyCached.forecast.toTimeSeriesPoints()
+            self.lastUpdated = anyCached.cachedAt
+            self.isOfflineCached = true
+            self.offlineCacheNotice = "Offline: Showing cached \(anyCached.horizon.shortName) (\(self.formatRelativeTime(anyCached.cachedAt)))"
+        }
+
+        if let cachedImg = ForecastCacheManager.shared.loadImage(location: self.location, horizon: self.horizon.rawValue, lang: self.language.rawValue) {
+            #if canImport(AppKit)
+            self.currentImage = NSImage(data: cachedImg.data)
+            #elseif canImport(UIKit)
+            self.currentImage = UIImage(data: cachedImg.data)
+            #endif
+            self.rawImageData = cachedImg.data
+        }
     }
 
     public var formattedTitle: String {
@@ -150,30 +179,60 @@ public class MeteogramViewModel: ObservableObject {
 
     public func switchToModel(_ target: ForecastHorizon) {
         guard target != horizon else { return }
+        let previousHorizon = self.horizon
+        let previousForecast = self.forecastData
+        let previousTimeSeries = self.timeSeries
+        let previousImage = self.currentImage
+        let previousRawData = self.rawImageData
+
         self.selectedDate = nil
         self.horizon = target
-        fetchMeteogram()
+
+        // If target model is in cache, load it immediately for seamless instant switching
+        if let cached = ForecastCacheManager.shared.loadForecast(location: self.location, horizon: target.rawValue, lang: self.language.rawValue) {
+            self.forecastData = cached.forecast
+            self.timeSeries = cached.forecast.toTimeSeriesPoints()
+            self.lastUpdated = cached.cachedAt
+            self.isOfflineCached = true
+            self.offlineCacheNotice = "Loaded from offline cache (\(self.formatRelativeTime(cached.cachedAt)))"
+        }
+        if let cachedImg = ForecastCacheManager.shared.loadImage(location: self.location, horizon: target.rawValue, lang: self.language.rawValue) {
+            #if canImport(AppKit)
+            self.currentImage = NSImage(data: cachedImg.data)
+            #elseif canImport(UIKit)
+            self.currentImage = UIImage(data: cachedImg.data)
+            #endif
+            self.rawImageData = cachedImg.data
+        }
+
+        fetchMeteogram(fallbackToPreviousOnFailure: (
+            horizon: previousHorizon,
+            forecast: previousForecast,
+            timeSeries: previousTimeSeries,
+            image: previousImage,
+            rawData: previousRawData
+        ))
     }
 
-public enum MeteogramDisplayMode: String, CaseIterable, Identifiable {
-    case nativeCharts = "charts"
-    case rasterImage = "image"
+    public enum MeteogramDisplayMode: String, CaseIterable, Identifiable {
+        case nativeCharts = "charts"
+        case rasterImage = "image"
 
-    public var id: String { rawValue }
-    public var displayName: String {
-        switch self {
-        case .nativeCharts: return "Native Swift Charts"
-        case .rasterImage: return "Server Image"
+        public var id: String { rawValue }
+        public var displayName: String {
+            switch self {
+            case .nativeCharts: return "Native Swift Charts"
+            case .rasterImage: return "Server Image"
+            }
         }
     }
-}
 
     public var selectedPoint: TimeSeriesPoint? {
         guard let selDate = selectedDate, !timeSeries.isEmpty else { return nil }
         return timeSeries.min(by: { abs($0.date.timeIntervalSince(selDate)) < abs($1.date.timeIntervalSince(selDate)) })
     }
 
-    public func fetchMeteogram() {
+    public func fetchMeteogram(fallbackToPreviousOnFailure: (horizon: ForecastHorizon, forecast: ForecastResponse?, timeSeries: [TimeSeriesPoint], image: PlatformImage?, rawData: Data?)? = nil) {
         currentTask?.cancel()
         self.selectedDate = nil
 
@@ -182,11 +241,32 @@ public enum MeteogramDisplayMode: String, CaseIterable, Identifiable {
         let loc = location.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !loc.isEmpty else { return }
 
+        // If not populated yet, check if cache has this model
+        if self.forecastData == nil || self.timeSeries.isEmpty {
+            if let cached = ForecastCacheManager.shared.loadForecast(location: loc, horizon: horizon.rawValue, lang: language.rawValue) {
+                self.forecastData = cached.forecast
+                self.timeSeries = cached.forecast.toTimeSeriesPoints()
+                self.lastUpdated = cached.cachedAt
+                self.isOfflineCached = true
+                self.offlineCacheNotice = "Showing cached forecast (\(self.formatRelativeTime(cached.cachedAt)))"
+            }
+            if let cachedImg = ForecastCacheManager.shared.loadImage(location: loc, horizon: horizon.rawValue, lang: language.rawValue) {
+                #if canImport(AppKit)
+                self.currentImage = NSImage(data: cachedImg.data)
+                #elseif canImport(UIKit)
+                self.currentImage = UIImage(data: cachedImg.data)
+                #endif
+                self.rawImageData = cachedImg.data
+            }
+        }
+
         isLoading = true
         errorMessage = nil
-        loadingStatusText = "Fetching \(horizon.shortName) forecast for \(loc)..."
+        loadingStatusText = "Updating \(horizon.shortName) forecast..."
 
         currentTask = Task {
+            var forecastFetchSucceeded = false
+
             // 1. Fetch structured forecast data for Native Swift Charts
             do {
                 let forecastResult = try await service.fetchForecastData(
@@ -203,7 +283,11 @@ public enum MeteogramDisplayMode: String, CaseIterable, Identifiable {
                 self.timeSeries = forecastResult.timeSeries
                 self.latencyMs = forecastResult.latencyMs
                 self.lastUpdated = Date()
+                self.isOfflineCached = false
+                self.offlineCacheNotice = nil
                 self.isLoading = false
+                self.errorMessage = nil
+                forecastFetchSucceeded = true
 
                 if forecastResult.fallbackUsed {
                     if forecastResult.actualModel == "icon_eu" {
@@ -217,7 +301,7 @@ public enum MeteogramDisplayMode: String, CaseIterable, Identifiable {
                 }
             } catch {
                 if Task.isCancelled { return }
-                print("Forecast JSON fetch error: \(error), falling back to raster image")
+                print("Forecast JSON fetch error: \(error)")
             }
 
             // 2. Concurrently fetch raster image (for fallback, copy/share, and raster mode)
@@ -248,12 +332,67 @@ public enum MeteogramDisplayMode: String, CaseIterable, Identifiable {
                 self.isLoading = false
             } catch {
                 if Task.isCancelled { return }
-                // Only set error if we don't have timeSeries either
-                if self.timeSeries.isEmpty {
-                    self.isLoading = false
-                    self.errorMessage = error.localizedDescription
-                }
+                print("Raster fetch error: \(error)")
             }
+
+            // 3. Offline / Cellular Unavailable Fallback Protection:
+            // Ensure the app NEVER goes blank if network or cellular data fails!
+            if !forecastFetchSucceeded {
+                self.isLoading = false
+
+                // Case A: We already have a valid loaded forecast or cached data for the target horizon
+                if self.forecastData != nil && !self.timeSeries.isEmpty {
+                    self.isOfflineCached = true
+                    let ageText = self.lastUpdated.map { self.formatRelativeTime($0) } ?? "previously saved"
+                    self.offlineCacheNotice = "Offline: Showing cached \(self.horizon.shortName) (\(ageText))"
+                    self.errorMessage = nil
+                    return
+                }
+
+                // Case B: No cache for target horizon, but we have a previous working model/view
+                if let fallback = fallbackToPreviousOnFailure, let prevForecast = fallback.forecast, !fallback.timeSeries.isEmpty {
+                    self.horizon = fallback.horizon
+                    self.forecastData = prevForecast
+                    self.timeSeries = fallback.timeSeries
+                    self.currentImage = fallback.image
+                    self.rawImageData = fallback.rawData
+                    self.isOfflineCached = true
+                    self.offlineCacheNotice = "Offline: No cache for \(self.horizon.shortName). Retaining \(fallback.horizon.shortName)."
+                    self.errorMessage = nil
+                    return
+                }
+
+                // Case C: Search for ANY cached model for this location
+                if let anyCached = ForecastCacheManager.shared.findAnyCachedForecast(for: loc) {
+                    self.horizon = anyCached.horizon
+                    self.forecastData = anyCached.forecast
+                    self.timeSeries = anyCached.forecast.toTimeSeriesPoints()
+                    self.lastUpdated = anyCached.cachedAt
+                    self.isOfflineCached = true
+                    self.offlineCacheNotice = "Offline: Switched to cached \(anyCached.horizon.shortName) (\(self.formatRelativeTime(anyCached.cachedAt)))"
+                    self.errorMessage = nil
+                    return
+                }
+
+                // Case D: First launch and absolutely no network or cache available
+                self.errorMessage = "No network connection. Please check your cellular/Wi-Fi connection and retry."
+            }
+        }
+    }
+
+    public func formatRelativeTime(_ date: Date) -> String {
+        let elapsed = -date.timeIntervalSinceNow
+        if elapsed < 60 {
+            return "just now"
+        } else if elapsed < 3600 {
+            let mins = Int(elapsed / 60)
+            return "\(mins)m ago"
+        } else if elapsed < 86400 {
+            let hours = Int(elapsed / 3600)
+            return "\(hours)h ago"
+        } else {
+            let days = Int(elapsed / 86400)
+            return "\(days)d ago"
         }
     }
 

@@ -46,6 +46,34 @@ public struct ContentView: View {
                 .zIndex(9)
             }
 
+            // Offline / Cached Mode Banner
+            if viewModel.isOfflineCached {
+                HStack(spacing: 6) {
+                    Image(systemName: "antenna.radiowaves.left.and.right.slash")
+                        .font(.caption2.bold())
+                        .foregroundColor(.orange)
+                    Text(viewModel.offlineCacheNotice ?? "Offline • Using cached forecast")
+                        .font(.caption2.weight(.medium))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                    Spacer()
+                    Button("Retry") {
+                        viewModel.fetchMeteogram()
+                    }
+                    .font(.caption2.bold())
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Color.orange.opacity(0.12))
+                .cornerRadius(6)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 2)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .zIndex(8)
+            }
+
             // Meteogram Chart Viewer: Native Swift Charts or Server Raster Image
             Group {
                 if viewModel.displayMode == .nativeCharts && !viewModel.timeSeries.isEmpty {
@@ -253,9 +281,20 @@ public struct ContentView: View {
             }
 
             if let updated = viewModel.lastUpdated {
-                Text("Updated \(updated.formatted(date: .omitted, time: .standard))")
-                    .font(.caption2)
-                    .foregroundColor(.secondary.opacity(0.8))
+                HStack(spacing: 3) {
+                    if viewModel.isOfflineCached {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 8))
+                            .foregroundColor(.orange)
+                        Text("Cached \(viewModel.formatRelativeTime(updated))")
+                            .font(.caption2)
+                            .foregroundColor(.orange)
+                    } else {
+                        Text("Updated \(updated.formatted(date: .omitted, time: .standard))")
+                            .font(.caption2)
+                            .foregroundColor(.secondary.opacity(0.8))
+                    }
+                }
             }
         }
         .padding(.horizontal, 14)
