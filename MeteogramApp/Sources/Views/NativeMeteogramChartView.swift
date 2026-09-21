@@ -575,7 +575,25 @@ public struct NativeMeteogramChartView: View {
 
     // MARK: - Panel 5: Mean Sea Level Pressure [hPa]
     private func pressurePanelView(points: [TimeSeriesPoint]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let validMinList = points.compactMap { $0.pressureMin }
+        let validMaxList = points.compactMap { $0.pressureMax }
+        let validMedList = points.map(\.pressureMedian).filter { $0 > 800 }
+
+        let minP = validMinList.min() ?? (validMedList.min() ?? 1010.0)
+        let maxP = validMaxList.max() ?? (validMedList.max() ?? 1025.0)
+
+        let rawMin = floor((minP - 2.0) / 5.0) * 5.0
+        let rawMax = ceil((maxP + 2.0) / 5.0) * 5.0
+        let yDomain: ClosedRange<Double> = {
+            if rawMax - rawMin < 10 {
+                return (rawMin - 5)...(rawMax + 5)
+            }
+            return rawMin...rawMax
+        }()
+
+        let showStdLine = yDomain.contains(1013.25)
+
+        return VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Label("Mean Sea Level Pressure [hPa]", systemImage: "gauge.with.needle")
                     .font(.caption.bold())
@@ -585,7 +603,9 @@ public struct NativeMeteogramChartView: View {
 
                 HStack(spacing: 12) {
                     legendItem(title: "Median", color: .purple, isLine: true)
-                    legendItem(title: "1013 hPa Std", color: .gray, isLine: true)
+                    if showStdLine {
+                        legendItem(title: "1013 hPa Std", color: .gray, isLine: true)
+                    }
                 }
                 .font(.caption2)
             }
@@ -611,9 +631,11 @@ public struct NativeMeteogramChartView: View {
                     .lineStyle(StrokeStyle(lineWidth: 2.0))
                 }
 
-                RuleMark(y: .value("Std", 1013.25))
-                    .foregroundStyle(Color.gray.opacity(0.6))
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                if showStdLine {
+                    RuleMark(y: .value("Std", 1013.25))
+                        .foregroundStyle(Color.gray.opacity(0.6))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                }
 
                 if let selDate = selectedDate {
                     RuleMark(x: .value("Selected", selDate))
@@ -622,13 +644,20 @@ public struct NativeMeteogramChartView: View {
                 }
             }
             .chartXSelection(value: $selectedDate)
+            .chartYScale(domain: yDomain)
             .chartYAxis {
-                AxisMarks(position: .leading)
+                AxisMarks(position: .leading, values: .stride(by: 5)) { val in
+                    AxisGridLine()
+                    AxisTick()
+                    AxisValueLabel {
+                        if let v = val.as(Double.self) {
+                            Text("\(Int(v))")
+                        }
+                    }
+                }
             }
             .chartXAxis {
-                AxisMarks(values: .automatic(desiredCount: 6)) { _ in
-                    AxisGridLine()
-                }
+                xAxisMarks(points: points)
             }
             .frame(height: 100)
             .background(Color(white: 0.98).opacity(0.04))
