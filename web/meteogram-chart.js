@@ -1176,22 +1176,11 @@ class MeteogramChart {
       const y = altToY(peak.alt);
 
       if (iconsOnly) {
-        ctx.save();
-        // Subtle white backing circle so curve does not cut through icon
-        ctx.fillStyle = "rgba(255, 255, 255, 0.82)";
-        ctx.beginPath();
-        ctx.arc(x, y, 6.5, 0, 2 * Math.PI);
-        ctx.fill();
-        ctx.strokeStyle = "#fde68a";
-        ctx.lineWidth = 0.8;
-        ctx.stroke();
-
-        ctx.font = "bold 12px 'Inter', sans-serif";
+        ctx.font = "bold 13px 'Inter', sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillStyle = "#b45309";
         ctx.fillText("☀", x, y);
-        ctx.restore();
       } else {
         const label = `☀ ${peak.tStr} (${Math.round(peak.alt)}°)`;
         ctx.font = "bold 9px 'Inter', sans-serif";

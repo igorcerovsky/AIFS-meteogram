@@ -1384,7 +1384,6 @@ class MeteogramRenderer:
                     color="#b45309",
                     fontweight="bold",
                     zorder=5,
-                    bbox=dict(boxstyle="circle,pad=0.2", fc="#ffffff", ec="#fde68a", lw=0.6, alpha=0.9),
                 )
             else:
                 label_text = f"☀ {t_str} ({p_alt:.0f}°)" if forecast_days <= 10 else f"☀ {p_alt:.0f}°"
