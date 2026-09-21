@@ -1933,15 +1933,24 @@ const PRESET_COORDS = {
 
 window.MeteogramAPI = {
   async fetchForecast(locationQuery, days = 15, model = "aifs") {
-    // 1. Try local server API first
-    const localUrl = `/api/forecast?location=${encodeURIComponent(locationQuery)}&days=${days}&model=${model}&_t=${Date.now()}`;
-    try {
-      const resp = await fetch(localUrl);
-      if (resp.ok) {
-        return await resp.json();
+    // 1. Try local server API first if running locally
+    const isLocalhost = typeof window !== "undefined" && Boolean(
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1" ||
+      window.location.hostname === "[::1]" ||
+      window.location.port === "8080"
+    );
+
+    if (isLocalhost) {
+      const localUrl = `/api/forecast?location=${encodeURIComponent(locationQuery)}&days=${days}&model=${model}&_t=${Date.now()}`;
+      try {
+        const resp = await fetch(localUrl);
+        if (resp.ok) {
+          return await resp.json();
+        }
+      } catch (e) {
+        // Local server unavailable -> proceed to client-side Open-Meteo direct fetch
       }
-    } catch (e) {
-      // Local server unavailable -> proceed to client-side Open-Meteo direct fetch
     }
 
     // 2. Direct Open-Meteo fetch fallback (GitHub Pages / Standalone)
