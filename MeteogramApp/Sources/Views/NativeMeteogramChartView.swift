@@ -628,27 +628,52 @@ public struct NativeMeteogramChartView: View {
                     .lineStyle(StrokeStyle(lineWidth: 2.0))
                 }
 
-                // Faint Azimuth Guide Wave Line
-                ForEach(points) { p in
-                    if let dir = p.windDirection {
-                        let yMid = yMaxWind * 0.55
-                        let ySpan = yMaxWind * 0.35
-                        let arrowY = yMid + ySpan * cos(dir * .pi / 180.0)
+                // Direction Grid Lines: Nord (up), E, W (middle), South (down)
+                let yMid = yMaxWind * 0.55
+                let ySpan = yMaxWind * 0.35
+                let yTop = yMid + ySpan
+                let yBottom = yMid - ySpan
+
+                RuleMark(y: .value("DirLevel", yTop))
+                    .foregroundStyle(Color.secondary.opacity(0.35))
+                    .lineStyle(StrokeStyle(lineWidth: 0.85, dash: [3, 3]))
+
+                RuleMark(y: .value("DirLevel", yMid))
+                    .foregroundStyle(Color.secondary.opacity(0.35))
+                    .lineStyle(StrokeStyle(lineWidth: 0.85, dash: [3, 3]))
+
+                RuleMark(y: .value("DirLevel", yBottom))
+                    .foregroundStyle(Color.secondary.opacity(0.35))
+                    .lineStyle(StrokeStyle(lineWidth: 0.85, dash: [3, 3]))
+
+                // Wind direction trajectory curve colored continuously by wind direction
+                ForEach(0..<max(0, points.count - 1), id: \.self) { idx in
+                    let p1 = points[idx]
+                    let p2 = points[idx + 1]
+                    if let dir1 = p1.windDirection, let dir2 = p2.windDirection {
+                        let y1 = yMid + ySpan * cos(dir1 * .pi / 180.0)
+                        let y2 = yMid + ySpan * cos(dir2 * .pi / 180.0)
                         LineMark(
-                            x: .value("Time", p.date),
-                            y: .value("WindWave", arrowY),
-                            series: .value("Series", "WindWave")
+                            x: .value("Time", p1.date),
+                            y: .value("WindWave", y1),
+                            series: .value("WindWaveSeg", idx)
                         )
-                        .foregroundStyle(Color.gray.opacity(0.32))
-                        .lineStyle(StrokeStyle(lineWidth: 1.0, dash: [2, 3]))
+                        .foregroundStyle(windDirectionColor(dirDeg: dir1))
+                        .lineStyle(StrokeStyle(lineWidth: 2.2, lineCap: .round))
+
+                        LineMark(
+                            x: .value("Time", p2.date),
+                            y: .value("WindWave", y2),
+                            series: .value("WindWaveSeg", idx)
+                        )
+                        .foregroundStyle(windDirectionColor(dirDeg: dir2))
+                        .lineStyle(StrokeStyle(lineWidth: 2.2, lineCap: .round))
                     }
                 }
 
                 // Sampled Wind Arrows distributed as a sine wave by azimuth
                 ForEach(arrowPoints) { p in
                     if let dir = p.windDirection {
-                        let yMid = yMaxWind * 0.55
-                        let ySpan = yMaxWind * 0.35
                         let arrowY = yMid + ySpan * cos(dir * .pi / 180.0)
                         PointMark(
                             x: .value("Time", p.date),
@@ -669,7 +694,41 @@ public struct NativeMeteogramChartView: View {
             .chartXSelection(value: $selectedDate)
             .chartYScale(domain: 0...yMaxWind)
             .chartYAxis {
-                AxisMarks(position: .leading)
+                AxisMarks(position: .leading, values: .stride(by: 10)) { val in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 2]))
+                    AxisValueLabel {
+                        if let v = val.as(Double.self) {
+                            Text("\(Int(v))")
+                                .font(.system(size: 8.5))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                AxisMarks(position: .trailing, values: [yMaxWind * 0.20, yMaxWind * 0.55, yMaxWind * 0.90]) { val in
+                    AxisValueLabel {
+                        if let v = val.as(Double.self) {
+                            if abs(v - yMaxWind * 0.90) < 1.0 {
+                                Text("N")
+                                    .font(.system(size: 9.5, weight: .bold))
+                                    .foregroundColor(Color(red: 37/255, green: 99/255, blue: 235/255))
+                            } else if abs(v - yMaxWind * 0.55) < 1.0 {
+                                HStack(spacing: 1) {
+                                    Text("E")
+                                        .foregroundColor(Color(red: 16/255, green: 185/255, blue: 129/255))
+                                    Text(",")
+                                        .foregroundColor(Color(red: 148/255, green: 163/255, blue: 184/255))
+                                    Text("W")
+                                        .foregroundColor(Color(red: 139/255, green: 92/255, blue: 246/255))
+                                }
+                                .font(.system(size: 8.5, weight: .bold))
+                            } else {
+                                Text("S")
+                                    .font(.system(size: 9.5, weight: .bold))
+                                    .foregroundColor(Color(red: 239/255, green: 68/255, blue: 68/255))
+                            }
+                        }
+                    }
+                }
             }
             .chartXAxis {
                 AxisMarks(values: .automatic(desiredCount: 6)) { _ in
@@ -1123,6 +1182,34 @@ private func windColor(speedMs: Double) -> Color {
     }
 }
 
+// MARK: - Wind Direction Color
+private func windDirectionColor(dirDeg: Double) -> Color {
+    let d = dirDeg.truncatingRemainder(dividingBy: 360.0)
+    let normD = d < 0 ? d + 360.0 : d
+    let stops: [(deg: Double, r: Double, g: Double, b: Double)] = [
+        (0.0, 37.0, 99.0, 235.0),    // N: Royal Blue
+        (45.0, 6.0, 182.0, 212.0),   // NE: Cyan
+        (90.0, 16.0, 185.0, 129.0),  // E: Emerald
+        (135.0, 245.0, 158.0, 11.0), // SE: Amber
+        (180.0, 239.0, 68.0, 68.0),  // S: Coral Red
+        (225.0, 217.0, 70.0, 239.0), // SW: Fuchsia
+        (270.0, 139.0, 92.0, 246.0), // W: Purple
+        (315.0, 99.0, 102.0, 241.0), // NW: Indigo
+        (360.0, 37.0, 99.0, 235.0)   // N: Royal Blue
+    ]
+    var i = 0
+    while i < stops.count - 1 && normD > stops[i + 1].deg {
+        i += 1
+    }
+    let s1 = stops[i]
+    let s2 = stops[i + 1]
+    let t = (normD - s1.deg) / (s2.deg - s1.deg)
+    let r = (s1.r + (s2.r - s1.r) * t) / 255.0
+    let g = (s1.g + (s2.g - s1.g) * t) / 255.0
+    let b = (s1.b + (s2.b - s1.b) * t) / 255.0
+    return Color(red: r, green: g, blue: b)
+}
+
 // MARK: - Triangle Shape
 public struct Triangle: Shape {
     public init() {}
@@ -1151,13 +1238,27 @@ public struct WindArrowShape: View {
         let col = windColor(speedMs: speedMs)
         let arrowLen = max(8, min(24, 7 + CGFloat(speedMs) * 1.2))
         let headSize = max(3, min(6, arrowLen * 0.25))
+        let shaftW: CGFloat = speedMs >= 15 ? 2.0 : (speedMs >= 10 ? 1.6 : 1.2)
 
         ZStack {
+            // White halo outline so arrow stands out cleanly over the colored curve
+            VStack(spacing: 0) {
+                Rectangle()
+                    .fill(Color.white)
+                    .frame(width: shaftW + 2.2, height: arrowLen - headSize)
+
+                Triangle()
+                    .fill(Color.white)
+                    .frame(width: headSize * 2.2, height: headSize + 1.2)
+            }
+            .rotationEffect(.degrees(dirDeg))
+
+            // Arrow foreground
             VStack(spacing: 0) {
                 // Shaft
                 Rectangle()
                     .fill(col)
-                    .frame(width: speedMs >= 15 ? 2.0 : (speedMs >= 10 ? 1.6 : 1.2), height: arrowLen - headSize)
+                    .frame(width: shaftW, height: arrowLen - headSize)
 
                 // Arrow head pointing towards bottom (positive Y)
                 Triangle()

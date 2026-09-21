@@ -1524,18 +1524,44 @@ class MeteogramChart {
     const yMax = Math.ceil(maxW / 5.0) * 5.0;
     const valToY = (v) => p.bottom - (v / yMax) * p.height;
 
-    // Grid lines
+    // Bounds for vertical wind azimuth levels
+    const yTop = p.top + 28;
+    const yBottom = p.bottom - 16;
+    const yMid = (yTop + yBottom) / 2.0;
+    const ySpan = (yBottom - yTop) / 2.0;
+
+    // Grid lines for wind direction: N (up), E, W (middle), S (down)
     ctx.save();
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.45)";
+    ctx.lineWidth = 0.85;
+    ctx.setLineDash([3, 3]);
+
+    const dirLevels = [
+      { y: yTop, label: "N" },
+      { y: yMid, label: "E, W" },
+      { y: yBottom, label: "S" }
+    ];
+
+    for (const lvl of dirLevels) {
+      ctx.beginPath();
+      ctx.moveTo(this.marginLeft, lvl.y);
+      ctx.lineTo(this.marginLeft + this.plotWidth, lvl.y);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    // Left axis: Wind Speed (m/s)
     ctx.font = "10px 'Inter', monospace";
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
+    ctx.fillStyle = "#64748b";
 
     for (let v = 0; v <= yMax; v += (yMax <= 15 ? 2.5 : 5)) {
       const y = valToY(v);
       if (y < p.top || y > p.bottom) continue;
 
       ctx.strokeStyle = "#e2e8f0";
-      ctx.lineWidth = 0.8;
+      ctx.lineWidth = 0.6;
       ctx.setLineDash([2, 2]);
       ctx.beginPath();
       ctx.moveTo(this.marginLeft, y);
@@ -1543,22 +1569,40 @@ class MeteogramChart {
       ctx.stroke();
       ctx.setLineDash([]);
 
-      ctx.fillStyle = "#64748b";
       ctx.fillText(`${v.toFixed(1)} m/s`, this.marginLeft - 6, y);
     }
 
-    // Right axis: Beaufort scale guides
-    const bftScales = [
-      { name: "Bft 4", ms: 5.5 },
-      { name: "Bft 6", ms: 10.8 },
-      { name: "Bft 8", ms: 17.2 },
-    ];
+    // Right axis: Direction legend (N, E, W, S)
+    ctx.font = "bold 9.5px 'Inter', sans-serif";
     ctx.textAlign = "left";
-    ctx.fillStyle = "#94a3b8";
-    ctx.font = "9px 'Inter', sans-serif";
-    for (const b of bftScales) {
-      if (b.ms <= yMax) {
-        ctx.fillText(b.name, this.marginLeft + this.plotWidth + 6, valToY(b.ms));
+    ctx.textBaseline = "middle";
+
+    for (const lvl of dirLevels) {
+      // Small tick mark on the right border pointing to the label
+      ctx.strokeStyle = "#94a3b8";
+      ctx.lineWidth = 1.0;
+      ctx.beginPath();
+      ctx.moveTo(this.marginLeft + this.plotWidth, lvl.y);
+      ctx.lineTo(this.marginLeft + this.plotWidth + 4, lvl.y);
+      ctx.stroke();
+
+      const rightX = this.marginLeft + this.plotWidth + 7;
+      if (lvl.label === "N") {
+        ctx.fillStyle = "#2563eb"; // North: Royal Blue
+        ctx.fillText("N", rightX, lvl.y);
+      } else if (lvl.label === "S") {
+        ctx.fillStyle = "#ef4444"; // South: Coral Red
+        ctx.fillText("S", rightX, lvl.y);
+      } else {
+        // East (Emerald) & West (Purple)
+        ctx.fillStyle = "#10b981";
+        ctx.fillText("E", rightX, lvl.y);
+        const ew = ctx.measureText("E").width;
+        ctx.fillStyle = "#94a3b8";
+        ctx.fillText(", ", rightX + ew, lvl.y);
+        const cw = ctx.measureText(", ").width;
+        ctx.fillStyle = "#8b5cf6";
+        ctx.fillText("W", rightX + ew + cw, lvl.y);
       }
     }
 
@@ -1596,35 +1640,35 @@ class MeteogramChart {
 
     // Draw Rotating Meteorological Wind Arrows distributed as a sine wave by azimuth
     if (wDir && wDir.median) {
-      // Azimuth bounds: North (0°) at top, South (180°) at bottom, East/West in middle
-      const yTop = p.top + 28;
-      const yBottom = p.bottom - 16;
-      const yMid = (yTop + yBottom) / 2.0;
-      const ySpan = (yBottom - yTop) / 2.0;
-
-      // Draw faint, elegant trajectory guide curve connecting the wind azimuth wave
+      // Wind direction trajectory curve colored continuously by wind direction
       ctx.save();
-      ctx.strokeStyle = "rgba(148, 163, 184, 0.35)";
-      ctx.lineWidth = 1.0;
-      ctx.setLineDash([2, 3]);
-      ctx.beginPath();
-      let startedWave = false;
-      for (let i = 0; i < this.times.length; i++) {
-        const dir = wDir.median[i];
-        if (dir == null) continue;
-        const x = this._timeToX(this.times[i].getTime());
-        // North (0°) -> cos(0) = 1 -> yTop (canvas top)
-        // South (180°) -> cos(180°) = -1 -> yBottom (canvas bottom)
-        // East/West (90°/270°) -> cos = 0 -> yMid (middle)
-        const y = yMid - ySpan * Math.cos(dir * Math.PI / 180.0);
-        if (!startedWave) {
-          ctx.moveTo(x, y);
-          startedWave = true;
-        } else {
-          ctx.lineTo(x, y);
-        }
+      ctx.lineWidth = 2.2;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+
+      for (let i = 0; i < this.times.length - 1; i++) {
+        const dir1 = wDir.median[i];
+        const dir2 = wDir.median[i + 1];
+        if (dir1 == null || dir2 == null) continue;
+
+        const x1 = this._timeToX(this.times[i].getTime());
+        const y1 = yMid - ySpan * Math.cos(dir1 * Math.PI / 180.0);
+        const x2 = this._timeToX(this.times[i + 1].getTime());
+        const y2 = yMid - ySpan * Math.cos(dir2 * Math.PI / 180.0);
+
+        const col1 = this._getWindDirColor(dir1);
+        const col2 = this._getWindDirColor(dir2);
+
+        const grad = ctx.createLinearGradient(x1, y1, x2, y2);
+        grad.addColorStop(0, col1);
+        grad.addColorStop(1, col2);
+
+        ctx.strokeStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
       }
-      ctx.stroke();
       ctx.restore();
 
       const stepInterval = Math.max(1, Math.round(this.times.length / 28)); // ~28 arrows across width
@@ -1689,6 +1733,33 @@ class MeteogramChart {
     this.panels.p4.valToY = valToY;
   }
 
+  _getWindDirColor(dir) {
+    if (dir == null) return "#94a3b8";
+    const d = ((dir % 360) + 360) % 360;
+    const stops = [
+      { deg: 0,   r: 37,  g: 99,  b: 235 }, // N: Royal Blue
+      { deg: 45,  r: 6,   g: 182, b: 212 }, // NE: Cyan
+      { deg: 90,  r: 16,  g: 185, b: 129 }, // E: Emerald
+      { deg: 135, r: 245, g: 158, b: 11  }, // SE: Amber
+      { deg: 180, r: 239, g: 68,  b: 68  }, // S: Coral Red
+      { deg: 225, r: 217, g: 70,  b: 239 }, // SW: Fuchsia
+      { deg: 270, r: 139, g: 92,  b: 246 }, // W: Purple
+      { deg: 315, r: 99,  g: 102, b: 241 }, // NW: Indigo
+      { deg: 360, r: 37,  g: 99,  b: 235 }, // N: Royal Blue
+    ];
+    let i = 0;
+    while (i < stops.length - 1 && d > stops[i + 1].deg) {
+      i++;
+    }
+    const s1 = stops[i];
+    const s2 = stops[i + 1];
+    const t = (d - s1.deg) / (s2.deg - s1.deg);
+    const r = Math.round(s1.r + (s2.r - s1.r) * t);
+    const g = Math.round(s1.g + (s2.g - s1.g) * t);
+    const b = Math.round(s1.b + (s2.b - s1.b) * t);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
   _drawWindArrow(x, y, dirDeg, speedMs) {
     const ctx = this.ctx;
     ctx.save();
@@ -1709,6 +1780,23 @@ class MeteogramChart {
     const headSize = Math.max(3, Math.min(6, arrowLen * 0.24));
     const shaftWidth = speedMs >= 15 ? 2.0 : (speedMs >= 10 ? 1.7 : (speedMs >= 5 ? 1.4 : 1.1));
 
+    // Crisp white halo/backing so arrow stands out distinctly on top of the colored curve
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = shaftWidth + 2.0;
+    ctx.beginPath();
+    ctx.moveTo(0, -halfLen);
+    ctx.lineTo(0, halfLen - headSize);
+    ctx.stroke();
+
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.moveTo(0, halfLen + 1);
+    ctx.lineTo(-headSize * 0.85, halfLen - headSize - 0.5);
+    ctx.lineTo(headSize * 0.85, halfLen - headSize - 0.5);
+    ctx.closePath();
+    ctx.fill();
+
+    // Draw arrow foreground
     ctx.fillStyle = col;
     ctx.strokeStyle = col;
     ctx.lineWidth = shaftWidth;
