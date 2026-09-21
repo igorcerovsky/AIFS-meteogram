@@ -2305,6 +2305,9 @@ const PRESET_COORDS = {
 
 window.MeteogramAPI = {
   async fetchForecast(locationQuery, days = 15, model = "aifs") {
+    const cleanLoc = (locationQuery || "").toLowerCase().trim().replace(/[\s\/]+/g, "_");
+    const cacheKey = `meteogram_fc_${cleanLoc}_${model}_${days}`;
+
     // 1. Try local server API first if running locally
     const isLocalhost = typeof window !== "undefined" && Boolean(
       window.location.hostname === "localhost" ||
@@ -2318,7 +2321,9 @@ window.MeteogramAPI = {
       try {
         const resp = await fetch(localUrl);
         if (resp.ok) {
-          return await resp.json();
+          const data = await resp.json();
+          try { localStorage.setItem(cacheKey, JSON.stringify({ time: Date.now(), data })); } catch (e) {}
+          return data;
         }
       } catch (e) {
         // Local server unavailable -> proceed to client-side Open-Meteo direct fetch
@@ -2326,7 +2331,45 @@ window.MeteogramAPI = {
     }
 
     // 2. Direct Open-Meteo fetch fallback (GitHub Pages / Standalone)
-    return await this.fetchDirectOpenMeteo(locationQuery, days, model);
+    try {
+      const data = await this.fetchDirectOpenMeteo(locationQuery, days, model);
+      if (data && data.stats) {
+        try { localStorage.setItem(cacheKey, JSON.stringify({ time: Date.now(), data })); } catch (e) {}
+        return data;
+      }
+    } catch (e) {
+      console.warn("Direct Open-Meteo fetch failed:", e);
+    }
+
+    // 3. If offline / cellular unavailable: load cached model from localStorage!
+    try {
+      const cachedStr = localStorage.getItem(cacheKey);
+      if (cachedStr) {
+        const parsed = JSON.parse(cachedStr);
+        if (parsed && parsed.data) {
+          console.info("Using cached forecast from localStorage");
+          parsed.data.isOfflineCached = true;
+          return parsed.data;
+        }
+      }
+    } catch (e) {}
+
+    // 4. Try finding ANY cached forecast in localStorage for this location
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(`meteogram_fc_${cleanLoc}_`)) {
+          const item = JSON.parse(localStorage.getItem(k));
+          if (item && item.data) {
+            console.info("Using alternative cached forecast from localStorage:", k);
+            item.data.isOfflineCached = true;
+            return item.data;
+          }
+        }
+      }
+    } catch (e) {}
+
+    throw new Error("No network connection and no cached forecast available.");
   },
 
   async geocode(query) {
