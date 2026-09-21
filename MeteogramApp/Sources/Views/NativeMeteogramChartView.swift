@@ -222,6 +222,35 @@ public struct NativeMeteogramChartView: View {
                 .lineStyle(StrokeStyle(lineWidth: 1.3, dash: [2, 3]))
             }
         }
+
+        // Centered Sun apex icons with transparent background at local culminations
+        ForEach(sunPeakPoints(points: points)) { p in
+            if let alt = p.sunAltitude {
+                PointMark(
+                    x: .value("Time", p.date),
+                    y: .value("Sun Peak", alt)
+                )
+                .symbol {
+                    Text("☀")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(Color(red: 180/255, green: 83/255, blue: 9/255))
+                }
+            }
+        }
+
+        // Centered Moon phase icons with transparent background at local culminations
+        ForEach(moonPeakPoints(points: points)) { p in
+            if let alt = p.moonAltitude {
+                PointMark(
+                    x: .value("Time", p.date),
+                    y: .value("Moon Peak", alt)
+                )
+                .symbol {
+                    Text(moonIconForDate(p.date))
+                        .font(.system(size: 10))
+                }
+            }
+        }
     }
 
     @ChartContentBuilder
@@ -663,65 +692,100 @@ public struct NativeMeteogramChartView: View {
 
                 Spacer()
 
-                HStack(spacing: 12) {
+                HStack(spacing: 8) {
                     legendItem(title: "Median", color: .purple, isLine: true)
+                    legendItem(title: "Spread", color: .purple.opacity(0.25))
                     if showStdLine {
-                        legendItem(title: "1013 hPa Std", color: .gray, isLine: true)
+                        legendItem(title: "1013 hPa", color: .gray, isLine: true)
                     }
+                    legendItem(title: "☀ Sun", color: Color(red: 244/255, green: 162/255, blue: 97/255), isLine: true)
+                    legendItem(title: "🌙 Moon", color: Color(red: 0/255, green: 180/255, blue: 216/255), isLine: true)
                 }
                 .font(.caption2)
             }
 
-            Chart {
-                ForEach(points) { p in
-                    if let prMin = p.pressureMin, let prMax = p.pressureMax {
-                        AreaMark(
-                            x: .value("Time", p.date),
-                            yStart: .value("Min", prMin),
-                            yEnd: .value("Max", prMax)
-                        )
-                        .foregroundStyle(Color.purple.opacity(0.15))
-                    }
+            ZStack(alignment: .topTrailing) {
+                // Background: Celestial Altitude (0° .. 92°, anchored at horizon = 0°)
+                Chart {
+                    celestialMarks(points: points)
                 }
-
-                ForEach(points) { p in
-                    LineMark(
-                        x: .value("Time", p.date),
-                        y: .value("Pressure", p.pressureMedian)
-                    )
-                    .foregroundStyle(Color.purple)
-                    .lineStyle(StrokeStyle(lineWidth: 2.0))
-                }
-
-                if showStdLine {
-                    RuleMark(y: .value("Std", 1013.25))
-                        .foregroundStyle(Color.gray.opacity(0.6))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                }
-
-                if let selDate = selectedDate {
-                    RuleMark(x: .value("Selected", selDate))
-                        .foregroundStyle(Color.primary.opacity(0.75))
-                        .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
-                }
-            }
-            .chartXSelection(value: $selectedDate)
-            .chartYScale(domain: yDomain)
-            .chartYAxis {
-                AxisMarks(position: .leading, values: .stride(by: 5)) { val in
-                    AxisGridLine()
-                    AxisTick()
-                    AxisValueLabel {
-                        if let v = val.as(Double.self) {
-                            Text("\(Int(v))")
+                .chartYScale(domain: 0...92)
+                .chartXAxis(.hidden)
+                .chartYAxis {
+                    AxisMarks(position: .trailing, values: [30, 60]) { val in
+                        AxisGridLine()
+                            .foregroundStyle(Color.orange.opacity(0.12))
+                        AxisValueLabel {
+                            if let v = val.as(Int.self) {
+                                Text("\(v)°")
+                                    .font(.system(size: 8, weight: .semibold))
+                                    .foregroundColor(Color(red: 244/255, green: 162/255, blue: 97/255))
+                            }
                         }
                     }
                 }
+
+                // Foreground: Pressure & Grid
+                Chart {
+                    ForEach(points) { p in
+                        if let prMin = p.pressureMin, let prMax = p.pressureMax {
+                            AreaMark(
+                                x: .value("Time", p.date),
+                                yStart: .value("Min", prMin),
+                                yEnd: .value("Max", prMax)
+                            )
+                            .foregroundStyle(Color.purple.opacity(0.15))
+                        }
+                    }
+
+                    ForEach(points) { p in
+                        LineMark(
+                            x: .value("Time", p.date),
+                            y: .value("Pressure", p.pressureMedian)
+                        )
+                        .foregroundStyle(Color.purple)
+                        .lineStyle(StrokeStyle(lineWidth: 2.0))
+                    }
+
+                    if showStdLine {
+                        RuleMark(y: .value("Std", 1013.25))
+                            .foregroundStyle(Color.gray.opacity(0.6))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                    }
+
+                    if let selDate = selectedDate {
+                        RuleMark(x: .value("Selected", selDate))
+                            .foregroundStyle(Color.primary.opacity(0.75))
+                            .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+
+                        if let selPoint = selectedPoint {
+                            PointMark(
+                                x: .value("Selected", selPoint.date),
+                                y: .value("Pressure", selPoint.pressureMedian)
+                            )
+                            .foregroundStyle(Color.purple)
+                            .symbolSize(40)
+                        }
+                    }
+                }
+                .chartXSelection(value: $selectedDate)
+                .chartYScale(domain: yDomain)
+                .chartYAxis {
+                    AxisMarks(position: .leading, values: .stride(by: 5)) { val in
+                        AxisGridLine()
+                        AxisTick()
+                        AxisValueLabel {
+                            if let v = val.as(Double.self) {
+                                Text("\(Int(v))")
+                            }
+                        }
+                    }
+                }
+                .chartXAxis {
+                    xAxisMarks(points: points)
+                }
             }
-            .chartXAxis {
-                xAxisMarks(points: points)
-            }
-            .frame(height: 100)
+            .frame(height: 110)
             .background(Color(white: 0.98).opacity(0.04))
             .cornerRadius(8)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.15), lineWidth: 1))
@@ -973,6 +1037,55 @@ public struct NativeMeteogramChartView: View {
         case 0.75..<0.875: return "🌗"
         default: return "🌘"
         }
+    }
+
+    private func sunPeakPoints(points: [TimeSeriesPoint]) -> [TimeSeriesPoint] {
+        guard points.count >= 3 else { return [] }
+        var peaks: [TimeSeriesPoint] = []
+        for i in 1..<(points.count - 1) {
+            let prev = points[i - 1].sunAltitude ?? -90
+            let cur = points[i].sunAltitude ?? -90
+            let next = points[i + 1].sunAltitude ?? -90
+            if cur > 5.0 && cur >= prev && cur >= next {
+                let pPrev2 = i >= 2 ? (points[i - 2].sunAltitude ?? -90) : -90
+                let pNext2 = i + 2 < points.count ? (points[i + 2].sunAltitude ?? -90) : -90
+                if cur >= pPrev2 && cur >= pNext2 {
+                    peaks.append(points[i])
+                }
+            }
+        }
+        return peaks
+    }
+
+    private func moonPeakPoints(points: [TimeSeriesPoint]) -> [TimeSeriesPoint] {
+        guard points.count >= 3 else { return [] }
+        var peaks: [TimeSeriesPoint] = []
+        for i in 1..<(points.count - 1) {
+            let prev = points[i - 1].moonAltitude ?? -90
+            let cur = points[i].moonAltitude ?? -90
+            let next = points[i + 1].moonAltitude ?? -90
+            if cur > 5.0 && cur >= prev && cur >= next {
+                let pPrev2 = i >= 2 ? (points[i - 2].moonAltitude ?? -90) : -90
+                let pNext2 = i + 2 < points.count ? (points[i + 2].moonAltitude ?? -90) : -90
+                if cur >= pPrev2 && cur >= pNext2 {
+                    peaks.append(points[i])
+                }
+            }
+        }
+        return peaks
+    }
+
+    private func moonIconForDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let dayKey = formatter.string(from: date)
+        if let item = viewModel.forecastData?.astro?.daily?[dayKey], let phase = item.moonPhase {
+            return moonIcon(for: phase)
+        }
+        let daysSinceRef = date.timeIntervalSince1970 / 86400.0 - 19733.0
+        let phase = (daysSinceRef / 29.53058867).truncatingRemainder(dividingBy: 1.0)
+        let normPhase = phase < 0 ? phase + 1.0 : phase
+        return moonIcon(for: normPhase)
     }
 }
 
