@@ -1526,23 +1526,46 @@ class MeteogramChart {
     const yMax = Math.ceil(maxW / 5.0) * 5.0;
     const valToY = (v) => p.bottom - (v / yMax) * p.height;
 
-    // Bounds for vertical wind azimuth levels
+    // Bounds for vertical wind azimuth levels: N, E, S, W from top to bottom
     const yTop = p.top + 28;
     const yBottom = p.bottom - 16;
-    const yMid = (yTop + yBottom) / 2.0;
-    const ySpan = (yBottom - yTop) / 2.0;
+    const ySpan = yBottom - yTop;
 
-    // Grid lines for wind direction: N (up), E, W (middle), S (down)
+    const dirLevels = [
+      { y: yTop, label: "N", col: "#2563eb" },
+      { y: yTop + ySpan * (1.0 / 3.0), label: "E", col: "#10b981" },
+      { y: yTop + ySpan * (2.0 / 3.0), label: "S", col: "#ef4444" },
+      { y: yBottom, label: "W", col: "#8b5cf6" }
+    ];
+
+    const dirToY = (dir) => {
+      const d = ((dir % 360) + 360) % 360;
+      let t;
+      if (d <= 90) {
+        // N (0°) to E (90°)
+        const u = (1 - Math.cos((d / 90.0) * Math.PI)) / 2.0;
+        t = u * (1.0 / 3.0);
+      } else if (d <= 180) {
+        // E (90°) to S (180°)
+        const u = (1 - Math.cos(((d - 90.0) / 90.0) * Math.PI)) / 2.0;
+        t = 1.0 / 3.0 + u * (1.0 / 3.0);
+      } else if (d <= 270) {
+        // S (180°) to W (270°)
+        const u = (1 - Math.cos(((d - 180.0) / 90.0) * Math.PI)) / 2.0;
+        t = 2.0 / 3.0 + u * (1.0 / 3.0);
+      } else {
+        // W (270°) to N (360°)
+        const u = (1 - Math.cos(((d - 270.0) / 90.0) * Math.PI)) / 2.0;
+        t = 1.0 - u;
+      }
+      return yTop + t * ySpan;
+    };
+
+    // Grid lines for 4 wind directions: N, E, S, W
     ctx.save();
     ctx.strokeStyle = "rgba(148, 163, 184, 0.45)";
     ctx.lineWidth = 0.85;
     ctx.setLineDash([3, 3]);
-
-    const dirLevels = [
-      { y: yTop, label: "N" },
-      { y: yMid, label: "E, W" },
-      { y: yBottom, label: "S" }
-    ];
 
     for (const lvl of dirLevels) {
       ctx.beginPath();
@@ -1574,7 +1597,7 @@ class MeteogramChart {
       ctx.fillText(`${v.toFixed(1)} m/s`, this.marginLeft - 6, y);
     }
 
-    // Right axis: Direction legend (N, E, W, S)
+    // Right axis: Direction legend (N, E, S, W)
     ctx.font = "bold 9.5px 'Inter', sans-serif";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
@@ -1589,23 +1612,8 @@ class MeteogramChart {
       ctx.stroke();
 
       const rightX = this.marginLeft + this.plotWidth + 7;
-      if (lvl.label === "N") {
-        ctx.fillStyle = "#2563eb"; // North: Royal Blue
-        ctx.fillText("N", rightX, lvl.y);
-      } else if (lvl.label === "S") {
-        ctx.fillStyle = "#ef4444"; // South: Coral Red
-        ctx.fillText("S", rightX, lvl.y);
-      } else {
-        // East (Emerald) & West (Purple)
-        ctx.fillStyle = "#10b981";
-        ctx.fillText("E", rightX, lvl.y);
-        const ew = ctx.measureText("E").width;
-        ctx.fillStyle = "#94a3b8";
-        ctx.fillText(", ", rightX + ew, lvl.y);
-        const cw = ctx.measureText(", ").width;
-        ctx.fillStyle = "#8b5cf6";
-        ctx.fillText("W", rightX + ew + cw, lvl.y);
-      }
+      ctx.fillStyle = lvl.col;
+      ctx.fillText(lvl.label, rightX, lvl.y);
     }
 
     // Spread band (light slate)
@@ -1640,7 +1648,7 @@ class MeteogramChart {
     }
     ctx.stroke();
 
-    // Draw Rotating Meteorological Wind Arrows distributed as a sine wave by azimuth
+    // Draw Rotating Meteorological Wind Arrows distributed as a wave by 4-direction azimuth
     if (wDir && wDir.median) {
       // Wind direction trajectory curve colored continuously by wind direction
       ctx.save();
@@ -1654,9 +1662,9 @@ class MeteogramChart {
         if (dir1 == null || dir2 == null) continue;
 
         const x1 = this._timeToX(this.times[i].getTime());
-        const y1 = yMid - ySpan * Math.cos(dir1 * Math.PI / 180.0);
+        const y1 = dirToY(dir1);
         const x2 = this._timeToX(this.times[i + 1].getTime());
-        const y2 = yMid - ySpan * Math.cos(dir2 * Math.PI / 180.0);
+        const y2 = dirToY(dir2);
 
         const col1 = this._getWindDirColor(dir1);
         const col2 = this._getWindDirColor(dir2);
@@ -1687,7 +1695,7 @@ class MeteogramChart {
         if (dir == null || spd == null) continue;
 
         const x = this._timeToX(this.times[i].getTime());
-        const y = yMid - ySpan * Math.cos(dir * Math.PI / 180.0);
+        const y = dirToY(dir);
 
         this._drawWindArrow(x, y, dir, spd);
       }

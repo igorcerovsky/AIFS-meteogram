@@ -571,10 +571,43 @@ public struct NativeMeteogramChartView: View {
         }
     }
 
+// MARK: - Wind Direction Azimuth Y Mapping
+private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
+    let d = dirDeg.truncatingRemainder(dividingBy: 360.0)
+    let normD = d < 0 ? d + 360.0 : d
+    let yTop = yMaxWind * 0.90
+    let yBottom = yMaxWind * 0.20
+    let ySpan = yTop - yBottom
+    let t: Double
+    if normD <= 90.0 {
+        let u = (1.0 - cos((normD / 90.0) * .pi)) / 2.0
+        t = u * (1.0 / 3.0)
+    } else if normD <= 180.0 {
+        let u = (1.0 - cos(((normD - 90.0) / 90.0) * .pi)) / 2.0
+        t = 1.0 / 3.0 + u * (1.0 / 3.0)
+    } else if normD <= 270.0 {
+        let u = (1.0 - cos(((normD - 180.0) / 90.0) * .pi)) / 2.0
+        t = 2.0 / 3.0 + u * (1.0 / 3.0)
+    } else {
+        let u = (1.0 - cos(((normD - 270.0) / 90.0) * .pi)) / 2.0
+        t = 1.0 - u
+    }
+    return yTop - t * ySpan
+}
+
     // MARK: - Panel 4: Wind Speed & Direction [km/h]
     private func windPanelView(points: [TimeSeriesPoint]) -> some View {
         let maxSpd = points.compactMap { $0.windSpeedMax }.max() ?? 10.0
         let yMaxWind = max(40.0, ceil((maxSpd * 3.6 + 5.0) / 10.0) * 10.0)
+
+        // 4 Wind Direction Levels from Top to Bottom: N, E, S, W
+        let yTop = yMaxWind * 0.90
+        let yBottom = yMaxWind * 0.20
+        let ySpan = yTop - yBottom
+        let yN = yTop
+        let yE = yTop - ySpan * (1.0 / 3.0)
+        let yS = yTop - ySpan * (2.0 / 3.0)
+        let yW = yBottom
 
         let sampleStep = max(1, points.count / 14)
         let arrowPoints = points.enumerated().filter { $0.offset % sampleStep == 0 }.map(\.element)
@@ -630,21 +663,19 @@ public struct NativeMeteogramChartView: View {
                     .lineStyle(StrokeStyle(lineWidth: 2.0))
                 }
 
-                // Direction Grid Lines: Nord (up), E, W (middle), South (down)
-                let yMid = yMaxWind * 0.55
-                let ySpan = yMaxWind * 0.35
-                let yTop = yMid + ySpan
-                let yBottom = yMid - ySpan
-
-                RuleMark(y: .value("DirLevel", yTop))
+                RuleMark(y: .value("DirLevel", yN))
                     .foregroundStyle(Color.secondary.opacity(0.35))
                     .lineStyle(StrokeStyle(lineWidth: 0.85, dash: [3, 3]))
 
-                RuleMark(y: .value("DirLevel", yMid))
+                RuleMark(y: .value("DirLevel", yE))
                     .foregroundStyle(Color.secondary.opacity(0.35))
                     .lineStyle(StrokeStyle(lineWidth: 0.85, dash: [3, 3]))
 
-                RuleMark(y: .value("DirLevel", yBottom))
+                RuleMark(y: .value("DirLevel", yS))
+                    .foregroundStyle(Color.secondary.opacity(0.35))
+                    .lineStyle(StrokeStyle(lineWidth: 0.85, dash: [3, 3]))
+
+                RuleMark(y: .value("DirLevel", yW))
                     .foregroundStyle(Color.secondary.opacity(0.35))
                     .lineStyle(StrokeStyle(lineWidth: 0.85, dash: [3, 3]))
 
@@ -653,8 +684,8 @@ public struct NativeMeteogramChartView: View {
                     let p1 = points[idx]
                     let p2 = points[idx + 1]
                     if let dir1 = p1.windDirection, let dir2 = p2.windDirection {
-                        let y1 = yMid + ySpan * cos(dir1 * .pi / 180.0)
-                        let y2 = yMid + ySpan * cos(dir2 * .pi / 180.0)
+                        let y1 = calcWindDirY(dirDeg: dir1, yMaxWind: yMaxWind)
+                        let y2 = calcWindDirY(dirDeg: dir2, yMaxWind: yMaxWind)
                         let spd1 = p1.windSpeedMedian
                         let spd2 = p2.windSpeedMedian
                         let avgSpd = (spd1 + spd2) / 2.0
@@ -677,10 +708,10 @@ public struct NativeMeteogramChartView: View {
                     }
                 }
 
-                // Sampled Wind Arrows distributed as a sine wave by azimuth
+                // Sampled Wind Arrows distributed by 4-direction azimuth
                 ForEach(arrowPoints) { p in
                     if let dir = p.windDirection {
-                        let arrowY = yMid + ySpan * cos(dir * .pi / 180.0)
+                        let arrowY = calcWindDirY(dirDeg: dir, yMaxWind: yMaxWind)
                         PointMark(
                             x: .value("Time", p.date),
                             y: .value("ArrowY", arrowY)
@@ -710,27 +741,25 @@ public struct NativeMeteogramChartView: View {
                         }
                     }
                 }
-                AxisMarks(position: .trailing, values: [yMaxWind * 0.20, yMaxWind * 0.55, yMaxWind * 0.90]) { val in
+                AxisMarks(position: .trailing, values: [yW, yS, yE, yN]) { val in
                     AxisValueLabel {
                         if let v = val.as(Double.self) {
-                            if abs(v - yMaxWind * 0.90) < 1.0 {
+                            if abs(v - yN) < 1.0 {
                                 Text("N")
                                     .font(.system(size: 9.5, weight: .bold))
                                     .foregroundColor(Color(red: 37/255, green: 99/255, blue: 235/255))
-                            } else if abs(v - yMaxWind * 0.55) < 1.0 {
-                                HStack(spacing: 1) {
-                                    Text("E")
-                                        .foregroundColor(Color(red: 16/255, green: 185/255, blue: 129/255))
-                                    Text(",")
-                                        .foregroundColor(Color(red: 148/255, green: 163/255, blue: 184/255))
-                                    Text("W")
-                                        .foregroundColor(Color(red: 139/255, green: 92/255, blue: 246/255))
-                                }
-                                .font(.system(size: 8.5, weight: .bold))
-                            } else {
+                            } else if abs(v - yE) < 1.0 {
+                                Text("E")
+                                    .font(.system(size: 9.5, weight: .bold))
+                                    .foregroundColor(Color(red: 16/255, green: 185/255, blue: 129/255))
+                            } else if abs(v - yS) < 1.0 {
                                 Text("S")
                                     .font(.system(size: 9.5, weight: .bold))
                                     .foregroundColor(Color(red: 239/255, green: 68/255, blue: 68/255))
+                            } else {
+                                Text("W")
+                                    .font(.system(size: 9.5, weight: .bold))
+                                    .foregroundColor(Color(red: 139/255, green: 92/255, blue: 246/255))
                             }
                         }
                     }
