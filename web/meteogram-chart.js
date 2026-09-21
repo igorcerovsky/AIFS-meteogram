@@ -214,13 +214,17 @@ class MeteogramChart {
     this.container.style.userSelect = "none";
     this.container.style.webkitUserSelect = "none";
 
-    // Create Canvas
+    // Create Canvas with alpha: false to avoid black canvas Direct2D/WebRender bugs in Firefox on Windows
     this.canvas = document.createElement("canvas");
     this.canvas.style.display = "block";
     this.canvas.style.width = "100%";
     this.canvas.style.height = "auto";
     this.canvas.style.cursor = "crosshair";
-    this.ctx = this.canvas.getContext("2d");
+    this.canvas.style.backgroundColor = "#ffffff";
+    this.canvas.style.colorScheme = "light";
+    this.container.style.backgroundColor = "#ffffff";
+    this.container.style.colorScheme = "light";
+    this.ctx = this.canvas.getContext("2d", { alpha: false, willReadFrequently: false }) || this.canvas.getContext("2d");
     this.container.appendChild(this.canvas);
 
     // Create Floating HUD Tooltip
@@ -265,9 +269,17 @@ class MeteogramChart {
 
     this.canvas.addEventListener("touchend", () => this._handlePointerLeave());
 
-    // Window resize observer
+    // Window resize observer with debounced RAF to prevent layout thrashing / Firefox loops
+    let resizeTimer = null;
     this.resizeObserver = new ResizeObserver(() => {
-      if (this.data) this.render();
+      if (!this.data) return;
+      if (resizeTimer) cancelAnimationFrame(resizeTimer);
+      resizeTimer = requestAnimationFrame(() => {
+        const newWidth = Math.max(880, Math.floor(this.container.getBoundingClientRect().width));
+        if (Math.abs(newWidth - (this.W || 0)) >= 2) {
+          this.render();
+        }
+      });
     });
     this.resizeObserver.observe(this.container);
   }
@@ -438,7 +450,7 @@ class MeteogramChart {
   }
 
   render() {
-    if (!this.data || !this.times || this.times.length === 0) return;
+    if (!this.data || !this.times || this.times.length === 0 || !this.ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
     const rect = this.container.getBoundingClientRect();
@@ -450,7 +462,16 @@ class MeteogramChart {
     this.canvas.style.width = `${cssWidth}px`;
     this.canvas.style.height = `${cssHeight}px`;
 
-    this.ctx.resetTransform();
+    // Clear and fill physical hardware buffer with opaque white before scaling
+    if (this.ctx.setTransform) {
+      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    } else if (this.ctx.resetTransform) {
+      this.ctx.resetTransform();
+    }
+    this.ctx.fillStyle = "#ffffff";
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    // Apply high-DPI scaling
     this.ctx.scale(dpr, dpr);
 
     // Layout configuration
@@ -2007,11 +2028,13 @@ window.MeteogramAPI = {
     ].join(",");
 
     const ensembleUrl = `https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&models=${apiModel}&hourly=${hourlyVars}&forecast_days=${actualDays}&timezone=UTC`;
-    const astroUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=sunrise,sunset,moonrise,moonset,moon_phase&forecast_days=${Math.min(actualDays + 2, 16)}&timezone=UTC`;
+    // For ICON-EU and ICON-D2, ensemble endpoint returns nulls for low/mid/high cloud layers.
+    // Request cloud_cover_low, cloud_cover_mid, cloud_cover_high from deterministic forecast endpoint to backfill.
+    const forecastEndpoint = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&models=${apiModel}&daily=sunrise,sunset,moonrise,moonset,moon_phase&hourly=cloud_cover_low,cloud_cover_mid,cloud_cover_high&forecast_days=${Math.min(actualDays + 2, 16)}&timezone=UTC`;
 
     const [ensRes, astroRes] = await Promise.all([
       fetch(ensembleUrl).then(r => r.json()).catch(() => null),
-      fetch(astroUrl).then(r => r.json()).catch(() => null),
+      fetch(forecastEndpoint).then(r => r.json()).catch(() => null),
     ]);
 
     if (!ensRes || !ensRes.hourly) {
@@ -2020,6 +2043,18 @@ window.MeteogramAPI = {
 
     // Process ensemble members client-side
     const hourly = ensRes.hourly;
+
+    // Backfill missing cloud layers from deterministic endpoint if ensemble layers are missing/null (ICON-EU & ICON-D2)
+    if (astroRes && astroRes.hourly) {
+      const cloudVars = ["cloud_cover_low", "cloud_cover_mid", "cloud_cover_high"];
+      for (const cv of cloudVars) {
+        const ensVals = hourly[cv];
+        const hasValidEns = ensVals && Array.isArray(ensVals) && ensVals.some(v => v !== null && !isNaN(v));
+        if (!hasValidEns && astroRes.hourly[cv]) {
+          hourly[cv] = astroRes.hourly[cv];
+        }
+      }
+    }
     const timeStrings = hourly.time || [];
     const stats = {
       times: timeStrings,
