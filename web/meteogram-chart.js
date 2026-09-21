@@ -1663,6 +1663,13 @@ class MeteogramChart {
         grad.addColorStop(0, col1);
         grad.addColorStop(1, col2);
 
+        // Variable curve thickness according to wind speed (PoC):
+        // 1.2px for light winds (< 2 m/s), up to ~5.5px for strong winds (>= 15 m/s)
+        const spd1 = wSpeed.median[i] != null ? wSpeed.median[i] : 0;
+        const spd2 = wSpeed.median[i + 1] != null ? wSpeed.median[i + 1] : spd1;
+        const avgSpd = (spd1 + spd2) / 2.0;
+        ctx.lineWidth = Math.max(1.2, Math.min(5.8, 1.2 + (avgSpd / 15.0) * 4.0));
+
         ctx.strokeStyle = grad;
         ctx.beginPath();
         ctx.moveTo(x1, y1);

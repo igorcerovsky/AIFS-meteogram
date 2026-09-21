@@ -646,20 +646,24 @@ public struct NativeMeteogramChartView: View {
                     .foregroundStyle(Color.secondary.opacity(0.35))
                     .lineStyle(StrokeStyle(lineWidth: 0.85, dash: [3, 3]))
 
-                // Wind direction trajectory curve colored continuously by wind direction
+                // Wind direction trajectory curve colored continuously by wind direction, thickness scaled by wind speed (PoC)
                 ForEach(0..<max(0, points.count - 1), id: \.self) { idx in
                     let p1 = points[idx]
                     let p2 = points[idx + 1]
                     if let dir1 = p1.windDirection, let dir2 = p2.windDirection {
                         let y1 = yMid + ySpan * cos(dir1 * .pi / 180.0)
                         let y2 = yMid + ySpan * cos(dir2 * .pi / 180.0)
+                        let spd1 = p1.windSpeedMedian
+                        let spd2 = p2.windSpeedMedian
+                        let avgSpd = (spd1 + spd2) / 2.0
+                        let segWidth = max(1.2, min(5.5, 1.2 + (avgSpd / 15.0) * 3.8))
                         LineMark(
                             x: .value("Time", p1.date),
                             y: .value("WindWave", y1),
                             series: .value("WindWaveSeg", idx)
                         )
                         .foregroundStyle(windDirectionColor(dirDeg: dir1))
-                        .lineStyle(StrokeStyle(lineWidth: 2.2, lineCap: .round))
+                        .lineStyle(StrokeStyle(lineWidth: segWidth, lineCap: .round))
 
                         LineMark(
                             x: .value("Time", p2.date),
@@ -667,7 +671,7 @@ public struct NativeMeteogramChartView: View {
                             series: .value("WindWaveSeg", idx)
                         )
                         .foregroundStyle(windDirectionColor(dirDeg: dir2))
-                        .lineStyle(StrokeStyle(lineWidth: 2.2, lineCap: .round))
+                        .lineStyle(StrokeStyle(lineWidth: segWidth, lineCap: .round))
                     }
                 }
 
