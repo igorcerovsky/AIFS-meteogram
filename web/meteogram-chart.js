@@ -1594,8 +1594,39 @@ class MeteogramChart {
     }
     ctx.stroke();
 
-    // Draw Rotating Meteorological Wind Arrows
+    // Draw Rotating Meteorological Wind Arrows distributed as a sine wave by azimuth
     if (wDir && wDir.median) {
+      // Azimuth bounds: North (0°) at top, South (180°) at bottom, East/West in middle
+      const yTop = p.top + 28;
+      const yBottom = p.bottom - 16;
+      const yMid = (yTop + yBottom) / 2.0;
+      const ySpan = (yBottom - yTop) / 2.0;
+
+      // Draw faint, elegant trajectory guide curve connecting the wind azimuth wave
+      ctx.save();
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.35)";
+      ctx.lineWidth = 1.0;
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath();
+      let startedWave = false;
+      for (let i = 0; i < this.times.length; i++) {
+        const dir = wDir.median[i];
+        if (dir == null) continue;
+        const x = this._timeToX(this.times[i].getTime());
+        // North (0°) -> cos(0) = 1 -> yTop (canvas top)
+        // South (180°) -> cos(180°) = -1 -> yBottom (canvas bottom)
+        // East/West (90°/270°) -> cos = 0 -> yMid (middle)
+        const y = yMid - ySpan * Math.cos(dir * Math.PI / 180.0);
+        if (!startedWave) {
+          ctx.moveTo(x, y);
+          startedWave = true;
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      ctx.stroke();
+      ctx.restore();
+
       const stepInterval = Math.max(1, Math.round(this.times.length / 28)); // ~28 arrows across width
       for (let i = 0; i < this.times.length; i += stepInterval) {
         const dir = wDir.median[i];
@@ -1603,7 +1634,7 @@ class MeteogramChart {
         if (dir == null || spd == null) continue;
 
         const x = this._timeToX(this.times[i].getTime());
-        const y = p.top + 32;
+        const y = yMid - ySpan * Math.cos(dir * Math.PI / 180.0);
 
         this._drawWindArrow(x, y, dir, spd);
       }

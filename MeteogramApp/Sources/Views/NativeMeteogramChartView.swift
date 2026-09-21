@@ -628,12 +628,31 @@ public struct NativeMeteogramChartView: View {
                     .lineStyle(StrokeStyle(lineWidth: 2.0))
                 }
 
-                // Sampled Wind Arrows near the top of the wind chart
+                // Faint Azimuth Guide Wave Line
+                ForEach(points) { p in
+                    if let dir = p.windDirection {
+                        let yMid = yMaxWind * 0.55
+                        let ySpan = yMaxWind * 0.35
+                        let arrowY = yMid + ySpan * cos(dir * .pi / 180.0)
+                        LineMark(
+                            x: .value("Time", p.date),
+                            y: .value("WindWave", arrowY),
+                            series: .value("Series", "WindWave")
+                        )
+                        .foregroundStyle(Color.gray.opacity(0.32))
+                        .lineStyle(StrokeStyle(lineWidth: 1.0, dash: [2, 3]))
+                    }
+                }
+
+                // Sampled Wind Arrows distributed as a sine wave by azimuth
                 ForEach(arrowPoints) { p in
                     if let dir = p.windDirection {
+                        let yMid = yMaxWind * 0.55
+                        let ySpan = yMaxWind * 0.35
+                        let arrowY = yMid + ySpan * cos(dir * .pi / 180.0)
                         PointMark(
                             x: .value("Time", p.date),
-                            y: .value("ArrowY", yMaxWind * 0.85)
+                            y: .value("ArrowY", arrowY)
                         )
                         .symbol {
                             WindArrowShape(dirDeg: dir, speedMs: p.windSpeedMedian)
