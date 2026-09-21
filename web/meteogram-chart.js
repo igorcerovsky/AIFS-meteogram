@@ -172,6 +172,113 @@ function getAnnualAnalemmaCurve(year = 2026) {
   return points;
 }
 
+function calculateLunarDeclinationAndAnomaly(dateUtc, lon = 17.10) {
+  const t_epoch = dateUtc.getTime() / 1000.0;
+  const d = (t_epoch - 946728000.0) / 86400.0;
+
+  const l_moon = ((218.316 + 13.176396 * d) % 360.0 + 360.0) % 360.0;
+  const m_moon = ((134.963 + 13.064993 * d) % 360.0 + 360.0) % 360.0;
+  const f_moon = ((93.272 + 13.229350 * d) % 360.0 + 360.0) % 360.0;
+
+  const m_rad = m_moon * Math.PI / 180.0;
+  const f_rad = f_moon * Math.PI / 180.0;
+
+  const lon_moon = l_moon + 6.289 * Math.sin(m_rad);
+  const lat_moon = 5.128 * Math.sin(f_rad);
+
+  const lon_rad = lon_moon * Math.PI / 180.0;
+  const lat_rad_moon = lat_moon * Math.PI / 180.0;
+
+  const e = 23.439 - 0.00000036 * d;
+  const e_rad = e * Math.PI / 180.0;
+
+  const sin_dec = (Math.sin(lat_rad_moon) * Math.cos(e_rad) +
+                   Math.cos(lat_rad_moon) * Math.sin(e_rad) * Math.sin(lon_rad));
+  const dec_rad = Math.asin(Math.max(-1.0, Math.min(1.0, sin_dec)));
+  const dec = dec_rad * 180.0 / Math.PI;
+
+  const y = (Math.sin(lon_rad) * Math.cos(e_rad) -
+             Math.tan(lat_rad_moon) * Math.sin(e_rad));
+  const x = Math.cos(lon_rad);
+  const ra_rad = Math.atan2(y, x);
+
+  const gmst = ((280.46061837 + 360.98564736629 * d) % 360.0 + 360.0) % 360.0;
+  const lst_rad = (((gmst + lon) % 360.0 + 360.0) % 360.0) * Math.PI / 180.0;
+
+  let ha_rad = lst_rad - ra_rad;
+  while (ha_rad > Math.PI) ha_rad -= 2 * Math.PI;
+  while (ha_rad < -Math.PI) ha_rad += 2 * Math.PI;
+
+  const ha_deg = ha_rad * 180.0 / Math.PI;
+  const timeOffset = -ha_deg * 4.0; // minutes earlier (-) or later (+)
+
+  const sun_mean_lon = (280.459 + 0.98564736 * d) % 360.0;
+  const phase = (((lon_moon - sun_mean_lon) % 360.0 + 360.0) % 360.0) / 360.0;
+
+  return { dec, timeOffset, ha_deg, phase };
+}
+
+function getMonthlyLunarAnalemmaCurve(centerDateUtc, lat = 48.15, lon = 17.10) {
+  // Find nearest local meridian transit to centerDateUtc
+  let t = new Date(centerDateUtc.getTime());
+  for (let iter = 0; iter < 3; iter++) {
+    const st = calculateLunarDeclinationAndAnomaly(t, lon);
+    t = new Date(t.getTime() - (st.ha_deg / 14.49) * 3600 * 1000);
+  }
+
+  // Sample 28 consecutive mean lunar transit cycles (24.8412h apart) for complete monthly loop
+  const points = [];
+  for (let k = 0; k <= 28; k++) {
+    const tk = new Date(t.getTime() + k * 24.84119 * 3600 * 1000);
+    const st = calculateLunarDeclinationAndAnomaly(tk, lon);
+    const alt = lat >= 0 ? (90.0 - lat + st.dec) : (90.0 + lat - st.dec);
+    points.push({
+      dec: st.dec,
+      alt: alt,
+      timeOffset: st.timeOffset,
+      phase: st.phase,
+      step: k
+    });
+  }
+  return points;
+}
+
+function drawMiniMoonPhase(ctx, cx, cy, radius, phase) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fillStyle = "#1e293b"; // Dark unlit side
+  ctx.fill();
+
+  // Lit side (warm silver-white)
+  ctx.fillStyle = "#e0f2fe";
+
+  const p = ((phase % 1.0) + 1.0) % 1.0;
+  if (p <= 0.5) {
+    // Waxing (right side lit)
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, -Math.PI / 2, Math.PI / 2, false);
+    const k = Math.cos(p * 2 * Math.PI);
+    ctx.ellipse(cx, cy, Math.max(0.1, Math.abs(k) * radius), radius, 0, Math.PI / 2, -Math.PI / 2, k < 0);
+    ctx.fill();
+  } else {
+    // Waning (left side lit)
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, Math.PI / 2, -Math.PI / 2, false);
+    const k = Math.cos(p * 2 * Math.PI);
+    ctx.ellipse(cx, cy, Math.max(0.1, Math.abs(k) * radius), radius, 0, -Math.PI / 2, Math.PI / 2, k < 0);
+    ctx.fill();
+  }
+
+  // Border ring
+  ctx.strokeStyle = "#38bdf8";
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function calculateLunarAltitude(dateUtc, lat, lon) {
   const t_epoch = dateUtc.getTime() / 1000.0;
   const d = (t_epoch - 946728000.0) / 86400.0;
@@ -935,17 +1042,19 @@ class MeteogramChart {
     this._drawLegendBadge(this.marginLeft + 560, p.top + 9, "#f59e0b", t.sun_alt, false, [3, 2]);
     this._drawLegendBadge(this.marginLeft + 670, p.top + 9, "#60a5fa", t.moon_alt, false, [3, 2]);
 
-    // Small Analemma reflecting given location in top-right of temperature graph (Transparent background)
-    const anW = 104;
-    const anH = 110;
-    const anX = this.marginLeft + this.plotWidth - anW - 8;
+    // Side-by-side Analemma widgets (Sun & Moon) in top-right of temperature graph
+    const cardW = 104;
+    const cardH = 110;
+    const gap = 8;
+    const totalW = cardW * 2 + gap; // 216px
+    const anX = this.marginLeft + this.plotWidth - totalW - 8;
     const anY = p.top + 18;
     const activeDate = (this.hoverIdx !== null && this.times?.[this.hoverIdx]) 
       ? this.times[this.hoverIdx] 
       : (this.times?.[0] || new Date());
     const lat = (this.data.location && this.data.location.latitude) ?? 48.15;
     const lon = (this.data.location && this.data.location.longitude) ?? 17.10;
-    this._drawAnalemmaWidget(ctx, anX, anY, anW, anH, activeDate, lat, lon);
+    this._drawAnalemmaWidget(ctx, anX, anY, totalW, cardH, activeDate, lat, lon);
 
     ctx.restore();
     this.panels.p1.valToY = valToY;
@@ -953,28 +1062,30 @@ class MeteogramChart {
 
   _drawAnalemmaWidget(ctx, x, y, width, height, activeDate, lat = 48.15, lon = 17.10) {
     if (!this.analemmaCurve || this.analemmaCurve.length === 0) return;
+    const gap = 8;
+    const cardW = Math.floor((width - gap) / 2);
+
+    // Left card: Solar Analemma (1 year)
+    this._drawSolarAnalemmaCard(ctx, x, y, cardW, height, activeDate, lat);
+
+    // Right card: Lunar Analemma (1 month)
+    this._drawLunarAnalemmaCard(ctx, x + cardW + gap, y, cardW, height, activeDate, lat, lon);
+  }
+
+  _drawSolarAnalemmaCard(ctx, x, y, width, height, activeDate, lat = 48.15) {
     ctx.save();
 
-    // 100% Transparent background with subtle boundary guide so underlying graph curves are never obscured
+    // 100% Transparent background with subtle boundary guide
     const r = 6;
     ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + width - r, y);
-    ctx.arcTo(x + width, y, x + width, y + r, r);
-    ctx.lineTo(x + width, y + height - r);
-    ctx.arcTo(x + width, y + height, x + width - r, y + height, r);
-    ctx.lineTo(x + r, y + height);
-    ctx.arcTo(x, y + height, x, y + height - r, r);
-    ctx.lineTo(x, y + r);
-    ctx.arcTo(x, y, x + r, y, r);
-    ctx.closePath();
+    ctx.roundRect ? ctx.roundRect(x, y, width, height, r) : ctx.rect(x, y, width, height);
     ctx.strokeStyle = "rgba(148, 163, 184, 0.25)";
     ctx.lineWidth = 0.8;
     ctx.setLineDash([2, 2]);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Location-aware title: "Analemma (48.2°N)"
+    // Location-aware title: "Sun (48.2°N)"
     const isNorth = lat >= 0;
     const absLat = Math.abs(lat);
     const latStr = `${absLat.toFixed(1)}°${isNorth ? "N" : "S"}`;
@@ -985,10 +1096,10 @@ class MeteogramChart {
     ctx.font = "bold 8.5px 'Inter', sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(`Analemma (${latStr})`, x + width / 2, y + 4);
+    ctx.fillText(`Sun (${latStr})`, x + width / 2, y + 4);
 
     // Inner plot area
-    const padX = 15;
+    const padX = 14;
     const padTop = 18;
     const padBottom = 18;
     const plotW = width - padX * 2;
@@ -996,15 +1107,8 @@ class MeteogramChart {
     const plotLeft = x + padX;
     const plotTop = y + padTop;
 
-    // Solar culmination altitude formula for this latitude:
-    // In Northern Hemisphere: h(dec) = 90 - lat + dec (highest in June, lowest in Dec)
-    // In Southern Hemisphere: h(dec) = 90 - |lat| - dec (highest in Dec, lowest in June)
     const noonAlt = (dec) => {
-      if (lat >= 0) {
-        return 90.0 - lat + dec;
-      } else {
-        return 90.0 + lat - dec;
-      }
+      return lat >= 0 ? (90.0 - lat + dec) : (90.0 + lat - dec);
     };
 
     const altJun = noonAlt(23.44);
@@ -1013,7 +1117,6 @@ class MeteogramChart {
     const altMax = Math.max(altJun, altDec);
     const altMin = Math.min(altJun, altDec);
 
-    // Dynamic vertical mapping bounded to the location's altitude span with margin
     const yMargin = 2.0;
     const plotAltMax = altMax + yMargin;
     const plotAltMin = altMin - yMargin;
@@ -1024,16 +1127,16 @@ class MeteogramChart {
 
     // Equinox centerline (h = altEq)
     const yEq = altToY(altEq);
-    ctx.strokeStyle = "rgba(100, 116, 139, 0.4)";
+    ctx.strokeStyle = "rgba(100, 116, 139, 0.35)";
     ctx.lineWidth = 0.8;
     ctx.setLineDash([3, 2]);
     ctx.beginPath();
-    ctx.moveTo(plotLeft - 5, yEq);
-    ctx.lineTo(plotLeft + plotW + 5, yEq);
+    ctx.moveTo(plotLeft - 4, yEq);
+    ctx.lineTo(plotLeft + plotW + 4, yEq);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Solstice marks & labels reflecting local altitude
+    // Solstice marks & labels
     const yTopSolstice = altToY(altMax);
     const yBottomSolstice = altToY(altMin);
     const topLabel = isNorth ? `Jun ${altMax.toFixed(0)}°` : `Dec ${altMax.toFixed(0)}°`;
@@ -1043,15 +1146,14 @@ class MeteogramChart {
     ctx.font = "7px 'Inter', sans-serif";
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
-    ctx.fillText(topLabel, plotLeft - 3, yTopSolstice);
-    ctx.fillText(bottomLabel, plotLeft - 3, yBottomSolstice);
+    ctx.fillText(topLabel, plotLeft - 2, yTopSolstice);
+    ctx.fillText(bottomLabel, plotLeft - 2, yBottomSolstice);
     ctx.textAlign = "left";
-    ctx.fillText(`${altEq.toFixed(0)}°`, plotLeft + plotW + 3, yEq);
+    ctx.fillText(`${altEq.toFixed(0)}°`, plotLeft + plotW + 2, yEq);
 
-    // Draw full 365-day figure-8 Analemma curve reflecting location's solar elevation
-    // Underlay white halo for contrast over background graph curves:
+    // Full 365-day figure-8 Analemma curve
     ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
-    ctx.lineWidth = 3.0;
+    ctx.lineWidth = 2.8;
     ctx.beginPath();
     for (let i = 0; i < this.analemmaCurve.length; i++) {
       const pt = this.analemmaCurve[i];
@@ -1063,9 +1165,8 @@ class MeteogramChart {
     ctx.closePath();
     ctx.stroke();
 
-    // Foreground amber curve:
     ctx.strokeStyle = "#d97706";
-    ctx.lineWidth = 1.6;
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let i = 0; i < this.analemmaCurve.length; i++) {
       const pt = this.analemmaCurve[i];
@@ -1077,30 +1178,28 @@ class MeteogramChart {
     ctx.closePath();
     ctx.stroke();
 
-    // Active date sun position reflecting location
+    // Active date sun position
     const curAstro = calculateSolarDeclinationAndEoT(activeDate || new Date());
     const curAlt = noonAlt(curAstro.dec);
     const sunX = eotToX(curAstro.eot);
     const sunY = altToY(curAlt);
 
-    // Glowing halo around active sun position
     ctx.fillStyle = "rgba(251, 146, 60, 0.4)";
     ctx.beginPath();
-    ctx.arc(sunX, sunY, 6, 0, Math.PI * 2);
+    ctx.arc(sunX, sunY, 5.5, 0, Math.PI * 2);
     ctx.fill();
 
-    // Core bright sun marker with white border
     ctx.fillStyle = "#ea580c";
     ctx.beginPath();
-    ctx.arc(sunX, sunY, 3, 0, Math.PI * 2);
+    ctx.arc(sunX, sunY, 2.8, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.fillStyle = "#ffffff";
     ctx.beginPath();
-    ctx.arc(sunX, sunY, 1.2, 0, Math.PI * 2);
+    ctx.arc(sunX, sunY, 1.1, 0, Math.PI * 2);
     ctx.fill();
 
-    // Footer: current local altitude at noon & EoT
+    // Footer
     ctx.shadowColor = "rgba(255, 255, 255, 0.9)";
     ctx.shadowBlur = 3;
     ctx.fillStyle = "#334155";
@@ -1109,6 +1208,139 @@ class MeteogramChart {
     ctx.textBaseline = "bottom";
     const eotSign = curAstro.eot >= 0 ? "+" : "";
     ctx.fillText(`Alt: ${curAlt.toFixed(1)}° (${eotSign}${curAstro.eot.toFixed(0)}m)`, x + width / 2, y + height - 2);
+
+    ctx.restore();
+  }
+
+  _drawLunarAnalemmaCard(ctx, x, y, width, height, activeDate, lat = 48.15, lon = 17.10) {
+    ctx.save();
+
+    // Boundary with subtle cyan tint
+    const r = 6;
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(x, y, width, height, r) : ctx.rect(x, y, width, height);
+    ctx.strokeStyle = "rgba(56, 189, 248, 0.35)";
+    ctx.lineWidth = 0.8;
+    ctx.setLineDash([2, 2]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Location & period title: "Moon (48.2°N)"
+    const isNorth = lat >= 0;
+    const absLat = Math.abs(lat);
+    const latStr = `${absLat.toFixed(1)}°${isNorth ? "N" : "S"}`;
+
+    ctx.shadowColor = "rgba(255, 255, 255, 0.9)";
+    ctx.shadowBlur = 3;
+    ctx.fillStyle = "#0369a1";
+    ctx.font = "bold 8.5px 'Inter', sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(`Moon (${latStr})`, x + width / 2, y + 4);
+
+    // Inner plot area
+    const padX = 14;
+    const padTop = 18;
+    const padBottom = 18;
+    const plotW = width - padX * 2;
+    const plotH = height - padTop - padBottom;
+    const plotLeft = x + padX;
+    const plotTop = y + padTop;
+
+    // Generate monthly lunar curve
+    const lunarCurve = getMonthlyLunarAnalemmaCurve(activeDate || new Date(), lat, lon);
+    if (!lunarCurve || lunarCurve.length === 0) {
+      ctx.restore();
+      return;
+    }
+
+    let minAlt = 999, maxAlt = -999;
+    let minOffset = -38, maxOffset = 38;
+    for (const p of lunarCurve) {
+      if (p.alt < minAlt) minAlt = p.alt;
+      if (p.alt > maxAlt) maxAlt = p.alt;
+      if (p.timeOffset < minOffset) minOffset = p.timeOffset;
+      if (p.timeOffset > maxOffset) maxOffset = p.timeOffset;
+    }
+    const plotAltMin = Math.max(0, minAlt - 3.0);
+    const plotAltMax = Math.min(90, maxAlt + 3.0);
+    const offsetSpan = Math.max(70.0, Math.max(Math.abs(minOffset), Math.abs(maxOffset)) * 2.2);
+
+    const toX = (to) => plotLeft + ((to + offsetSpan / 2.0) / offsetSpan) * plotW;
+    const altToY = (alt) => plotTop + ((plotAltMax - alt) / (plotAltMax - plotAltMin)) * plotH;
+
+    // Equator transit line (Dec = 0° -> alt = 90 - |lat|)
+    const eqAlt = 90.0 - Math.abs(lat);
+    const yEq = altToY(eqAlt);
+    ctx.strokeStyle = "rgba(56, 189, 248, 0.35)";
+    ctx.lineWidth = 0.8;
+    ctx.setLineDash([3, 2]);
+    ctx.beginPath();
+    ctx.moveTo(plotLeft - 4, yEq);
+    ctx.lineTo(plotLeft + plotW + 4, yEq);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Min / Max altitude labels
+    ctx.fillStyle = "#64748b";
+    ctx.font = "7px 'Inter', sans-serif";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    ctx.fillText(`Max ${maxAlt.toFixed(0)}°`, plotLeft - 2, altToY(maxAlt));
+    ctx.fillText(`Min ${minAlt.toFixed(0)}°`, plotLeft - 2, altToY(minAlt));
+    ctx.textAlign = "left";
+    ctx.fillText(`${eqAlt.toFixed(0)}°`, plotLeft + plotW + 2, yEq);
+
+    // Draw full monthly Lunar Analemma loop
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.lineWidth = 2.8;
+    ctx.beginPath();
+    for (let i = 0; i < lunarCurve.length; i++) {
+      const pt = lunarCurve[i];
+      const px = toX(pt.timeOffset);
+      const py = altToY(pt.alt);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.stroke();
+
+    ctx.strokeStyle = "#0284c7";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < lunarCurve.length; i++) {
+      const pt = lunarCurve[i];
+      const px = toX(pt.timeOffset);
+      const py = altToY(pt.alt);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.stroke();
+
+    // Active date Moon transit state (step k=0 on the curve)
+    const curMoon = lunarCurve[0] || { alt: minAlt, timeOffset: 0, phase: 0.5 };
+    const moonX = toX(curMoon.timeOffset);
+    const moonY = altToY(curMoon.alt);
+
+    // Glowing cyan halo around active Moon position
+    ctx.fillStyle = "rgba(56, 189, 248, 0.4)";
+    ctx.beginPath();
+    ctx.arc(moonX, moonY, 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Draw mini phase-accurate Moon marker
+    drawMiniMoonPhase(ctx, moonX, moonY, 3.5, curMoon.phase);
+
+    // Footer: current Moon culmination altitude & time anomaly
+    ctx.shadowColor = "rgba(255, 255, 255, 0.9)";
+    ctx.shadowBlur = 3;
+    ctx.fillStyle = "#0369a1";
+    ctx.font = "bold 8px 'Inter', sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    const toSign = curMoon.timeOffset >= 0 ? "+" : "";
+    ctx.fillText(`Alt: ${curMoon.alt.toFixed(1)}° (${toSign}${curMoon.timeOffset.toFixed(0)}m)`, x + width / 2, y + height - 2);
 
     ctx.restore();
   }

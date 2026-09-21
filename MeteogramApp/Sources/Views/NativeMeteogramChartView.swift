@@ -183,10 +183,11 @@ public struct NativeMeteogramChartView: View {
                     xAxisMarks(points: points)
                 }
 
-                // Analemma Widget reflecting location latitude & active solar culmination
+                // Analemma Widget reflecting location latitude & active solar/lunar culmination
                 let lat = viewModel.forecastData?.location.latitude ?? 48.15
+                let lon = viewModel.forecastData?.location.longitude ?? 17.10
                 let activeDate = selectedDate ?? points.first?.date ?? Date()
-                AnalemmaWidgetView(date: activeDate, latitude: lat)
+                AnalemmaWidgetView(date: activeDate, latitude: lat, longitude: lon)
                     .padding(.top, 4)
                     .padding(.trailing, 26)
             }
@@ -1441,14 +1442,90 @@ public struct WindArrowShape: View {
     }
 }
 
-// MARK: - Location-Reflecting Analemma Widget View
+// MARK: - Mini Moon Phase Indicator Shape & View
+public struct MiniMoonPhaseShape: Shape {
+    public let phase: Double
+
+    public init(phase: Double) {
+        self.phase = phase
+    }
+
+    public func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let cx = rect.midX
+        let cy = rect.midY
+        let r = min(rect.width, rect.height) / 2.0
+        let p = (phase.truncatingRemainder(dividingBy: 1.0) + 1.0).truncatingRemainder(dividingBy: 1.0)
+        let k = cos(p * 2.0 * .pi)
+        let ew = max(0.1, abs(k) * r)
+
+        if p <= 0.5 {
+            // Waxing: arc right (-pi/2 to pi/2)
+            path.move(to: CGPoint(x: cx, y: cy - r))
+            path.addArc(center: CGPoint(x: cx, y: cy), radius: r, startAngle: .radians(-.pi / 2), endAngle: .radians(.pi / 2), clockwise: false)
+            if k >= 0 {
+                // Crescent: curve back via right edge
+                path.addQuadCurve(to: CGPoint(x: cx, y: cy - r), control: CGPoint(x: cx + ew, y: cy))
+            } else {
+                // Gibbous: curve back via left edge
+                path.addQuadCurve(to: CGPoint(x: cx, y: cy - r), control: CGPoint(x: cx - ew, y: cy))
+            }
+        } else {
+            // Waning: arc left (pi/2 to -pi/2)
+            path.move(to: CGPoint(x: cx, y: cy + r))
+            path.addArc(center: CGPoint(x: cx, y: cy), radius: r, startAngle: .radians(.pi / 2), endAngle: .radians(-.pi / 2), clockwise: false)
+            if k >= 0 {
+                // Crescent: curve back via left edge
+                path.addQuadCurve(to: CGPoint(x: cx, y: cy + r), control: CGPoint(x: cx - ew, y: cy))
+            } else {
+                // Gibbous: curve back via right edge
+                path.addQuadCurve(to: CGPoint(x: cx, y: cy + r), control: CGPoint(x: cx + ew, y: cy))
+            }
+        }
+        path.closeSubpath()
+        return path
+    }
+}
+
+public struct MiniMoonPhaseView: View {
+    public let phase: Double
+    public let size: CGFloat
+
+    public init(phase: Double, size: CGFloat = 8.0) {
+        self.phase = phase
+        self.size = size
+    }
+
+    public var body: some View {
+        ZStack {
+            // Dark base
+            Circle()
+                .fill(Color(red: 30/255, green: 41/255, blue: 59/255))
+                .frame(width: size, height: size)
+
+            // Lit portion
+            MiniMoonPhaseShape(phase: phase)
+                .fill(Color(red: 224/255, green: 242/255, blue: 254/255))
+                .frame(width: size, height: size)
+
+            // Outer cyan border
+            Circle()
+                .stroke(Color(red: 56/255, green: 189/255, blue: 248/255), lineWidth: 0.8)
+                .frame(width: size, height: size)
+        }
+    }
+}
+
+// MARK: - Location-Reflecting Analemma Widget View (Solar & Lunar Side-by-Side)
 public struct AnalemmaWidgetView: View {
     public let date: Date
     public let latitude: Double
+    public let longitude: Double
 
-    public init(date: Date, latitude: Double = 48.15) {
+    public init(date: Date, latitude: Double = 48.15, longitude: Double = 17.10) {
         self.date = date
         self.latitude = latitude
+        self.longitude = longitude
     }
 
     private var annualCurve: [AnalemmaPoint] {
@@ -1464,6 +1541,13 @@ public struct AnalemmaWidgetView: View {
     }
 
     public var body: some View {
+        HStack(spacing: 5) {
+            solarCard
+            lunarCard
+        }
+    }
+
+    private var solarCard: some View {
         let activeSun = calculateSolarDeclinationAndEoT(date: date)
         let activeAlt = calcNoonAlt(decDeg: activeSun.dec)
 
@@ -1471,26 +1555,25 @@ public struct AnalemmaWidgetView: View {
         let maxSolstice = max(calcNoonAlt(decDeg: 23.44), calcNoonAlt(decDeg: -23.44))
         let minSolstice = min(calcNoonAlt(decDeg: 23.44), calcNoonAlt(decDeg: -23.44))
 
-        let altMin = max(0.0, minSolstice - 4.0)
-        let altMax = min(90.0, maxSolstice + 4.0)
+        let altMin = max(0.0, minSolstice - 3.0)
+        let altMax = min(90.0, maxSolstice + 3.0)
 
         let isNorth = latitude >= 0
-        let topLabel = isNorth ? "Jun \(Int(round(calcNoonAlt(decDeg: 23.44))))°" : "Dec \(Int(round(calcNoonAlt(decDeg: -23.44))))°"
-        let btmLabel = isNorth ? "Dec \(Int(round(calcNoonAlt(decDeg: -23.44))))°" : "Jun \(Int(round(calcNoonAlt(decDeg: 23.44))))°"
+        let topLabel = isNorth ? "Jun \(Int(round(maxSolstice)))°" : "Dec \(Int(round(maxSolstice)))°"
+        let btmLabel = isNorth ? "Dec \(Int(round(minSolstice)))°" : "Jun \(Int(round(minSolstice)))°"
+        let latTitle = String(format: "Sun (%.1f°%@)", abs(latitude), isNorth ? "N" : "S")
 
-        let latTitle = String(format: "Analemma (%.1f°%@)", abs(latitude), latitude >= 0 ? "N" : "S")
-
-        VStack(spacing: 2) {
+        return VStack(spacing: 2) {
             Text(latTitle)
                 .font(.system(size: 7, weight: .bold))
-                .foregroundColor(Color.orange.opacity(0.95))
+                .foregroundColor(Color(red: 245/255, green: 158/255, blue: 11/255))
 
             GeometryReader { geo in
                 let w = geo.size.width
                 let h = geo.size.height
 
                 let toX: (Double) -> CGFloat = { eot in
-                    let norm = (eot + 18.0) / 36.0
+                    let norm = (eot + 16.0) / 34.0
                     return CGFloat(norm) * w
                 }
 
@@ -1510,20 +1593,20 @@ public struct AnalemmaWidgetView: View {
 
                     // Solstice tick labels
                     Text(topLabel)
-                        .font(.system(size: 6, weight: .semibold))
+                        .font(.system(size: 5.5, weight: .semibold))
                         .foregroundColor(.secondary)
-                        .position(x: 16, y: 5)
+                        .position(x: 14, y: 5)
 
                     Text(btmLabel)
-                        .font(.system(size: 6, weight: .semibold))
+                        .font(.system(size: 5.5, weight: .semibold))
                         .foregroundColor(.secondary)
-                        .position(x: 16, y: h - 5)
+                        .position(x: 14, y: h - 5)
 
                     // Equinox label
-                    Text("Eq \(Int(round(eqAlt)))°")
+                    Text("\(Int(round(eqAlt)))°")
                         .font(.system(size: 5.5, weight: .semibold))
                         .foregroundColor(.secondary.opacity(0.85))
-                        .position(x: w - 12, y: eqY - 4)
+                        .position(x: w - 8, y: eqY - 4)
 
                     // Analemma Figure-8 Path
                     Path { path in
@@ -1539,7 +1622,7 @@ public struct AnalemmaWidgetView: View {
                     }
                     .stroke(
                         Color(red: 245/255, green: 158/255, blue: 11/255),
-                        style: StrokeStyle(lineWidth: 1.4, lineJoin: .round)
+                        style: StrokeStyle(lineWidth: 1.3, lineJoin: .round)
                     )
 
                     // Current Sun Position on Analemma
@@ -1553,18 +1636,127 @@ public struct AnalemmaWidgetView: View {
                         .position(x: sunX, y: sunY)
                 }
             }
-            .frame(height: 62)
+            .frame(height: 58)
 
             // Current Noon Alt & EoT info
             let signStr = activeSun.eot >= 0 ? "+" : ""
             Text(String(format: "Alt: %.1f° (%@%dm)", activeAlt, signStr, Int(round(activeSun.eot))))
-                .font(.system(size: 6.5, weight: .semibold))
+                .font(.system(size: 6.2, weight: .semibold))
                 .foregroundColor(Color(red: 245/255, green: 158/255, blue: 11/255))
         }
-        .padding(4)
-        .frame(width: 88, height: 92)
+        .padding(3)
+        .frame(width: 78, height: 88)
         .background(Color.primary.opacity(0.04))
         .cornerRadius(6)
         .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.orange.opacity(0.3), lineWidth: 0.8))
+    }
+
+    private var lunarCard: some View {
+        let lunarCurve = getMonthlyLunarAnalemmaCurve(centerDate: date, latitude: latitude, longitude: longitude)
+        let curMoon = lunarCurve.first ?? LunarAnalemmaPoint(dec: 0, alt: 90 - abs(latitude), timeOffset: 0, phase: 0.5, step: 0)
+
+        var minAlt = 999.0, maxAlt = -999.0
+        var minOffset = -38.0, maxOffset = 38.0
+        for p in lunarCurve {
+            if p.alt < minAlt { minAlt = p.alt }
+            if p.alt > maxAlt { maxAlt = p.alt }
+            if p.timeOffset < minOffset { minOffset = p.timeOffset }
+            if p.timeOffset > maxOffset { maxOffset = p.timeOffset }
+        }
+
+        let plotAltMin = max(0.0, minAlt - 3.0)
+        let plotAltMax = min(90.0, maxAlt + 3.0)
+        let offsetSpan = max(70.0, max(abs(minOffset), abs(maxOffset)) * 2.2)
+
+        let eqAlt = 90.0 - abs(latitude)
+        let isNorth = latitude >= 0
+        let latTitle = String(format: "Moon (%.1f°%@)", abs(latitude), isNorth ? "N" : "S")
+
+        return VStack(spacing: 2) {
+            Text(latTitle)
+                .font(.system(size: 7, weight: .bold))
+                .foregroundColor(Color(red: 2/255, green: 132/255, blue: 199/255))
+
+            GeometryReader { geo in
+                let w = geo.size.width
+                let h = geo.size.height
+
+                let toX: (Double) -> CGFloat = { to in
+                    let norm = (to + offsetSpan / 2.0) / offsetSpan
+                    return CGFloat(norm) * w
+                }
+
+                let toY: (Double) -> CGFloat = { alt in
+                    let norm = (alt - plotAltMin) / max(1.0, plotAltMax - plotAltMin)
+                    return CGFloat(1.0 - norm) * h
+                }
+
+                ZStack {
+                    // Equator reference line
+                    let eqY = toY(eqAlt)
+                    Path { p in
+                        p.move(to: CGPoint(x: 2, y: eqY))
+                        p.addLine(to: CGPoint(x: w - 2, y: eqY))
+                    }
+                    .stroke(Color(red: 56/255, green: 189/255, blue: 248/255).opacity(0.35), style: StrokeStyle(lineWidth: 0.8, dash: [2, 2]))
+
+                    // Altitude labels
+                    Text("Max \(Int(round(maxAlt)))°")
+                        .font(.system(size: 5.5, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .position(x: 14, y: 5)
+
+                    Text("Min \(Int(round(minAlt)))°")
+                        .font(.system(size: 5.5, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .position(x: 14, y: h - 5)
+
+                    // Equator label
+                    Text("\(Int(round(eqAlt)))°")
+                        .font(.system(size: 5.5, weight: .semibold))
+                        .foregroundColor(.secondary.opacity(0.85))
+                        .position(x: w - 8, y: eqY - 4)
+
+                    // Lunar Analemma Loop Path
+                    Path { path in
+                        guard let first = lunarCurve.first else { return }
+                        path.move(to: CGPoint(x: toX(first.timeOffset), y: toY(first.alt)))
+                        for pt in lunarCurve.dropFirst() {
+                            path.addLine(to: CGPoint(x: toX(pt.timeOffset), y: toY(pt.alt)))
+                        }
+                        path.closeSubpath()
+                    }
+                    .stroke(
+                        Color(red: 2/255, green: 132/255, blue: 199/255),
+                        style: StrokeStyle(lineWidth: 1.3, lineJoin: .round)
+                    )
+
+                    // Current Moon Position on Lunar Analemma
+                    let moonX = toX(curMoon.timeOffset)
+                    let moonY = toY(curMoon.alt)
+
+                    // Cyan halo behind moon
+                    Circle()
+                        .fill(Color(red: 56/255, green: 189/255, blue: 248/255).opacity(0.35))
+                        .frame(width: 10, height: 10)
+                        .position(x: moonX, y: moonY)
+
+                    MiniMoonPhaseView(phase: curMoon.phase, size: 6.5)
+                        .position(x: moonX, y: moonY)
+                }
+            }
+            .frame(height: 58)
+
+            // Current Moon Alt & Time offset info
+            let signStr = curMoon.timeOffset >= 0 ? "+" : ""
+            Text(String(format: "Alt: %.1f° (%@%dm)", curMoon.alt, signStr, Int(round(curMoon.timeOffset))))
+                .font(.system(size: 6.2, weight: .semibold))
+                .foregroundColor(Color(red: 2/255, green: 132/255, blue: 199/255))
+        }
+        .padding(3)
+        .frame(width: 78, height: 88)
+        .background(Color.primary.opacity(0.04))
+        .cornerRadius(6)
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 56/255, green: 189/255, blue: 248/255).opacity(0.35), lineWidth: 0.8))
     }
 }

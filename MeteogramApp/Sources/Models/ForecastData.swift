@@ -391,6 +391,81 @@ public func getAnnualAnalemmaCurve(year: Int = 2026) -> [AnalemmaPoint] {
     }
 }
 
+public struct LunarAnalemmaPoint: Sendable {
+    public let dec: Double
+    public let alt: Double
+    public let timeOffset: Double
+    public let phase: Double
+    public let step: Int
+
+    public init(dec: Double, alt: Double, timeOffset: Double, phase: Double, step: Int) {
+        self.dec = dec
+        self.alt = alt
+        self.timeOffset = timeOffset
+        self.phase = phase
+        self.step = step
+    }
+}
+
+public func calculateLunarDeclinationAndAnomaly(date: Date, lon: Double = 17.10) -> (dec: Double, timeOffset: Double, haDeg: Double, phase: Double) {
+    let tEpoch = date.timeIntervalSince1970
+    let d = (tEpoch - 946728000.0) / 86400.0
+
+    let lMoon = ((218.316 + 13.176396 * d).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)
+    let mMoon = ((134.963 + 13.064993 * d).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)
+    let fMoon = ((93.272 + 13.229350 * d).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)
+
+    let mRad = mMoon * .pi / 180.0
+    let fRad = fMoon * .pi / 180.0
+
+    let lonMoon = lMoon + 6.289 * sin(mRad)
+    let latMoon = 5.128 * sin(fRad)
+
+    let lonRad = lonMoon * .pi / 180.0
+    let latRadMoon = latMoon * .pi / 180.0
+
+    let e = 23.439 - 0.00000036 * d
+    let eRad = e * .pi / 180.0
+
+    let sinDec = sin(latRadMoon) * cos(eRad) + cos(latRadMoon) * sin(eRad) * sin(lonRad)
+    let decRad = asin(max(-1.0, min(1.0, sinDec)))
+    let dec = decRad * 180.0 / .pi
+
+    let y = sin(lonRad) * cos(eRad) - tan(latRadMoon) * sin(eRad)
+    let x = cos(lonRad)
+    let raRad = atan2(y, x)
+
+    let gmst = ((280.46061837 + 360.98564736629 * d).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)
+    let lstRad = ((gmst + lon).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0) * .pi / 180.0
+
+    var haRad = lstRad - raRad
+    while haRad > .pi { haRad -= 2.0 * .pi }
+    while haRad < -.pi { haRad += 2.0 * .pi }
+
+    let haDeg = haRad * 180.0 / .pi
+    let timeOffset = -haDeg * 4.0
+
+    let sunMeanLon = ((280.459 + 0.98564736 * d).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)
+    let phase = ((lonMoon - sunMeanLon).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0) / 360.0
+
+    return (dec: dec, timeOffset: timeOffset, haDeg: haDeg, phase: phase)
+}
+
+public func getMonthlyLunarAnalemmaCurve(centerDate: Date, latitude: Double = 48.15, longitude: Double = 17.10) -> [LunarAnalemmaPoint] {
+    var t = centerDate
+    for _ in 0..<3 {
+        let st = calculateLunarDeclinationAndAnomaly(date: t, lon: longitude)
+        t = t.addingTimeInterval(-Double(st.haDeg / 14.49) * 3600.0)
+    }
+
+    return (0...28).map { k in
+        let tk = t.addingTimeInterval(Double(k) * 24.84119 * 3600.0)
+        let st = calculateLunarDeclinationAndAnomaly(date: tk, lon: longitude)
+        let alt = latitude >= 0 ? (90.0 - latitude + st.dec) : (90.0 + latitude - st.dec)
+        return LunarAnalemmaPoint(dec: st.dec, alt: alt, timeOffset: st.timeOffset, phase: st.phase, step: k)
+    }
+}
+
 extension Array {
     subscript(safe index: Index) -> Element? {
         indices.contains(index) ? self[index] : nil
