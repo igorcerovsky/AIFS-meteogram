@@ -35,7 +35,13 @@ public struct NativeMeteogramChartView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ZStack(alignment: .top) {
+                VStack(spacing: 0) {
+                    // Fixed Interactive Data HUD (Pinned, App Style)
+                    interactiveHUDPane
+                        .padding(.horizontal, 10)
+                        .padding(.top, 4)
+                        .padding(.bottom, 6)
+
                     ScrollView(.vertical, showsIndicators: true) {
                         VStack(spacing: 10) {
                             // Location Header
@@ -61,15 +67,6 @@ public struct NativeMeteogramChartView: View {
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
-                        .padding(.top, selectedPoint != nil ? 75 : 0) // Space for floating HUD
-                    }
-
-                    // Floating HUD Tooltip when scrubbing with .chartXSelection
-                    if let selPoint = selectedPoint {
-                        floatingHUDView(point: selPoint)
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                            .padding(.top, 4)
-                            .zIndex(100)
                     }
                 }
             }
@@ -132,7 +129,7 @@ public struct NativeMeteogramChartView: View {
                 .font(.caption2)
             }
 
-            ZStack {
+            ZStack(alignment: .topTrailing) {
                 // Background: Celestial Altitude (0° .. 92°, anchored at horizon = 0°)
                 Chart {
                     celestialMarks(points: points)
@@ -185,6 +182,13 @@ public struct NativeMeteogramChartView: View {
                 .chartXAxis {
                     xAxisMarks(points: points)
                 }
+
+                // Analemma Widget reflecting location latitude & active solar culmination
+                let lat = viewModel.forecastData?.location.latitude ?? 48.15
+                let activeDate = selectedDate ?? points.first?.date ?? Date()
+                AnalemmaWidgetView(date: activeDate, latitude: lat)
+                    .padding(.top, 4)
+                    .padding(.trailing, 26)
             }
             .frame(height: 155)
             .background(Color(white: 0.98).opacity(0.04))
@@ -540,7 +544,13 @@ public struct NativeMeteogramChartView: View {
 
     // MARK: - Panel 4: Wind Speed & Direction [km/h]
     private func windPanelView(points: [TimeSeriesPoint]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let maxSpd = points.compactMap { $0.windSpeedMax }.max() ?? 10.0
+        let yMaxWind = max(40.0, ceil((maxSpd * 3.6 + 5.0) / 10.0) * 10.0)
+
+        let sampleStep = max(1, points.count / 14)
+        let arrowPoints = points.enumerated().filter { $0.offset % sampleStep == 0 }.map(\.element)
+
+        return VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Label("10m Wind Speed [km/h] & Direction", systemImage: "wind")
                     .font(.caption.bold())
@@ -548,7 +558,9 @@ public struct NativeMeteogramChartView: View {
 
                 Spacer()
 
-                HStack(spacing: 12) {
+                windSpeedScaleBar
+
+                HStack(spacing: 8) {
                     legendItem(title: "Median", color: .brown, isLine: true)
                     legendItem(title: "Spread", color: .brown.opacity(0.2))
                 }
@@ -587,6 +599,19 @@ public struct NativeMeteogramChartView: View {
                     .lineStyle(StrokeStyle(lineWidth: 2.0))
                 }
 
+                // Sampled Wind Arrows near the top of the wind chart
+                ForEach(arrowPoints) { p in
+                    if let dir = p.windDirection {
+                        PointMark(
+                            x: .value("Time", p.date),
+                            y: .value("ArrowY", yMaxWind * 0.85)
+                        )
+                        .symbol {
+                            WindArrowShape(dirDeg: dir, speedMs: p.windSpeedMedian)
+                        }
+                    }
+                }
+
                 if let selDate = selectedDate {
                     RuleMark(x: .value("Selected", selDate))
                         .foregroundStyle(Color.primary.opacity(0.75))
@@ -594,6 +619,7 @@ public struct NativeMeteogramChartView: View {
                 }
             }
             .chartXSelection(value: $selectedDate)
+            .chartYScale(domain: 0...yMaxWind)
             .chartYAxis {
                 AxisMarks(position: .leading)
             }
@@ -602,7 +628,7 @@ public struct NativeMeteogramChartView: View {
                     AxisGridLine()
                 }
             }
-            .frame(height: 105)
+            .frame(height: 115)
             .background(Color(white: 0.98).opacity(0.04))
             .cornerRadius(8)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.15), lineWidth: 1))
@@ -746,99 +772,166 @@ public struct NativeMeteogramChartView: View {
         }
     }
 
-    // MARK: - Floating HUD View
-    private func floatingHUDView(point: TimeSeriesPoint) -> some View {
-        HStack(spacing: 12) {
-            // Time
-            VStack(alignment: .leading, spacing: 2) {
-                Text(point.date.formatted(date: .abbreviated, time: .shortened))
-                    .font(.caption.bold())
-                HStack(spacing: 4) {
-                    if let sunAlt = point.sunAltitude, sunAlt > 0 {
-                        Text(String(format: "☀ %.0f°", sunAlt))
-                            .foregroundColor(Color(red: 244/255, green: 162/255, blue: 97/255))
-                    }
-                    if let moonAlt = point.moonAltitude, moonAlt > 0 {
-                        Text(String(format: "🌙 %.0f°", moonAlt))
-                            .foregroundColor(Color(red: 0/255, green: 180/255, blue: 216/255))
-                    }
-                }
-                .font(.system(size: 9, weight: .semibold))
-            }
-
-            Divider().frame(height: 30)
-
-            // Temp
-            VStack(alignment: .leading, spacing: 2) {
-                Text(String(format: "%.1f°C", point.tempMedian))
-                    .font(.subheadline.bold())
-                    .foregroundColor(.red)
-                if let q25 = point.tempQ25, let q75 = point.tempQ75 {
-                    Text(String(format: "%.0f–%.0f°C", q25, q75))
-                        .font(.system(size: 9))
+    // MARK: - Interactive Data HUD (Fixed Pinned App Style)
+    private var interactiveHUDPane: some View {
+        Group {
+            if let selPoint = selectedPoint {
+                floatingHUDView(point: selPoint)
+            } else if let firstPoint = viewModel.timeSeries.first {
+                HStack(spacing: 8) {
+                    Image(systemName: "hand.draw")
+                        .font(.subheadline)
+                        .foregroundColor(.accentColor)
+                    Text("Scrub chart to view ensemble spread & solar altitude")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("Latest: \(String(format: "%.1f°C", firstPoint.tempMedian)) • \(String(format: "%.0f km/h", firstPoint.windSpeedKmH))")
+                        .font(.caption2.bold())
                         .foregroundColor(.secondary)
                 }
-            }
-
-            Divider().frame(height: 30)
-
-            // Precip
-            VStack(alignment: .leading, spacing: 2) {
-                Text(String(format: "%.1f mm", point.precipMedian))
-                    .font(.subheadline.bold())
-                    .foregroundColor(.blue)
-                if point.snowMedian > 0 {
-                    Text(String(format: "❄️ %.1f cm", point.snowMedian))
-                        .font(.system(size: 9))
-                        .foregroundColor(.cyan)
-                }
-            }
-
-            Divider().frame(height: 30)
-
-            // Clouds
-            VStack(alignment: .leading, spacing: 2) {
-                Text(String(format: "☁ %.0f%%", point.cloudTotalMedian))
-                    .font(.subheadline.bold())
-                    .foregroundColor(Color(red: 202/255, green: 138/255, blue: 4/255))
-                HStack(spacing: 4) {
-                    Text(String(format: "H:%.0f", point.cloudHigh ?? 0))
-                        .foregroundColor(Color(red: 6/255, green: 182/255, blue: 212/255))
-                    Text(String(format: "M:%.0f", point.cloudMid ?? 0))
-                        .foregroundColor(Color(red: 16/255, green: 185/255, blue: 129/255))
-                    Text(String(format: "L:%.0f", point.cloudLow ?? 0))
-                        .foregroundColor(Color(red: 225/255, green: 29/255, blue: 72/255))
-                }
-                .font(.system(size: 9, weight: .bold))
-            }
-
-            Divider().frame(height: 30)
-
-            // Wind
-            VStack(alignment: .leading, spacing: 2) {
-                Text(String(format: "%.0f km/h", point.windSpeedKmH))
-                    .font(.subheadline.bold())
-                    .foregroundColor(.brown)
-                Text("\(point.windCompassDirection)")
-                    .font(.system(size: 9))
-                    .foregroundColor(.secondary)
-            }
-
-            Divider().frame(height: 30)
-
-            // Pressure
-            VStack(alignment: .leading, spacing: 2) {
-                Text(String(format: "%.0f hPa", point.pressureMedian))
-                    .font(.subheadline.bold())
-                    .foregroundColor(.purple)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity)
+                .background(.ultraThickMaterial)
+                .cornerRadius(10)
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.15), lineWidth: 1))
+            } else {
+                EmptyView()
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+    }
+
+    // MARK: - Floating HUD View
+    private func floatingHUDView(point: TimeSeriesPoint) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                // Time
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(point.date.formatted(date: .abbreviated, time: .shortened))
+                        .font(.caption.bold())
+                    HStack(spacing: 4) {
+                        if let sunAlt = point.sunAltitude, sunAlt > 0 {
+                            Text(String(format: "☀ %.0f°", sunAlt))
+                                .foregroundColor(Color(red: 244/255, green: 162/255, blue: 97/255))
+                        }
+                        if let moonAlt = point.moonAltitude, moonAlt > 0 {
+                            Text(String(format: "🌙 %.0f°", moonAlt))
+                                .foregroundColor(Color(red: 0/255, green: 180/255, blue: 216/255))
+                        }
+                    }
+                    .font(.system(size: 9, weight: .semibold))
+                }
+
+                Divider().frame(height: 30)
+
+                // Temp
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(format: "%.1f°C", point.tempMedian))
+                        .font(.subheadline.bold())
+                        .foregroundColor(.red)
+                    if let q25 = point.tempQ25, let q75 = point.tempQ75 {
+                        Text(String(format: "%.0f–%.0f°C", q25, q75))
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Divider().frame(height: 30)
+
+                // Precip
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(format: "%.1f mm", point.precipMedian))
+                        .font(.subheadline.bold())
+                        .foregroundColor(.blue)
+                    if point.snowMedian > 0 {
+                        Text(String(format: "❄️ %.1f cm", point.snowMedian))
+                            .font(.system(size: 9))
+                            .foregroundColor(.cyan)
+                    }
+                }
+
+                Divider().frame(height: 30)
+
+                // Clouds
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(format: "☁ %.0f%%", point.cloudTotalMedian))
+                        .font(.subheadline.bold())
+                        .foregroundColor(Color(red: 202/255, green: 138/255, blue: 4/255))
+                    HStack(spacing: 4) {
+                        Text(String(format: "H:%.0f", point.cloudHigh ?? 0))
+                            .foregroundColor(Color(red: 6/255, green: 182/255, blue: 212/255))
+                        Text(String(format: "M:%.0f", point.cloudMid ?? 0))
+                            .foregroundColor(Color(red: 16/255, green: 185/255, blue: 129/255))
+                        Text(String(format: "L:%.0f", point.cloudLow ?? 0))
+                            .foregroundColor(Color(red: 225/255, green: 29/255, blue: 72/255))
+                    }
+                    .font(.system(size: 9, weight: .bold))
+                }
+
+                Divider().frame(height: 30)
+
+                // Wind
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        Text(String(format: "%.0f km/h", point.windSpeedKmH))
+                            .font(.subheadline.bold())
+                            .foregroundColor(.brown)
+                        Text(String(format: "(%.1f m/s)", point.windSpeedMedian))
+                            .font(.system(size: 8))
+                            .foregroundColor(.secondary)
+                    }
+                    HStack(spacing: 4) {
+                        if let dir = point.windDirection {
+                            Image(systemName: "arrow.down")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(windColor(speedMs: point.windSpeedMedian))
+                                .rotationEffect(.degrees(dir))
+                        }
+                        Text(point.windCompassDirection)
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Divider().frame(height: 30)
+
+                // Pressure
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(format: "%.0f hPa", point.pressureMedian))
+                        .font(.subheadline.bold())
+                        .foregroundColor(.purple)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+        }
+        .frame(maxWidth: .infinity)
         .background(.ultraThickMaterial)
         .cornerRadius(10)
         .shadow(color: .black.opacity(0.18), radius: 8, x: 0, y: 4)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.2), lineWidth: 1))
+    }
+
+    // MARK: - Wind Speed Color Scale & Arrows
+    private var windSpeedScaleBar: some View {
+        HStack(spacing: 2) {
+            scaleBadge(label: "<2", color: Color(red: 148/255, green: 163/255, blue: 184/255))
+            scaleBadge(label: "2–5", color: Color(red: 16/255, green: 185/255, blue: 129/255))
+            scaleBadge(label: "5–10", color: Color(red: 37/255, green: 99/255, blue: 235/255))
+            scaleBadge(label: "10–15", color: Color(red: 245/255, green: 158/255, blue: 11/255))
+            scaleBadge(label: ">15 m/s", color: Color(red: 239/255, green: 68/255, blue: 68/255))
+        }
+    }
+
+    private func scaleBadge(label: String, color: Color) -> some View {
+        Text(label)
+            .font(.system(size: 7, weight: .bold))
+            .foregroundColor(.white)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 2)
+            .background(color)
+            .cornerRadius(2)
     }
 
     // MARK: - Helpers
@@ -880,5 +973,195 @@ public struct NativeMeteogramChartView: View {
         case 0.75..<0.875: return "🌗"
         default: return "🌘"
         }
+    }
+}
+
+// MARK: - Wind Speed Color
+private func windColor(speedMs: Double) -> Color {
+    if speedMs >= 15.0 {
+        return Color(red: 239/255, green: 68/255, blue: 68/255)
+    } else if speedMs >= 10.0 {
+        return Color(red: 245/255, green: 158/255, blue: 11/255)
+    } else if speedMs >= 5.0 {
+        return Color(red: 37/255, green: 99/255, blue: 235/255)
+    } else if speedMs >= 2.0 {
+        return Color(red: 16/255, green: 185/255, blue: 129/255)
+    } else {
+        return Color(red: 148/255, green: 163/255, blue: 184/255)
+    }
+}
+
+// MARK: - Triangle Shape
+public struct Triangle: Shape {
+    public init() {}
+
+    public func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+// MARK: - Wind Arrow Shape
+public struct WindArrowShape: View {
+    public let dirDeg: Double
+    public let speedMs: Double
+
+    public init(dirDeg: Double, speedMs: Double) {
+        self.dirDeg = dirDeg
+        self.speedMs = speedMs
+    }
+
+    public var body: some View {
+        let col = windColor(speedMs: speedMs)
+        let arrowLen = max(8, min(24, 7 + CGFloat(speedMs) * 1.2))
+        let headSize = max(3, min(6, arrowLen * 0.25))
+
+        ZStack {
+            VStack(spacing: 0) {
+                // Shaft
+                Rectangle()
+                    .fill(col)
+                    .frame(width: speedMs >= 15 ? 2.0 : (speedMs >= 10 ? 1.6 : 1.2), height: arrowLen - headSize)
+
+                // Arrow head pointing towards bottom (positive Y)
+                Triangle()
+                    .fill(col)
+                    .frame(width: headSize * 1.8, height: headSize)
+            }
+            .rotationEffect(.degrees(dirDeg))
+        }
+        .frame(width: 26, height: 26)
+    }
+}
+
+// MARK: - Location-Reflecting Analemma Widget View
+public struct AnalemmaWidgetView: View {
+    public let date: Date
+    public let latitude: Double
+
+    public init(date: Date, latitude: Double = 48.15) {
+        self.date = date
+        self.latitude = latitude
+    }
+
+    private var annualCurve: [AnalemmaPoint] {
+        getAnnualAnalemmaCurve(year: Calendar.current.component(.year, from: date))
+    }
+
+    private func calcNoonAlt(decDeg: Double) -> Double {
+        if latitude >= 0 {
+            return 90.0 - latitude + decDeg
+        } else {
+            return 90.0 + latitude - decDeg
+        }
+    }
+
+    public var body: some View {
+        let activeSun = calculateSolarDeclinationAndEoT(date: date)
+        let activeAlt = calcNoonAlt(decDeg: activeSun.dec)
+
+        let eqAlt = 90.0 - abs(latitude)
+        let maxSolstice = max(calcNoonAlt(decDeg: 23.44), calcNoonAlt(decDeg: -23.44))
+        let minSolstice = min(calcNoonAlt(decDeg: 23.44), calcNoonAlt(decDeg: -23.44))
+
+        let altMin = max(0.0, minSolstice - 4.0)
+        let altMax = min(90.0, maxSolstice + 4.0)
+
+        let isNorth = latitude >= 0
+        let topLabel = isNorth ? "Jun \(Int(round(calcNoonAlt(decDeg: 23.44))))°" : "Dec \(Int(round(calcNoonAlt(decDeg: -23.44))))°"
+        let btmLabel = isNorth ? "Dec \(Int(round(calcNoonAlt(decDeg: -23.44))))°" : "Jun \(Int(round(calcNoonAlt(decDeg: 23.44))))°"
+
+        let latTitle = String(format: "Analemma (%.1f°%@)", abs(latitude), latitude >= 0 ? "N" : "S")
+
+        VStack(spacing: 2) {
+            Text(latTitle)
+                .font(.system(size: 7, weight: .bold))
+                .foregroundColor(Color.orange.opacity(0.95))
+
+            GeometryReader { geo in
+                let w = geo.size.width
+                let h = geo.size.height
+
+                let toX: (Double) -> CGFloat = { eot in
+                    let norm = (eot + 18.0) / 36.0
+                    return CGFloat(norm) * w
+                }
+
+                let toY: (Double) -> CGFloat = { alt in
+                    let norm = (alt - altMin) / max(1.0, altMax - altMin)
+                    return CGFloat(1.0 - norm) * h
+                }
+
+                ZStack {
+                    // Equinox reference line
+                    let eqY = toY(eqAlt)
+                    Path { p in
+                        p.move(to: CGPoint(x: 2, y: eqY))
+                        p.addLine(to: CGPoint(x: w - 2, y: eqY))
+                    }
+                    .stroke(Color.secondary.opacity(0.35), style: StrokeStyle(lineWidth: 0.8, dash: [2, 2]))
+
+                    // Solstice tick labels
+                    Text(topLabel)
+                        .font(.system(size: 6, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .position(x: 16, y: 5)
+
+                    Text(btmLabel)
+                        .font(.system(size: 6, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .position(x: 16, y: h - 5)
+
+                    // Equinox label
+                    Text("Eq \(Int(round(eqAlt)))°")
+                        .font(.system(size: 5.5, weight: .semibold))
+                        .foregroundColor(.secondary.opacity(0.85))
+                        .position(x: w - 12, y: eqY - 4)
+
+                    // Analemma Figure-8 Path
+                    Path { path in
+                        let curve = annualCurve
+                        guard let first = curve.first else { return }
+                        let startAlt = calcNoonAlt(decDeg: first.dec)
+                        path.move(to: CGPoint(x: toX(first.eot), y: toY(startAlt)))
+                        for pt in curve.dropFirst() {
+                            let alt = calcNoonAlt(decDeg: pt.dec)
+                            path.addLine(to: CGPoint(x: toX(pt.eot), y: toY(alt)))
+                        }
+                        path.closeSubpath()
+                    }
+                    .stroke(
+                        Color(red: 245/255, green: 158/255, blue: 11/255),
+                        style: StrokeStyle(lineWidth: 1.4, lineJoin: .round)
+                    )
+
+                    // Current Sun Position on Analemma
+                    let sunX = toX(activeSun.eot)
+                    let sunY = toY(activeAlt)
+
+                    Circle()
+                        .fill(Color(red: 239/255, green: 68/255, blue: 68/255))
+                        .frame(width: 5, height: 5)
+                        .overlay(Circle().stroke(Color.white, lineWidth: 1))
+                        .position(x: sunX, y: sunY)
+                }
+            }
+            .frame(height: 62)
+
+            // Current Noon Alt & EoT info
+            let signStr = activeSun.eot >= 0 ? "+" : ""
+            Text(String(format: "Alt: %.1f° (%@%dm)", activeAlt, signStr, Int(round(activeSun.eot))))
+                .font(.system(size: 6.5, weight: .semibold))
+                .foregroundColor(Color(red: 245/255, green: 158/255, blue: 11/255))
+        }
+        .padding(4)
+        .frame(width: 88, height: 92)
+        .background(Color.primary.opacity(0.04))
+        .cornerRadius(6)
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.orange.opacity(0.3), lineWidth: 0.8))
     }
 }

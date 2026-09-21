@@ -342,6 +342,55 @@ extension ForecastResponse {
     }
 }
 
+// MARK: - Analemma Astronomical Calculations
+
+public struct AnalemmaPoint: Sendable {
+    public let dec: Double
+    public let eot: Double
+
+    public init(dec: Double, eot: Double) {
+        self.dec = dec
+        self.eot = eot
+    }
+}
+
+public func calculateSolarDeclinationAndEoT(date: Date) -> AnalemmaPoint {
+    let tEpoch = date.timeIntervalSince1970
+    let d = (tEpoch - 946728000.0) / 86400.0
+
+    let g = ((357.529 + 0.98560028 * d).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)
+    let gRad = g * .pi / 180.0
+    let q = ((280.459 + 0.98564736 * d).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)
+    let lEcl = ((q + 1.915 * sin(gRad) + 0.020 * sin(2 * gRad)).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)
+    let lRad = lEcl * .pi / 180.0
+
+    let e = 23.439 - 0.00000036 * d
+    let eRad = e * .pi / 180.0
+
+    let sinDec = sin(eRad) * sin(lRad)
+    let decRad = asin(max(-1.0, min(1.0, sinDec)))
+    let dec = decRad * 180.0 / .pi
+
+    let y = cos(eRad) * sin(lRad)
+    let x = cos(lRad)
+    let raRad = atan2(y, x)
+
+    let diffDeg = ((q - raRad * 180.0 / .pi).truncatingRemainder(dividingBy: 360.0) + 540.0).truncatingRemainder(dividingBy: 360.0) - 180.0
+    let eot = 4.0 * diffDeg
+    return AnalemmaPoint(dec: dec, eot: eot)
+}
+
+public func getAnnualAnalemmaCurve(year: Int = 2026) -> [AnalemmaPoint] {
+    var cal = Calendar(identifier: .gregorian)
+    cal.timeZone = TimeZone(secondsFromGMT: 0)!
+    let components = DateComponents(year: year, month: 1, day: 1, hour: 12)
+    guard let start = cal.date(from: components) else { return [] }
+    return (0..<365).map { day in
+        let d = start.addingTimeInterval(Double(day) * 86400.0)
+        return calculateSolarDeclinationAndEoT(date: d)
+    }
+}
+
 extension Array {
     subscript(safe index: Index) -> Element? {
         indices.contains(index) ? self[index] : nil
