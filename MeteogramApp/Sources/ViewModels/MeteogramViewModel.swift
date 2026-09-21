@@ -123,6 +123,8 @@ public class MeteogramViewModel: ObservableObject {
         if horizon == .iconD22 && MeteogramConfig.isOutsideIconD2Domain(location) {
             horizon = .iconEu5
             triggerFallbackAlert(from: "icon_d2", to: "icon_eu")
+        } else if horizon != .iconD22 {
+            dismissFallbackAlert()
         }
     }
 
@@ -148,6 +150,7 @@ public class MeteogramViewModel: ObservableObject {
 
     public func switchToModel(_ target: ForecastHorizon) {
         guard target != horizon else { return }
+        self.selectedDate = nil
         self.horizon = target
         fetchMeteogram()
     }
@@ -172,6 +175,7 @@ public enum MeteogramDisplayMode: String, CaseIterable, Identifiable {
 
     public func fetchMeteogram() {
         currentTask?.cancel()
+        self.selectedDate = nil
 
         checkLocationDomainAndWarn()
 
@@ -208,7 +212,7 @@ public enum MeteogramDisplayMode: String, CaseIterable, Identifiable {
                         self.horizon = .aifs15
                     }
                     self.triggerFallbackAlert(from: forecastResult.fallbackFrom, to: forecastResult.actualModel)
-                } else if !MeteogramConfig.isOutsideIconD2Domain(loc) {
+                } else {
                     self.showFallbackAlert = false
                 }
             } catch {

@@ -63,24 +63,6 @@ public struct NativeMeteogramChartView: View {
                         .padding(.vertical, 8)
                         .padding(.top, selectedPoint != nil ? 75 : 0) // Space for floating HUD
                     }
-                    .simultaneousGesture(
-                        DragGesture(minimumDistance: 30)
-                            .onChanged { value in
-                                if selectedDate == nil && abs(value.translation.width) > abs(value.translation.height) {
-                                    dragOffset = value.translation.width
-                                }
-                            }
-                            .onEnded { value in
-                                if selectedDate == nil {
-                                    if value.translation.width < -60 {
-                                        onSwipeLeft()
-                                    } else if value.translation.width > 60 {
-                                        onSwipeRight()
-                                    }
-                                    dragOffset = 0
-                                }
-                            }
-                    )
 
                     // Floating HUD Tooltip when scrubbing with .chartXSelection
                     if let selPoint = selectedPoint {
@@ -131,108 +113,186 @@ public struct NativeMeteogramChartView: View {
         .padding(.horizontal, 4)
     }
 
-    // MARK: - Panel 1: Temperature [°C]
+    // MARK: - Panel 1: Temperature [°C] & Celestial Curves
     private func temperaturePanelView(points: [TimeSeriesPoint]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Label("2m Air Temperature [°C]", systemImage: "thermometer.medium")
+                Label("2m Air Temperature [°C] & Celestial Altitude", systemImage: "thermometer.medium")
                     .font(.caption.bold())
                     .foregroundColor(.red)
 
                 Spacer()
 
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     legendItem(title: "Median", color: .red, isLine: true)
-                    legendItem(title: "25-75%", color: .red.opacity(0.35))
-                    legendItem(title: "Spread", color: .red.opacity(0.18))
+                    legendItem(title: "Spread", color: .red.opacity(0.25))
+                    legendItem(title: "☀ Sun Alt", color: Color(red: 244/255, green: 162/255, blue: 97/255), isLine: true)
+                    legendItem(title: "🌙 Moon Alt", color: Color(red: 0/255, green: 180/255, blue: 216/255), isLine: true)
                 }
                 .font(.caption2)
             }
 
-            Chart {
-                ForEach(points) { p in
-                    if let pMin = p.tempMin, let pMax = p.tempMax {
-                        AreaMark(
-                            x: .value("Time", p.date),
-                            yStart: .value("Min", pMin),
-                            yEnd: .value("Max", pMax)
-                        )
-                        .foregroundStyle(Color.red.opacity(0.14))
+            ZStack {
+                // Background: Celestial Altitude (0° .. 92°, anchored at horizon = 0°)
+                Chart {
+                    celestialMarks(points: points)
+                }
+                .chartYScale(domain: 0...92)
+                .chartXAxis(.hidden)
+                .chartYAxis {
+                    AxisMarks(position: .trailing, values: [30, 60]) { val in
+                        AxisGridLine()
+                            .foregroundStyle(Color.orange.opacity(0.12))
+                        AxisValueLabel {
+                            if let v = val.as(Int.self) {
+                                Text("\(v)°")
+                                    .font(.system(size: 8, weight: .semibold))
+                                    .foregroundColor(Color(red: 244/255, green: 162/255, blue: 97/255))
+                            }
+                        }
                     }
                 }
 
-                ForEach(points) { p in
-                    if let pQ25 = p.tempQ25, let pQ75 = p.tempQ75 {
-                        AreaMark(
-                            x: .value("Time", p.date),
-                            yStart: .value("Q25", pQ25),
-                            yEnd: .value("Q75", pQ75)
-                        )
-                        .foregroundStyle(Color.red.opacity(0.28))
+                // Foreground: Temperature Ensemble & Grid
+                Chart {
+                    temperatureSpreadMarks(points: points)
+                    temperatureMedianMark(points: points)
+                    temperatureThresholdMarks()
+
+                    // Synchronized Selection Crosshair
+                    if let selDate = selectedDate {
+                        RuleMark(x: .value("Selected", selDate))
+                            .foregroundStyle(Color.primary.opacity(0.75))
+                            .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+
+                        if let selPoint = selectedPoint {
+                            PointMark(
+                                x: .value("Selected", selPoint.date),
+                                y: .value("Temperature", selPoint.tempMedian)
+                            )
+                            .foregroundStyle(Color.red)
+                            .symbolSize(40)
+                        }
                     }
                 }
-
-                ForEach(points) { p in
-                    LineMark(
-                        x: .value("Time", p.date),
-                        y: .value("Temperature", p.tempMedian)
-                    )
-                    .foregroundStyle(Color.red)
-                    .lineStyle(StrokeStyle(lineWidth: 2.2))
+                .chartXSelection(value: $selectedDate)
+                .chartYAxis {
+                    AxisMarks(position: .leading)
                 }
-
-                // Reference Threshold Grid Lines (-10, 0, 10, 20, 30°C)
-                RuleMark(y: .value("Threshold", -10.0))
-                    .foregroundStyle(Color.cyan.opacity(0.55))
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-
-                RuleMark(y: .value("Freezing", 0.0))
-                    .foregroundStyle(Color.blue)
-                    .lineStyle(StrokeStyle(lineWidth: 1.4, dash: [5, 3]))
-
-                RuleMark(y: .value("Threshold", 10.0))
-                    .foregroundStyle(Color.yellow.opacity(0.65))
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-
-                RuleMark(y: .value("Threshold", 20.0))
-                    .foregroundStyle(Color.orange.opacity(0.65))
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-
-                RuleMark(y: .value("Threshold", 30.0))
-                    .foregroundStyle(Color.red.opacity(0.65))
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-
-                // Synchronized Selection Crosshair
-                if let selDate = selectedDate {
-                    RuleMark(x: .value("Selected", selDate))
-                        .foregroundStyle(Color.primary.opacity(0.75))
-                        .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
-
-                    if let selPoint = selectedPoint {
-                        PointMark(
-                            x: .value("Selected", selPoint.date),
-                            y: .value("Temperature", selPoint.tempMedian)
-                        )
-                        .foregroundStyle(Color.red)
-                        .symbolSize(40)
-                    }
+                .chartXAxis {
+                    xAxisMarks(points: points)
                 }
             }
-            .chartXSelection(value: $selectedDate)
-            .chartYAxis {
-                AxisMarks(position: .leading)
-            }
-            .chartXAxis {
-                AxisMarks(values: .automatic(desiredCount: 6)) { value in
-                    AxisGridLine()
-                    AxisTick()
-                    AxisValueLabel(format: .dateTime.weekday().day())
-                }
-            }
-            .frame(height: 150)
+            .frame(height: 155)
             .background(Color(white: 0.98).opacity(0.04))
             .cornerRadius(8)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.15), lineWidth: 1))
+        }
+    }
+
+    @ChartContentBuilder
+    private func celestialMarks(points: [TimeSeriesPoint]) -> some ChartContent {
+        ForEach(points) { p in
+            if let sAlt = p.sunAltitude, sAlt >= 0 {
+                LineMark(
+                    x: .value("Time", p.date),
+                    y: .value("Sun Alt", sAlt),
+                    series: .value("Celestial", "Sun")
+                )
+                .foregroundStyle(Color(red: 244/255, green: 162/255, blue: 97/255))
+                .lineStyle(StrokeStyle(lineWidth: 1.4, dash: [4, 3]))
+            }
+        }
+
+        ForEach(points) { p in
+            if let mAlt = p.moonAltitude, mAlt >= 0 {
+                LineMark(
+                    x: .value("Time", p.date),
+                    y: .value("Moon Alt", mAlt),
+                    series: .value("Celestial", "Moon")
+                )
+                .foregroundStyle(Color(red: 0/255, green: 180/255, blue: 216/255))
+                .lineStyle(StrokeStyle(lineWidth: 1.3, dash: [2, 3]))
+            }
+        }
+    }
+
+    @ChartContentBuilder
+    private func temperatureSpreadMarks(points: [TimeSeriesPoint]) -> some ChartContent {
+        ForEach(points) { p in
+            if let pMin = p.tempMin, let pMax = p.tempMax {
+                AreaMark(
+                    x: .value("Time", p.date),
+                    yStart: .value("Min", pMin),
+                    yEnd: .value("Max", pMax)
+                )
+                .foregroundStyle(Color.red.opacity(0.14))
+            }
+        }
+
+        ForEach(points) { p in
+            if let pQ25 = p.tempQ25, let pQ75 = p.tempQ75 {
+                AreaMark(
+                    x: .value("Time", p.date),
+                    yStart: .value("Q25", pQ25),
+                    yEnd: .value("Q75", pQ75)
+                )
+                .foregroundStyle(Color.red.opacity(0.28))
+            }
+        }
+    }
+
+    @ChartContentBuilder
+    private func temperatureMedianMark(points: [TimeSeriesPoint]) -> some ChartContent {
+        ForEach(points) { p in
+            LineMark(
+                x: .value("Time", p.date),
+                y: .value("Temperature", p.tempMedian),
+                series: .value("Temp", "Median")
+            )
+            .foregroundStyle(Color.red)
+            .lineStyle(StrokeStyle(lineWidth: 2.2))
+        }
+    }
+
+    @ChartContentBuilder
+    private func temperatureThresholdMarks() -> some ChartContent {
+        RuleMark(y: .value("Threshold", -10.0))
+            .foregroundStyle(Color.cyan.opacity(0.55))
+            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+
+        RuleMark(y: .value("Freezing", 0.0))
+            .foregroundStyle(Color.blue)
+            .lineStyle(StrokeStyle(lineWidth: 1.4, dash: [5, 3]))
+
+        RuleMark(y: .value("Threshold", 10.0))
+            .foregroundStyle(Color.yellow.opacity(0.65))
+            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+
+        RuleMark(y: .value("Threshold", 20.0))
+            .foregroundStyle(Color.orange.opacity(0.65))
+            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+
+        RuleMark(y: .value("Threshold", 30.0))
+            .foregroundStyle(Color.red.opacity(0.65))
+            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+    }
+
+    @AxisContentBuilder
+    private func xAxisMarks(points: [TimeSeriesPoint]) -> some AxisContent {
+        let isShort = (points.count <= 72)
+        if isShort {
+            AxisMarks(values: .automatic(desiredCount: 8)) { value in
+                AxisGridLine()
+                AxisTick()
+                AxisValueLabel(format: .dateTime.weekday(.short).hour())
+            }
+        } else {
+            AxisMarks(values: .automatic(desiredCount: 6)) { value in
+                AxisGridLine()
+                AxisTick()
+                AxisValueLabel(format: .dateTime.weekday().day())
+            }
         }
     }
 
@@ -315,15 +375,15 @@ public struct NativeMeteogramChartView: View {
             HStack {
                 Label("Cloud Cover [%]", systemImage: "cloud.fill")
                     .font(.caption.bold())
-                    .foregroundColor(.yellow)
+                    .foregroundColor(Color(red: 202/255, green: 138/255, blue: 4/255))
 
                 Spacer()
 
-                HStack(spacing: 10) {
-                    legendItem(title: "Total (Bars)", color: .yellow)
-                    legendItem(title: "High", color: .cyan, isLine: true)
-                    legendItem(title: "Mid", color: .teal, isLine: true)
-                    legendItem(title: "Low", color: .pink, isLine: true)
+                HStack(spacing: 12) {
+                    legendItem(title: "Total (Bars)", color: Color(red: 250/255, green: 204/255, blue: 21/255))
+                    legendItem(title: "High (cirrus)", color: Color(red: 6/255, green: 182/255, blue: 212/255), isLine: true)
+                    legendItem(title: "Medium (alto)", color: Color(red: 16/255, green: 185/255, blue: 129/255), isLine: true)
+                    legendItem(title: "Low (stratus)", color: Color(red: 225/255, green: 29/255, blue: 72/255), isLine: true)
                 }
                 .font(.caption2)
             }
@@ -357,17 +417,26 @@ public struct NativeMeteogramChartView: View {
 
     @ChartContentBuilder
     private func cloudBars(points: [TimeSeriesPoint]) -> some ChartContent {
+        // Full ensemble min-max spread
         ForEach(points) { p in
-            if let cMin = p.cloudTotalMin, let cMax = p.cloudTotalMax, cMax > 0 {
+            if let cMin = p.cloudTotalMin, let cMax = p.cloudTotalMax, (cMax > 0 || cMin > 0) {
                 BarMark(
                     x: .value("Time", p.date),
                     yStart: .value("Min", cMin),
                     yEnd: .value("Max", cMax)
                 )
-                .foregroundStyle(Color.yellow.opacity(0.35))
+                .foregroundStyle(Color(red: 254/255, green: 240/255, blue: 138/255).opacity(0.55))
+            } else if p.cloudTotalMin == nil && p.cloudTotalMedian > 0 {
+                // Deterministic / single-member fallback
+                BarMark(
+                    x: .value("Time", p.date),
+                    y: .value("Total", p.cloudTotalMedian)
+                )
+                .foregroundStyle(Color(red: 250/255, green: 204/255, blue: 21/255).opacity(0.82))
             }
         }
 
+        // 50% interquartile spread (Q25-Q75)
         ForEach(points) { p in
             if let cQ25 = p.cloudTotalQ25, let cQ75 = p.cloudTotalQ75, cQ75 > 0 {
                 BarMark(
@@ -375,52 +444,60 @@ public struct NativeMeteogramChartView: View {
                     yStart: .value("Q25", cQ25),
                     yEnd: .value("Q75", cQ75)
                 )
-                .foregroundStyle(Color.yellow.opacity(0.75))
+                .foregroundStyle(Color(red: 250/255, green: 204/255, blue: 21/255).opacity(0.85))
             }
         }
     }
 
     @ChartContentBuilder
     private func cloudLayerLines(points: [TimeSeriesPoint]) -> some ChartContent {
+        // 1. Total Cloud Median line (Golden amber)
         ForEach(points) { p in
             LineMark(
                 x: .value("Time", p.date),
-                y: .value("Total Median", p.cloudTotalMedian)
+                y: .value("Total Median", p.cloudTotalMedian),
+                series: .value("Layer", "Total")
             )
-            .foregroundStyle(Color.orange)
+            .foregroundStyle(Color(red: 202/255, green: 138/255, blue: 4/255))
             .lineStyle(StrokeStyle(lineWidth: 1.8))
         }
 
+        // 2. High Clouds: Blue / Cyan (#06b6d4)
         ForEach(points) { p in
             if let cHigh = p.cloudHigh {
                 LineMark(
                     x: .value("Time", p.date),
-                    y: .value("High", cHigh)
+                    y: .value("High", cHigh),
+                    series: .value("Layer", "High")
                 )
-                .foregroundStyle(Color.cyan)
-                .lineStyle(StrokeStyle(lineWidth: 1.4))
+                .foregroundStyle(Color(red: 6/255, green: 182/255, blue: 212/255))
+                .lineStyle(StrokeStyle(lineWidth: 1.8))
             }
         }
 
+        // 3. Medium Clouds: Green / Emerald (#10b981)
         ForEach(points) { p in
             if let cMid = p.cloudMid {
                 LineMark(
                     x: .value("Time", p.date),
-                    y: .value("Mid", cMid)
+                    y: .value("Mid", cMid),
+                    series: .value("Layer", "Mid")
                 )
-                .foregroundStyle(Color.teal)
-                .lineStyle(StrokeStyle(lineWidth: 1.4))
+                .foregroundStyle(Color(red: 16/255, green: 185/255, blue: 129/255))
+                .lineStyle(StrokeStyle(lineWidth: 1.8))
             }
         }
 
+        // 4. Low Clouds: Red / Crimson (#e11d48)
         ForEach(points) { p in
             if let cLow = p.cloudLow {
                 LineMark(
                     x: .value("Time", p.date),
-                    y: .value("Low", cLow)
+                    y: .value("Low", cLow),
+                    series: .value("Layer", "Low")
                 )
-                .foregroundStyle(Color.pink)
-                .lineStyle(StrokeStyle(lineWidth: 1.4))
+                .foregroundStyle(Color(red: 225/255, green: 29/255, blue: 72/255))
+                .lineStyle(StrokeStyle(lineWidth: 1.8))
             }
         }
     }
@@ -611,12 +688,17 @@ public struct NativeMeteogramChartView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(point.date.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption.bold())
-                    .foregroundColor(.primary)
-                if let sunAlt = point.sunAltitude {
-                    Text(String(format: "☀️ Alt: %.1f°", sunAlt))
-                        .font(.system(size: 10))
-                        .foregroundColor(.orange)
+                HStack(spacing: 4) {
+                    if let sunAlt = point.sunAltitude, sunAlt > 0 {
+                        Text(String(format: "☀ %.0f°", sunAlt))
+                            .foregroundColor(Color(red: 244/255, green: 162/255, blue: 97/255))
+                    }
+                    if let moonAlt = point.moonAltitude, moonAlt > 0 {
+                        Text(String(format: "🌙 %.0f°", moonAlt))
+                            .foregroundColor(Color(red: 0/255, green: 180/255, blue: 216/255))
+                    }
                 }
+                .font(.system(size: 9, weight: .semibold))
             }
 
             Divider().frame(height: 30)
@@ -653,10 +735,16 @@ public struct NativeMeteogramChartView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(String(format: "☁ %.0f%%", point.cloudTotalMedian))
                     .font(.subheadline.bold())
-                    .foregroundColor(.yellow)
-                Text(String(format: "H:%.0f M:%.0f L:%.0f", point.cloudHigh ?? 0, point.cloudMid ?? 0, point.cloudLow ?? 0))
-                    .font(.system(size: 9))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color(red: 202/255, green: 138/255, blue: 4/255))
+                HStack(spacing: 4) {
+                    Text(String(format: "H:%.0f", point.cloudHigh ?? 0))
+                        .foregroundColor(Color(red: 6/255, green: 182/255, blue: 212/255))
+                    Text(String(format: "M:%.0f", point.cloudMid ?? 0))
+                        .foregroundColor(Color(red: 16/255, green: 185/255, blue: 129/255))
+                    Text(String(format: "L:%.0f", point.cloudLow ?? 0))
+                        .foregroundColor(Color(red: 225/255, green: 29/255, blue: 72/255))
+                }
+                .font(.system(size: 9, weight: .bold))
             }
 
             Divider().frame(height: 30)

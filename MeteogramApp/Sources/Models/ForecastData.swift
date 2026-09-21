@@ -161,8 +161,9 @@ public struct TimeSeriesPoint: Identifiable, Sendable {
     public let pressureMin: Double?
     public let pressureMax: Double?
 
-    // Solar Elevation (Degrees above horizon)
+    // Celestial Elevation (Degrees above horizon)
     public let sunAltitude: Double?
+    public let moonAltitude: Double?
 
     public var windSpeedKmH: Double {
         windSpeedMedian * 3.6
@@ -229,6 +230,7 @@ extension ForecastResponse {
             let prMax = stats.pressureMsl?.max?[safe: i]
 
             let sunAlt = ForecastResponse.calculateSolarAltitude(date: date, lat: location.latitude, lon: location.longitude)
+            let moonAlt = ForecastResponse.calculateLunarAltitude(date: date, lat: location.latitude, lon: location.longitude)
 
             points.append(TimeSeriesPoint(
                 date: date,
@@ -260,7 +262,8 @@ extension ForecastResponse {
                 pressureQ75: prQ75,
                 pressureMin: prMin,
                 pressureMax: prMax,
-                sunAltitude: sunAlt
+                sunAltitude: sunAlt,
+                moonAltitude: moonAlt
             ))
         }
 
@@ -299,6 +302,43 @@ extension ForecastResponse {
         let sinAlt = sin(phi) * sin(delta) + cos(phi) * cos(delta) * cos(h)
         let altRad = asin(max(-1.0, min(1.0, sinAlt)))
         return altRad * 180.0 / .pi
+    }
+
+    /// Lunar altitude calculation (in degrees above horizon)
+    public static func calculateLunarAltitude(date: Date, lat: Double, lon: Double) -> Double {
+        let tEpoch = date.timeIntervalSince1970
+        let d = (tEpoch - 946728000.0) / 86400.0
+
+        let lMoon = ((218.316 + 13.176396 * d).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)
+        let mMoon = ((134.963 + 13.064993 * d).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)
+        let fMoon = ((93.272 + 13.229350 * d).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)
+
+        let mRad = mMoon * .pi / 180.0
+        let fRad = fMoon * .pi / 180.0
+
+        let lonMoon = lMoon + 6.289 * sin(mRad)
+        let latMoon = 5.128 * sin(fRad)
+
+        let lonRad = lonMoon * .pi / 180.0
+        let latRadMoon = latMoon * .pi / 180.0
+
+        let e = 23.439 - 0.00000036 * d
+        let eRad = e * .pi / 180.0
+
+        let sinDec = sin(latRadMoon) * cos(eRad) + cos(latRadMoon) * sin(eRad) * sin(lonRad)
+        let decRad = asin(max(-1.0, min(1.0, sinDec)))
+
+        let y = sin(lonRad) * cos(eRad) - tan(latRadMoon) * sin(eRad)
+        let x = cos(lonRad)
+        let raRad = atan2(y, x)
+
+        let gmst = ((280.46061837 + 360.98564736629 * d).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)
+        let lstRad = (((gmst + lon).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)) * .pi / 180.0
+        let haRad = lstRad - raRad
+
+        let latRad = lat * .pi / 180.0
+        let sinAlt = sin(latRad) * sin(decRad) + cos(latRad) * cos(decRad) * cos(haRad)
+        return asin(max(-1.0, min(1.0, sinAlt))) * 180.0 / .pi
     }
 }
 
