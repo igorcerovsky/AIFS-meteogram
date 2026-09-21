@@ -33,6 +33,31 @@ public struct MeteogramFetchResult {
     }
 }
 
+public struct ForecastFetchResult {
+    public let forecast: ForecastResponse
+    public let timeSeries: [TimeSeriesPoint]
+    public let actualModel: String
+    public let fallbackUsed: Bool
+    public let fallbackFrom: String
+    public let latencyMs: Double
+
+    public init(
+        forecast: ForecastResponse,
+        timeSeries: [TimeSeriesPoint],
+        actualModel: String,
+        fallbackUsed: Bool,
+        fallbackFrom: String,
+        latencyMs: Double
+    ) {
+        self.forecast = forecast
+        self.timeSeries = timeSeries
+        self.actualModel = actualModel
+        self.fallbackUsed = fallbackUsed
+        self.fallbackFrom = fallbackFrom
+        self.latencyMs = latencyMs
+    }
+}
+
 public enum MeteogramServiceError: LocalizedError {
     case invalidUrl
     case serverError(statusCode: Int, message: String)
@@ -176,6 +201,73 @@ public class MeteogramService {
             fallbackFrom: fallbackFrom,
             latencyMs: elapsedMs,
             isStaticFallback: false
+        )
+    }
+
+    /// Fetches structured forecast JSON data (/api/forecast) for native Swift Charts
+    public func fetchForecastData(
+        serverBaseUrl: String,
+        location: String,
+        horizon: ForecastHorizon,
+        language: ForecastLanguage,
+        timeZone: ForecastTimeZone
+    ) async throws -> ForecastFetchResult {
+        var base = serverBaseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !base.hasPrefix("http://") && !base.hasPrefix("https://") {
+            base = "http://" + base
+        }
+        if base.hasSuffix("/") {
+            base.removeLast()
+        }
+
+        guard var components = URLComponents(string: "\(base)/api/forecast") else {
+            throw MeteogramServiceError.invalidUrl
+        }
+
+        components.queryItems = [
+            URLQueryItem(name: "location", value: location),
+            URLQueryItem(name: "days", value: String(horizon.daysParam)),
+            URLQueryItem(name: "model", value: horizon.modelParam),
+            URLQueryItem(name: "lang", value: language.rawValue),
+            URLQueryItem(name: "tz", value: timeZone.rawValue),
+            URLQueryItem(name: "_t", value: String(Int64(Date().timeIntervalSince1970 * 1000)))
+        ]
+
+        guard let url = components.url else {
+            throw MeteogramServiceError.invalidUrl
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = (base.contains("localhost") || base.contains("127.0.0.1") || base.contains(".local")) ? 8.0 : 35.0
+
+        let startTime = CFAbsoluteTimeGetCurrent()
+        let (data, response) = try await session.data(for: request)
+        let elapsedMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw MeteogramServiceError.decodingError
+        }
+
+        if httpResponse.statusCode != 200 {
+            let errorMsg = String(data: data, encoding: .utf8) ?? "Unknown server error"
+            throw MeteogramServiceError.serverError(statusCode: httpResponse.statusCode, message: errorMsg)
+        }
+
+        let decoder = JSONDecoder()
+        let forecast = try decoder.decode(ForecastResponse.self, from: data)
+        let timeSeries = forecast.toTimeSeriesPoints()
+
+        let actualModel = forecast.model
+        let fallbackUsed = forecast.modelFallback ?? false
+        let fallbackFrom = forecast.fallbackFrom ?? "icon_d2"
+
+        return ForecastFetchResult(
+            forecast: forecast,
+            timeSeries: timeSeries,
+            actualModel: actualModel,
+            fallbackUsed: fallbackUsed,
+            fallbackFrom: fallbackFrom,
+            latencyMs: elapsedMs
         )
     }
 

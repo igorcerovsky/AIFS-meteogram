@@ -42,6 +42,12 @@ public class MeteogramViewModel: ObservableObject {
         }
     }
 
+    // Native Swift Charts State
+    @Published public var forecastData: ForecastResponse?
+    @Published public var timeSeries: [TimeSeriesPoint] = []
+    @Published public var selectedDate: Date?
+    @Published public var displayMode: MeteogramDisplayMode = .nativeCharts
+
     // State
     @Published public var currentImage: PlatformImage?
     @Published public var rawImageData: Data?
@@ -146,6 +152,24 @@ public class MeteogramViewModel: ObservableObject {
         fetchMeteogram()
     }
 
+public enum MeteogramDisplayMode: String, CaseIterable, Identifiable {
+    case nativeCharts = "charts"
+    case rasterImage = "image"
+
+    public var id: String { rawValue }
+    public var displayName: String {
+        switch self {
+        case .nativeCharts: return "Native Swift Charts"
+        case .rasterImage: return "Server Image"
+        }
+    }
+}
+
+    public var selectedPoint: TimeSeriesPoint? {
+        guard let selDate = selectedDate, !timeSeries.isEmpty else { return nil }
+        return timeSeries.min(by: { abs($0.date.timeIntervalSince(selDate)) < abs($1.date.timeIntervalSince(selDate)) })
+    }
+
     public func fetchMeteogram() {
         currentTask?.cancel()
 
@@ -159,8 +183,42 @@ public class MeteogramViewModel: ObservableObject {
         loadingStatusText = "Fetching \(horizon.shortName) forecast for \(loc)..."
 
         currentTask = Task {
+            // 1. Fetch structured forecast data for Native Swift Charts
             do {
-                let result = try await service.fetchMeteogram(
+                let forecastResult = try await service.fetchForecastData(
+                    serverBaseUrl: serverUrl,
+                    location: loc,
+                    horizon: horizon,
+                    language: language,
+                    timeZone: timeZone
+                )
+
+                if Task.isCancelled { return }
+
+                self.forecastData = forecastResult.forecast
+                self.timeSeries = forecastResult.timeSeries
+                self.latencyMs = forecastResult.latencyMs
+                self.lastUpdated = Date()
+                self.isLoading = false
+
+                if forecastResult.fallbackUsed {
+                    if forecastResult.actualModel == "icon_eu" {
+                        self.horizon = .iconEu5
+                    } else if forecastResult.actualModel == "aifs" {
+                        self.horizon = .aifs15
+                    }
+                    self.triggerFallbackAlert(from: forecastResult.fallbackFrom, to: forecastResult.actualModel)
+                } else if !MeteogramConfig.isOutsideIconD2Domain(loc) {
+                    self.showFallbackAlert = false
+                }
+            } catch {
+                if Task.isCancelled { return }
+                print("Forecast JSON fetch error: \(error), falling back to raster image")
+            }
+
+            // 2. Concurrently fetch raster image (for fallback, copy/share, and raster mode)
+            do {
+                let imageResult = try await service.fetchMeteogram(
                     serverBaseUrl: serverUrl,
                     location: loc,
                     horizon: horizon,
@@ -171,36 +229,26 @@ public class MeteogramViewModel: ObservableObject {
                 if Task.isCancelled { return }
 
                 #if canImport(AppKit)
-                guard let image = NSImage(data: result.imageData) else {
+                guard let image = NSImage(data: imageResult.imageData) else {
                     throw MeteogramServiceError.decodingError
                 }
                 #elseif canImport(UIKit)
-                guard let image = UIImage(data: result.imageData) else {
+                guard let image = UIImage(data: imageResult.imageData) else {
                     throw MeteogramServiceError.decodingError
                 }
                 #endif
 
                 self.currentImage = image
-                self.rawImageData = result.imageData
-                self.latencyMs = result.latencyMs
-                self.lastUpdated = Date()
-                self.isUsingStaticFallback = result.isStaticFallback
+                self.rawImageData = imageResult.imageData
+                self.isUsingStaticFallback = imageResult.isStaticFallback
                 self.isLoading = false
-
-                if result.fallbackUsed {
-                    if result.actualModel == "icon_eu" {
-                        self.horizon = .iconEu5
-                    } else if result.actualModel == "aifs" {
-                        self.horizon = .aifs15
-                    }
-                    self.triggerFallbackAlert(from: result.fallbackFrom, to: result.actualModel)
-                } else if !MeteogramConfig.isOutsideIconD2Domain(loc) {
-                    self.showFallbackAlert = false
-                }
             } catch {
                 if Task.isCancelled { return }
-                self.isLoading = false
-                self.errorMessage = error.localizedDescription
+                // Only set error if we don't have timeSeries either
+                if self.timeSeries.isEmpty {
+                    self.isLoading = false
+                    self.errorMessage = error.localizedDescription
+                }
             }
         }
     }

@@ -20,6 +20,8 @@
 		AA01000B2C00000100000001 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA02000B2C00000100000001 /* SettingsView.swift */; };
 		AA01000C2C00000100000001 /* PresetsRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA02000C2C00000100000001 /* PresetsRowView.swift */; };
 		AA01000E2C00000100000001 /* ModelPillsBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA02000F2C00000100000001 /* ModelPillsBar.swift */; };
+		AA0100102C00000100000001 /* ForecastData.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200102C00000100000001 /* ForecastData.swift */; };
+		AA0100112C00000100000001 /* NativeMeteogramChartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200112C00000100000001 /* NativeMeteogramChartView.swift */; };
 		AA01000D2C00000100000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA02000D2C00000100000001 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -38,6 +40,8 @@
 		AA02000B2C00000100000001 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		AA02000C2C00000100000001 /* PresetsRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetsRowView.swift; sourceTree = "<group>"; };
 		AA02000F2C00000100000001 /* ModelPillsBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPillsBar.swift; sourceTree = "<group>"; };
+		AA0200102C00000100000001 /* ForecastData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForecastData.swift; sourceTree = "<group>"; };
+		AA0200112C00000100000001 /* NativeMeteogramChartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeMeteogramChartView.swift; sourceTree = "<group>"; };
 		AA02000D2C00000100000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA02000E2C00000100000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -79,6 +83,7 @@
 			children = (
 				AA0200022C00000100000001 /* ForecastModel.swift */,
 				AA0200032C00000100000001 /* MeteogramConfig.swift */,
+				AA0200102C00000100000001 /* ForecastData.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -118,6 +123,7 @@
 				AA02000B2C00000100000001 /* SettingsView.swift */,
 				AA02000C2C00000100000001 /* PresetsRowView.swift */,
 				AA02000F2C00000100000001 /* ModelPillsBar.swift */,
+				AA0200112C00000100000001 /* NativeMeteogramChartView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -214,6 +220,8 @@
 				AA01000B2C00000100000001 /* SettingsView.swift in Sources */,
 				AA01000C2C00000100000001 /* PresetsRowView.swift in Sources */,
 				AA01000E2C00000100000001 /* ModelPillsBar.swift in Sources */,
+				AA0100102C00000100000001 /* ForecastData.swift in Sources */,
+				AA0100112C00000100000001 /* NativeMeteogramChartView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

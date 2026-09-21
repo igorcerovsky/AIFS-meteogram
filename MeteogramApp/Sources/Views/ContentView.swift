@@ -46,26 +46,45 @@ public struct ContentView: View {
                 .zIndex(9)
             }
 
-            // Interactive Meteogram Chart Viewer (Maximizes screen!)
-            MeteogramImageViewer(
-                image: viewModel.currentImage,
-                isLoading: viewModel.isLoading,
-                statusText: viewModel.loadingStatusText,
-                errorMessage: viewModel.errorMessage,
-                onRetry: {
-                    viewModel.fetchMeteogram()
-                },
-                onSwipeLeft: {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                        viewModel.switchToNextModel()
-                    }
-                },
-                onSwipeRight: {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                        viewModel.switchToPreviousModel()
-                    }
+            // Meteogram Chart Viewer: Native Swift Charts or Server Raster Image
+            Group {
+                if viewModel.displayMode == .nativeCharts && !viewModel.timeSeries.isEmpty {
+                    NativeMeteogramChartView(
+                        viewModel: viewModel,
+                        selectedDate: $viewModel.selectedDate,
+                        onSwipeLeft: {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                viewModel.switchToNextModel()
+                            }
+                        },
+                        onSwipeRight: {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                viewModel.switchToPreviousModel()
+                            }
+                        }
+                    )
+                } else {
+                    MeteogramImageViewer(
+                        image: viewModel.currentImage,
+                        isLoading: viewModel.isLoading,
+                        statusText: viewModel.loadingStatusText,
+                        errorMessage: viewModel.errorMessage,
+                        onRetry: {
+                            viewModel.fetchMeteogram()
+                        },
+                        onSwipeLeft: {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                viewModel.switchToNextModel()
+                            }
+                        },
+                        onSwipeRight: {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                viewModel.switchToPreviousModel()
+                            }
+                        }
+                    )
                 }
-            )
+            }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
             .zIndex(1)
@@ -78,12 +97,25 @@ public struct ContentView: View {
             SettingsView(viewModel: viewModel)
         }
         .onAppear {
-            if viewModel.currentImage == nil {
+            if viewModel.timeSeries.isEmpty && viewModel.currentImage == nil {
                 viewModel.fetchMeteogram()
             }
         }
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
+                // View Mode Toggle (Native Charts vs Server Image)
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        viewModel.displayMode = (viewModel.displayMode == .nativeCharts) ? .rasterImage : .nativeCharts
+                    }
+                }) {
+                    Label(
+                        viewModel.displayMode == .nativeCharts ? "Native Charts" : "Raster Image",
+                        systemImage: viewModel.displayMode == .nativeCharts ? "chart.xyaxis.line" : "photo"
+                    )
+                }
+                .help("Toggle between Native Swift Charts and Server Image")
+
                 // Refresh
                 Button(action: { viewModel.fetchMeteogram() }) {
                     Label("Refresh", systemImage: "arrow.clockwise")
