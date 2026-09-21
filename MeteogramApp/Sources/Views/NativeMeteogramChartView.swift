@@ -580,16 +580,18 @@ public struct NativeMeteogramChartView: View {
         let arrowPoints = points.enumerated().filter { $0.offset % sampleStep == 0 }.map(\.element)
 
         return VStack(alignment: .leading, spacing: 4) {
-            HStack {
+            HStack(spacing: 6) {
                 Label("10m Wind Speed [km/h] & Direction", systemImage: "wind")
                     .font(.caption.bold())
                     .foregroundColor(.brown)
 
                 Spacer()
 
+                windCurveThicknessLegend
+
                 windSpeedScaleBar
 
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     legendItem(title: "Median", color: .brown, isLine: true)
                     legendItem(title: "Spread", color: .brown.opacity(0.2))
                 }
@@ -1070,6 +1072,30 @@ public struct NativeMeteogramChartView: View {
         }
     }
 
+    private var windCurveThicknessLegend: some View {
+        HStack(spacing: 3) {
+            Text("<2")
+                .font(.system(size: 7))
+                .foregroundColor(.secondary)
+
+            TaperedWedgeShape()
+                .fill(
+                    LinearGradient(
+                        colors: [Color(red: 16/255, green: 185/255, blue: 129/255),
+                                 Color(red: 37/255, green: 99/255, blue: 235/255),
+                                 Color(red: 239/255, green: 68/255, blue: 68/255)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(width: 22, height: 6)
+
+            Text("≥15")
+                .font(.system(size: 7))
+                .foregroundColor(.secondary)
+        }
+    }
+
     private func scaleBadge(label: String, color: Color) -> some View {
         Text(label)
             .font(.system(size: 7, weight: .bold))
@@ -1079,6 +1105,25 @@ public struct NativeMeteogramChartView: View {
             .background(color)
             .cornerRadius(2)
     }
+
+// MARK: - Tapered Wedge Shape
+public struct TaperedWedgeShape: Shape {
+    public init() {}
+
+    public func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let r1: CGFloat = 0.8
+        let r2: CGFloat = rect.height / 2.0
+        let midY = rect.midY
+        path.move(to: CGPoint(x: rect.minX, y: midY - r1))
+        path.addLine(to: CGPoint(x: rect.maxX - r2, y: midY - r2))
+        path.addArc(center: CGPoint(x: rect.maxX - r2, y: midY), radius: r2, startAngle: .degrees(-90), endAngle: .degrees(90), clockwise: false)
+        path.addLine(to: CGPoint(x: rect.minX, y: midY + r1))
+        path.addArc(center: CGPoint(x: rect.minX, y: midY), radius: r1, startAngle: .degrees(90), endAngle: .degrees(270), clockwise: false)
+        path.closeSubpath()
+        return path
+    }
+}
 
     // MARK: - Helpers
     private func legendItem(title: String, color: Color, isLine: Bool = false) -> some View {

@@ -38,6 +38,7 @@ const METEO_TRANSLATIONS = {
     wind_light: "Light breeze",
     wind_moderate: "Moderate breeze",
     wind_strong: "Strong breeze / Gale",
+    curve_thickness: "Curve thickness",
     local_time: "Local Time",
     utc_time: "UTC",
     above_horizon: "Daylight / Above horizon",
@@ -77,6 +78,7 @@ const METEO_TRANSLATIONS = {
     wind_light: "Mierny vietor",
     wind_moderate: "Čerstvý vietor",
     wind_strong: "Silný vietor / Víchrica",
+    curve_thickness: "Hrúbka krivky",
     local_time: "Miestny čas",
     utc_time: "UTC",
     above_horizon: "Deň / Nad obzorom",
@@ -1735,6 +1737,51 @@ class MeteogramChart {
       ctx.fillText(tier.label, curX + tier.w / 2, scaleY + barH / 2);
       curX += tier.w;
     }
+
+    // Wind Curve Thickness Legend (thickness ~ wind speed)
+    const thickX = curX + 16;
+    ctx.font = "bold 9px 'Inter', sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#475569";
+    const labelText = (t.curve_thickness || "Curve thickness") + ":";
+    ctx.fillText(labelText, thickX, scaleY + barH / 2);
+
+    const lblW = ctx.measureText(labelText).width;
+    const wedgeX1 = thickX + lblW + 24;
+    const wedgeW = 36;
+    const wedgeX2 = wedgeX1 + wedgeW;
+    const centerY = scaleY + barH / 2;
+
+    // Small min speed label
+    ctx.font = "8px 'Inter', sans-serif";
+    ctx.fillStyle = "#64748b";
+    ctx.textAlign = "right";
+    ctx.fillText("< 2", wedgeX1 - 5, centerY);
+
+    // Tapered wedge showing variable thickness (1.2px -> 5.5px)
+    const r1 = 0.7;
+    const r2 = 2.75;
+    ctx.beginPath();
+    ctx.moveTo(wedgeX1, centerY - r1);
+    ctx.lineTo(wedgeX2, centerY - r2);
+    ctx.arc(wedgeX2, centerY, r2, -Math.PI / 2, Math.PI / 2);
+    ctx.lineTo(wedgeX1, centerY + r1);
+    ctx.arc(wedgeX1, centerY, r1, Math.PI / 2, -Math.PI / 2);
+    ctx.closePath();
+
+    // Gradient filling the tapered wedge matching speed scale colors
+    const wedgeGrad = ctx.createLinearGradient(wedgeX1, centerY, wedgeX2, centerY);
+    wedgeGrad.addColorStop(0, "#10b981");
+    wedgeGrad.addColorStop(0.5, "#2563eb");
+    wedgeGrad.addColorStop(1, "#ef4444");
+    ctx.fillStyle = wedgeGrad;
+    ctx.fill();
+
+    // Max speed label
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#64748b";
+    ctx.fillText("≥ 15 m/s", wedgeX2 + 4, centerY);
 
     ctx.restore();
     this.panels.p4.valToY = valToY;
