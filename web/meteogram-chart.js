@@ -1532,11 +1532,11 @@ class MeteogramChart {
     const ySpan = yBottom - yTop;
 
     const dirLevels = [
-      { y: yTop, label: "N", col: "#2563eb" },
-      { y: yTop + ySpan * 0.25, label: "W", col: "#8b5cf6" },
-      { y: yTop + ySpan * 0.50, label: "S", col: "#ef4444" },
-      { y: yTop + ySpan * 0.75, label: "E", col: "#10b981" },
-      { y: yBottom, label: "N", col: "#2563eb" }
+      { y: yTop, label: "N", col: "#64748b" },
+      { y: yTop + ySpan * 0.25, label: "W", col: "#64748b" },
+      { y: yTop + ySpan * 0.50, label: "S", col: "#64748b" },
+      { y: yTop + ySpan * 0.75, label: "E", col: "#64748b" },
+      { y: yBottom, label: "N", col: "#64748b" }
     ];
 
     const dirToY = (dir) => {

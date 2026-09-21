@@ -823,22 +823,17 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                 AxisMarks(position: .trailing, values: [yN_bot, yE, yS, yW, yN_top]) { val in
                     AxisValueLabel {
                         if let v = val.as(Double.self) {
-                            if abs(v - yN_top) < 1.0 || abs(v - yN_bot) < 1.0 {
-                                Text("N")
+                            let label: String = {
+                                if abs(v - yN_top) < 1.0 || abs(v - yN_bot) < 1.0 { return "N" }
+                                if abs(v - yW) < 1.0 { return "W" }
+                                if abs(v - yS) < 1.0 { return "S" }
+                                if abs(v - yE) < 1.0 { return "E" }
+                                return ""
+                            }()
+                            if !label.isEmpty {
+                                Text(label)
                                     .font(.system(size: 9.5, weight: .bold))
-                                    .foregroundColor(Color(red: 37/255, green: 99/255, blue: 235/255))
-                            } else if abs(v - yW) < 1.0 {
-                                Text("W")
-                                    .font(.system(size: 9.5, weight: .bold))
-                                    .foregroundColor(Color(red: 139/255, green: 92/255, blue: 246/255))
-                            } else if abs(v - yS) < 1.0 {
-                                Text("S")
-                                    .font(.system(size: 9.5, weight: .bold))
-                                    .foregroundColor(Color(red: 239/255, green: 68/255, blue: 68/255))
-                            } else if abs(v - yE) < 1.0 {
-                                Text("E")
-                                    .font(.system(size: 9.5, weight: .bold))
-                                    .foregroundColor(Color(red: 16/255, green: 185/255, blue: 129/255))
+                                    .foregroundColor(.secondary)
                             }
                         }
                     }
