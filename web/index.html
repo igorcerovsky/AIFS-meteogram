@@ -222,90 +222,201 @@
       background: var(--card-bg);
       border: 1px solid var(--card-border);
       border-radius: 14px;
-      padding: 1.5rem;
+      padding: 1rem 1.25rem;
       backdrop-filter: blur(12px);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-    }
-
-    .form-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 1rem;
-      align-items: flex-end;
-    }
-
-    .form-group {
+      box-shadow: 0 4px 20px rgba(0,0,0,0.06);
       display: flex;
       flex-direction: column;
-      gap: 0.4rem;
+      gap: 0.75rem;
+    }
+
+    .control-top-row {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .search-box {
+      position: relative;
       flex: 1;
-      min-width: 220px;
+      min-width: 260px;
+      display: flex;
+      align-items: center;
     }
 
-    label {
-      font-size: 0.85rem;
-      font-weight: 600;
+    .search-icon {
+      position: absolute;
+      left: 14px;
       color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
+      pointer-events: none;
     }
 
-    input, select {
+    .search-box input {
+      width: 100%;
+      padding-left: 40px;
+      padding-right: 12px;
+      height: 42px;
+      border-radius: 10px;
+      font-size: 0.92rem;
+      font-weight: 500;
       background: var(--input-bg);
       border: 1px solid var(--card-border);
-      border-radius: 8px;
       color: var(--text-main);
-      padding: 0.75rem 1rem;
-      font-size: 0.95rem;
       font-family: inherit;
       outline: none;
       transition: all 0.2s;
     }
 
-    input:focus, select:focus {
+    .search-box input:focus {
       border-color: var(--accent-blue);
       box-shadow: 0 0 0 3px rgba(56, 139, 253, 0.2);
     }
 
-    button.btn-primary {
-      background: linear-gradient(180deg, #1f6feb 0%, #1a56db 100%);
-      color: white;
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 8px;
-      padding: 0.75rem 1.75rem;
-      font-size: 0.95rem;
-      font-weight: 600;
-      cursor: pointer;
+    .quick-settings {
       display: flex;
-      align-items: center;
       gap: 0.5rem;
+      align-items: center;
+    }
+
+    .select-wrapper {
+      display: inline-flex;
+      align-items: center;
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 0 0.5rem;
+      height: 42px;
+      gap: 5px;
+      font-size: 0.85rem;
       transition: all 0.2s;
-      height: 44px;
-      box-shadow: 0 4px 14px rgba(31, 111, 235, 0.35);
     }
 
-    button.btn-primary:hover {
-      background: linear-gradient(180deg, #388bfd 0%, #1f6feb 100%);
-      transform: translateY(-1px);
+    .select-wrapper:hover, .select-wrapper:focus-within {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 2px rgba(56, 139, 253, 0.15);
     }
 
-    button.btn-primary:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-      transform: none;
+    .select-icon {
+      font-size: 0.95rem;
+      opacity: 0.85;
+      user-select: none;
+    }
+
+    .select-wrapper select {
+      background: transparent;
+      border: none;
+      padding: 0 0.25rem;
+      height: 100%;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-main);
+      cursor: pointer;
+      outline: none;
+      box-shadow: none !important;
+      font-family: inherit;
+    }
+
+    .select-wrapper select option {
+      background: var(--card-bg, #ffffff);
+      color: var(--text-main, #0f172a);
+    }
+
+    /* Model Pills Bar (Native App Style) */
+    .model-pills-container {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 1px 0;
+    }
+
+    .model-pills-bar {
+      display: flex;
+      gap: 6px;
+      background: var(--theme-switch-bg);
+      padding: 4px;
+      border-radius: 12px;
+      border: 1px solid var(--theme-switch-border);
+      min-width: 520px;
+    }
+
+    .model-pill {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+      font-family: inherit;
+      user-select: none;
+      text-align: center;
+    }
+
+    .model-pill:hover:not(.active) {
+      background: rgba(148, 163, 184, 0.15);
+      color: var(--text-main);
+    }
+
+    .model-pill.active {
+      background: var(--accent-blue);
+      color: #ffffff !important;
+      border-color: rgba(255, 255, 255, 0.18);
+      box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+    }
+
+    .model-pill .pill-title {
+      font-size: 0.88rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .model-pill .pill-sub {
+      font-size: 0.68rem;
+      opacity: 0.75;
+      white-space: nowrap;
+      margin-top: 1px;
+    }
+
+    .model-pill.active .pill-sub {
+      opacity: 0.95;
+      color: rgba(255, 255, 255, 0.95);
+      font-weight: 500;
+    }
+
+    .model-pill.outside-coverage {
+      opacity: 0.65;
+    }
+
+    .model-pill.outside-coverage .pill-title {
+      text-decoration: line-through;
+      text-decoration-color: #f59e0b;
+    }
+
+    .model-pill.outside-coverage .pill-sub {
+      color: #f59e0b !important;
+      font-weight: 600;
+      opacity: 1;
     }
 
     .presets {
       display: flex;
-      gap: 0.5rem;
-      margin-top: 1rem;
+      gap: 0.4rem;
+      margin-top: 0.2rem;
       flex-wrap: wrap;
       align-items: center;
     }
 
-    .presets span {
-      font-size: 0.8rem;
+    .presets-label {
+      font-size: 0.78rem;
+      font-weight: 600;
       color: var(--text-muted);
+      margin-right: 0.2rem;
     }
 
     .chip {
@@ -711,58 +822,71 @@
   <main>
     <section class="control-panel">
       <form id="meteogram-form" onsubmit="event.preventDefault(); updateMeteogram(); return false;">
-        <div class="form-row">
-          <div class="form-group" style="flex: 2;">
-            <label for="location">Location / Coordinates (lat, lon)</label>
-            <input type="text" id="location" name="location" value="Bratislava-Koliba" placeholder="e.g. Bratislava-Koliba, Liptovsky Mikulas, Jasna, Plavecke Podhradie" required />
-          </div>
+        <!-- Hidden input for backward compatibility with existing days param -->
+        <input type="hidden" id="days" name="days" value="15" />
 
-          <div class="form-group">
-            <label for="days">Forecast Horizon & Model</label>
-            <select id="days" name="days">
-              <optgroup label="ECMWF AIFS (Global AI Ensemble - 50 members)">
-                <option value="15" selected>15 days (Full AI horizon)</option>
-                <option value="10">10 days</option>
-                <option value="7">7 days (1 week)</option>
-              </optgroup>
-              <optgroup label="Regional High-Resolution Ensembles (ALADIN style)">
-                <option value="icon_eu_5">5 days (DWD ICON-EU, 7 km - 40 members)</option>
-                <option value="icon_d2_2">2 days / 48h (DWD ICON-D2, 2.2 km - 20 members)</option>
-              </optgroup>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label for="lang">Language</label>
-            <select id="lang" name="lang">
-              <option value="en" selected>English (Default)</option>
-              <option value="sk">Slovenčina (SHMÚ)</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label for="tz">Time Zone</label>
-            <select id="tz" name="tz">
-              <option value="local" selected>Local Time (Default)</option>
-              <option value="utc">UTC</option>
-            </select>
-          </div>
-
-          <button type="button" id="generate-btn" class="btn-primary" onclick="updateMeteogram()">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+        <!-- Top Row: Location Search Bar + Quick Settings (Language & Timezone) -->
+        <div class="control-top-row">
+          <div class="search-box">
+            <svg class="search-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
-            Generate Graph
-          </button>
+            <input type="text" id="location" name="location" value="Bratislava-Koliba" placeholder="Search city, summit or coordinates (lat, lon)..." required autocomplete="off" />
+          </div>
+
+          <div class="quick-settings">
+            <div class="select-wrapper" title="Language">
+              <span class="select-icon">🌐</span>
+              <select id="lang" name="lang" aria-label="Language">
+                <option value="en" selected>English</option>
+                <option value="sk">Slovenčina</option>
+              </select>
+            </div>
+
+            <div class="select-wrapper" title="Time Zone">
+              <span class="select-icon">🕒</span>
+              <select id="tz" name="tz" aria-label="Time Zone">
+                <option value="local" selected>Local Time</option>
+                <option value="utc">UTC</option>
+              </select>
+            </div>
+          </div>
         </div>
 
+        <!-- Model Pills Bar (Native App Style: 15d, 2d, 5d, 10d, 7d) -->
+        <div class="model-pills-container">
+          <div class="model-pills-bar" role="tablist" aria-label="Forecast Horizon & Model">
+            <button type="button" class="model-pill active" data-model="15" onclick="switchModel('15')">
+              <span class="pill-title">15d</span>
+              <span class="pill-sub">ECMWF AIFS</span>
+            </button>
+            <button type="button" class="model-pill" data-model="icon_d2_2" id="pill-icon-d2" onclick="switchModel('icon_d2_2')">
+              <span class="pill-title">2d</span>
+              <span class="pill-sub" id="sub-icon-d2">DWD ICON-D2</span>
+            </button>
+            <button type="button" class="model-pill" data-model="icon_eu_5" onclick="switchModel('icon_eu_5')">
+              <span class="pill-title">5d</span>
+              <span class="pill-sub">DWD ICON-EU</span>
+            </button>
+            <button type="button" class="model-pill" data-model="10" onclick="switchModel('10')">
+              <span class="pill-title">10d</span>
+              <span class="pill-sub">ECMWF AIFS</span>
+            </button>
+            <button type="button" class="model-pill" data-model="7" onclick="switchModel('7')">
+              <span class="pill-title">7d</span>
+              <span class="pill-sub">ECMWF AIFS</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Presets Row -->
         <div class="presets">
-          <span>Default Locations:</span>
+          <span class="presets-label">Popular:</span>
           <button type="button" class="chip active-preset" onclick="setLoc('Bratislava-Koliba')">📍 Bratislava-Koliba</button>
-          <button type="button" class="chip" onclick="setLoc('Liptovsky Mikulas')">📍 Liptovsky Mikulas</button>
-          <button type="button" class="chip" onclick="setLoc('Jasna')">📍 Jasna</button>
-          <button type="button" class="chip" onclick="setLoc('Plavecke Podhradie')">📍 Plavecke Podhradie</button>
-          <span style="margin-left: 0.5rem;">More:</span>
+          <button type="button" class="chip" onclick="setLoc('Liptovsky Mikulas')">📍 Liptovský Mikuláš</button>
+          <button type="button" class="chip" onclick="setLoc('Jasna')">📍 Jasná</button>
+          <button type="button" class="chip" onclick="setLoc('Plavecke Podhradie')">📍 Plavecké Podhradie</button>
           <button type="button" class="chip" onclick="setLoc('Košice')">Košice</button>
           <button type="button" class="chip" onclick="setLoc('Poprad')">Poprad / Tatry</button>
           <button type="button" class="chip" onclick="setLoc('Vienna')">Vienna</button>
@@ -850,20 +974,55 @@
       return outsideKeywords.some(kw => norm.includes(kw));
     }
 
+    function updateModelPillsUI(activeHorizon) {
+      let norm = String(activeHorizon || '15');
+      if (norm === 'icon_d2') norm = 'icon_d2_2';
+      if (norm === 'icon_eu') norm = 'icon_eu_5';
+
+      document.querySelectorAll('.model-pill').forEach(btn => {
+        if (btn.getAttribute('data-model') === norm) {
+          btn.classList.add('active');
+          btn.setAttribute('aria-selected', 'true');
+        } else {
+          btn.classList.remove('active');
+          btn.setAttribute('aria-selected', 'false');
+        }
+      });
+    }
+
+    function switchModel(horizonVal) {
+      const loc = document.getElementById('location').value.trim();
+      const lang = document.getElementById('lang').value;
+      if ((horizonVal === 'icon_d2_2' || horizonVal === 'icon_d2') && isKnownOutsideIconD2(loc)) {
+        horizonVal = 'icon_eu_5';
+        showAlert(loc, 'icon_d2', 'icon_eu', lang);
+      } else if (!isKnownOutsideIconD2(loc)) {
+        hideAlert();
+      }
+      document.getElementById('days').value = horizonVal;
+      updateModelPillsUI(horizonVal);
+      updateMeteogram(false);
+    }
+
     function checkLocationAndSyncDropdown(loc) {
       if (!loc) return;
       const isOutside = isKnownOutsideIconD2(loc);
-      const daysSelect = document.getElementById('days');
-      const iconD2Opt = daysSelect.querySelector('option[value="icon_d2_2"]');
-      if (iconD2Opt) {
+      const pillD2 = document.getElementById('pill-icon-d2');
+      const subD2 = document.getElementById('sub-icon-d2');
+      const daysInput = document.getElementById('days');
+
+      if (pillD2) {
         if (isOutside) {
-          iconD2Opt.text = '2 days / 48h (DWD ICON-D2) — outside coverage';
-          if (daysSelect.value === 'icon_d2_2') {
-            daysSelect.value = 'icon_eu_5';
+          pillD2.classList.add('outside-coverage');
+          if (subD2) subD2.innerHTML = '⚠️ No coverage';
+          if (daysInput.value === 'icon_d2_2' || daysInput.value === 'icon_d2') {
+            daysInput.value = 'icon_eu_5';
+            updateModelPillsUI('icon_eu_5');
             showAlert(loc, 'icon_d2', 'icon_eu', document.getElementById('lang').value);
           }
         } else {
-          iconD2Opt.text = '2 days / 48h (DWD ICON-D2, 2.2 km - 20 members)';
+          pillD2.classList.remove('outside-coverage');
+          if (subD2) subD2.innerText = 'DWD ICON-D2';
         }
       }
     }
@@ -903,18 +1062,21 @@
     function showLoader(text) {
       document.getElementById('loader-status').innerText = text || 'Rendering meteogram...';
       document.getElementById('loader').style.display = 'flex';
-      document.getElementById('generate-btn').disabled = true;
+      const genBtn = document.getElementById('generate-btn');
+      if (genBtn) genBtn.disabled = true;
     }
 
     function hideLoader() {
       document.getElementById('loader').style.display = 'none';
-      document.getElementById('generate-btn').disabled = false;
+      const genBtn = document.getElementById('generate-btn');
+      if (genBtn) genBtn.disabled = false;
     }
 
     function handleError(msg) {
       document.getElementById('loader').style.display = 'flex';
       document.getElementById('loader-status').innerHTML = msg || 'Error loading forecast. Please check location name or network.';
-      document.getElementById('generate-btn').disabled = false;
+      const genBtn = document.getElementById('generate-btn');
+      if (genBtn) genBtn.disabled = false;
     }
 
     async function updateMeteogram(optionsOnly = false) {
@@ -1005,6 +1167,7 @@
           }
 
           document.getElementById('days').value = newHorizonVal;
+          updateModelPillsUI(newHorizonVal);
           document.getElementById('result-title').innerText = `Meteogram: ${loc} (${newModelLabel})`;
           showAlert(loc, data.fallback_from || 'icon_d2', data.model, lang);
         } else if (!isKnownOutsideIconD2(loc)) {
@@ -1110,6 +1273,7 @@
       } else if (daysParam) {
         document.getElementById('days').value = daysParam;
       }
+      updateModelPillsUI(document.getElementById('days').value);
       if (langParam) document.getElementById('lang').value = langParam;
       if (tzParam) document.getElementById('tz').value = tzParam;
 
