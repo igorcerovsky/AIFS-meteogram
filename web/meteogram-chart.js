@@ -1526,42 +1526,26 @@ class MeteogramChart {
     const yMax = Math.ceil(maxW / 5.0) * 5.0;
     const valToY = (v) => p.bottom - (v / yMax) * p.height;
 
-    // Bounds for vertical wind azimuth levels: N, E, S, W from top to bottom
+    // Bounds for vertical wind azimuth levels: 5 levels N, W, S, E, N from top to bottom (360° loop)
     const yTop = p.top + 28;
     const yBottom = p.bottom - 16;
     const ySpan = yBottom - yTop;
 
     const dirLevels = [
       { y: yTop, label: "N", col: "#2563eb" },
-      { y: yTop + ySpan * (1.0 / 3.0), label: "E", col: "#10b981" },
-      { y: yTop + ySpan * (2.0 / 3.0), label: "S", col: "#ef4444" },
-      { y: yBottom, label: "W", col: "#8b5cf6" }
+      { y: yTop + ySpan * 0.25, label: "W", col: "#8b5cf6" },
+      { y: yTop + ySpan * 0.50, label: "S", col: "#ef4444" },
+      { y: yTop + ySpan * 0.75, label: "E", col: "#10b981" },
+      { y: yBottom, label: "N", col: "#2563eb" }
     ];
 
     const dirToY = (dir) => {
       const d = ((dir % 360) + 360) % 360;
-      let t;
-      if (d <= 90) {
-        // N (0°) to E (90°)
-        const u = (1 - Math.cos((d / 90.0) * Math.PI)) / 2.0;
-        t = u * (1.0 / 3.0);
-      } else if (d <= 180) {
-        // E (90°) to S (180°)
-        const u = (1 - Math.cos(((d - 90.0) / 90.0) * Math.PI)) / 2.0;
-        t = 1.0 / 3.0 + u * (1.0 / 3.0);
-      } else if (d <= 270) {
-        // S (180°) to W (270°)
-        const u = (1 - Math.cos(((d - 180.0) / 90.0) * Math.PI)) / 2.0;
-        t = 2.0 / 3.0 + u * (1.0 / 3.0);
-      } else {
-        // W (270°) to N (360°)
-        const u = (1 - Math.cos(((d - 270.0) / 90.0) * Math.PI)) / 2.0;
-        t = 1.0 - u;
-      }
-      return yTop + t * ySpan;
+      // 360° -> yTop (N), 270° -> W, 180° -> S, 90° -> E, 0° -> yBottom (N)
+      return yTop + ((360.0 - d) / 360.0) * ySpan;
     };
 
-    // Grid lines for 4 wind directions: N, E, S, W
+    // Grid lines for 5 wind direction levels: N, W, S, E, N
     ctx.save();
     ctx.strokeStyle = "rgba(148, 163, 184, 0.45)";
     ctx.lineWidth = 0.85;
@@ -1597,7 +1581,7 @@ class MeteogramChart {
       ctx.fillText(`${v.toFixed(1)} m/s`, this.marginLeft - 6, y);
     }
 
-    // Right axis: Direction legend (N, E, S, W)
+    // Right axis: Direction legend (N, W, S, E, N)
     ctx.font = "bold 9.5px 'Inter', sans-serif";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
@@ -1648,7 +1632,7 @@ class MeteogramChart {
     }
     ctx.stroke();
 
-    // Draw Rotating Meteorological Wind Arrows distributed as a wave by 4-direction azimuth
+    // Draw Rotating Meteorological Wind Arrows distributed as a wave by 5-direction azimuth (N, W, S, E, N)
     if (wDir && wDir.median) {
       // Wind direction trajectory curve colored continuously by wind direction
       ctx.save();
@@ -1657,21 +1641,15 @@ class MeteogramChart {
       ctx.lineJoin = "round";
 
       for (let i = 0; i < this.times.length - 1; i++) {
-        const dir1 = wDir.median[i];
-        const dir2 = wDir.median[i + 1];
+        let dir1 = wDir.median[i];
+        let dir2 = wDir.median[i + 1];
         if (dir1 == null || dir2 == null) continue;
 
+        dir1 = ((dir1 % 360) + 360) % 360;
+        dir2 = ((dir2 % 360) + 360) % 360;
+
         const x1 = this._timeToX(this.times[i].getTime());
-        const y1 = dirToY(dir1);
         const x2 = this._timeToX(this.times[i + 1].getTime());
-        const y2 = dirToY(dir2);
-
-        const col1 = this._getWindDirColor(dir1);
-        const col2 = this._getWindDirColor(dir2);
-
-        const grad = ctx.createLinearGradient(x1, y1, x2, y2);
-        grad.addColorStop(0, col1);
-        grad.addColorStop(1, col2);
 
         // Variable curve thickness according to wind speed (PoC):
         // 1.2px for light winds (< 2 m/s), up to ~5.5px for strong winds (>= 15 m/s)
@@ -1680,22 +1658,74 @@ class MeteogramChart {
         const avgSpd = (spd1 + spd2) / 2.0;
         ctx.lineWidth = Math.max(1.2, Math.min(5.8, 1.2 + (avgSpd / 15.0) * 4.0));
 
-        ctx.strokeStyle = grad;
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
+        // Handle wrap-around across North (360° / 0°)
+        if (dir1 - dir2 > 180) {
+          // Turning clockwise through North (e.g. 350° to 10°)
+          const frac = (360 - dir1) / ((360 - dir1) + dir2);
+          const xMid = x1 + (x2 - x1) * frac;
+          const y1 = dirToY(dir1);
+          const y2 = dirToY(dir2);
+
+          // Sub-segment 1: to top N (360°)
+          const grad1 = ctx.createLinearGradient(x1, y1, xMid, yTop);
+          grad1.addColorStop(0, this._getWindDirColor(dir1));
+          grad1.addColorStop(1, this._getWindDirColor(360));
+          ctx.strokeStyle = grad1;
+          ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(xMid, yTop); ctx.stroke();
+
+          // Sub-segment 2: from bottom N (0°)
+          const grad2 = ctx.createLinearGradient(xMid, yBottom, x2, y2);
+          grad2.addColorStop(0, this._getWindDirColor(0));
+          grad2.addColorStop(1, this._getWindDirColor(dir2));
+          ctx.strokeStyle = grad2;
+          ctx.beginPath(); ctx.moveTo(xMid, yBottom); ctx.lineTo(x2, y2); ctx.stroke();
+        } else if (dir2 - dir1 > 180) {
+          // Turning counter-clockwise through North (e.g. 10° to 350°)
+          const frac = dir1 / (dir1 + (360 - dir2));
+          const xMid = x1 + (x2 - x1) * frac;
+          const y1 = dirToY(dir1);
+          const y2 = dirToY(dir2);
+
+          // Sub-segment 1: to bottom N (0°)
+          const grad1 = ctx.createLinearGradient(x1, y1, xMid, yBottom);
+          grad1.addColorStop(0, this._getWindDirColor(dir1));
+          grad1.addColorStop(1, this._getWindDirColor(0));
+          ctx.strokeStyle = grad1;
+          ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(xMid, yBottom); ctx.stroke();
+
+          // Sub-segment 2: from top N (360°)
+          const grad2 = ctx.createLinearGradient(xMid, yTop, x2, y2);
+          grad2.addColorStop(0, this._getWindDirColor(360));
+          grad2.addColorStop(1, this._getWindDirColor(dir2));
+          ctx.strokeStyle = grad2;
+          ctx.beginPath(); ctx.moveTo(xMid, yTop); ctx.lineTo(x2, y2); ctx.stroke();
+        } else {
+          // Standard continuous segment
+          const y1 = dirToY(dir1);
+          const y2 = dirToY(dir2);
+          const grad = ctx.createLinearGradient(x1, y1, x2, y2);
+          grad.addColorStop(0, this._getWindDirColor(dir1));
+          grad.addColorStop(1, this._getWindDirColor(dir2));
+          ctx.strokeStyle = grad;
+          ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        }
       }
       ctx.restore();
 
       const stepInterval = Math.max(1, Math.round(this.times.length / 28)); // ~28 arrows across width
       for (let i = 0; i < this.times.length; i += stepInterval) {
-        const dir = wDir.median[i];
+        let dir = wDir.median[i];
         const spd = wSpeed.median[i];
         if (dir == null || spd == null) continue;
 
+        dir = ((dir % 360) + 360) % 360;
+        let plotDir = dir;
+        if (plotDir === 0 && i > 0 && wDir.median[i - 1] > 180) {
+          plotDir = 360;
+        }
+
         const x = this._timeToX(this.times[i].getTime());
-        const y = dirToY(dir);
+        const y = dirToY(plotDir);
 
         this._drawWindArrow(x, y, dir, spd);
       }
