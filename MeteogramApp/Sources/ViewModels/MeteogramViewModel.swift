@@ -98,14 +98,22 @@ public class MeteogramViewModel: ObservableObject {
         self.serverUrl = UserDefaults.standard.string(forKey: "serverUrl") ?? defaultUrl
 
         var loadedFavorites = UserDefaults.standard.stringArray(forKey: "favoriteLocations") ?? [
-            "Bratislava-Koliba", "Jasna", "Liptovsky Mikulas", "Repiska"
+            "Bratislava-Koliba", "Repiska", "Liptovsky Mikulas", "Jasna"
         ]
         var favsUpdated = false
         if let kosiceIdx = loadedFavorites.firstIndex(where: { $0.lowercased().contains("kosic") || $0.lowercased().contains("košic") }) {
             loadedFavorites[kosiceIdx] = "Repiska"
             favsUpdated = true
-        } else if !loadedFavorites.contains("Repiska") && !loadedFavorites.contains("Repiská") {
+        }
+        if !loadedFavorites.contains("Repiska") && !loadedFavorites.contains("Repiská") {
             loadedFavorites.append("Repiska")
+            favsUpdated = true
+        }
+        // Switch Repiska and Jasna positions if Jasna comes before Repiska
+        if let jIdx = loadedFavorites.firstIndex(where: { $0.lowercased().contains("jasn") }),
+           let rIdx = loadedFavorites.firstIndex(where: { $0.lowercased().contains("repisk") }),
+           jIdx < rIdx {
+            loadedFavorites.swapAt(jIdx, rIdx)
             favsUpdated = true
         }
         if favsUpdated {

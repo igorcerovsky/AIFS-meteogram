@@ -25,9 +25,9 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 LOCATIONS = [
     {"name": "Bratislava-Koliba", "slug": "bratislava-koliba"},
     {"name": "Liptovsky Mikulas", "slug": "liptovsky-mikulas"},
-    {"name": "Jasna", "slug": "jasna"},
-    {"name": "Plavecke Podhradie", "slug": "plavecke-podhradie"},
     {"name": "Repiska", "slug": "repiska"},
+    {"name": "Plavecke Podhradie", "slug": "plavecke-podhradie"},
+    {"name": "Jasna", "slug": "jasna"},
     {"name": "Poprad", "slug": "poprad"},
     {"name": "Vienna", "slug": "vienna"},
     {"name": "Prague", "slug": "prague"},

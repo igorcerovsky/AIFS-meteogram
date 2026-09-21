@@ -21,9 +21,9 @@ public struct MeteogramConfig {
     public static let defaultPresets: [PresetLocation] = [
         PresetLocation(name: "Bratislava-Koliba", displayName: "📍 Bratislava-Koliba", isMajor: true),
         PresetLocation(name: "Liptovsky Mikulas", displayName: "📍 Liptovský Mikuláš", isMajor: true),
-        PresetLocation(name: "Jasna", displayName: "📍 Jasná", isMajor: true),
-        PresetLocation(name: "Plavecke Podhradie", displayName: "📍 Plavecké Podhradie", isMajor: true),
         PresetLocation(name: "Repiska", displayName: "📍 Repiská", isMajor: true),
+        PresetLocation(name: "Plavecke Podhradie", displayName: "📍 Plavecké Podhradie", isMajor: true),
+        PresetLocation(name: "Jasna", displayName: "📍 Jasná", isMajor: true),
         PresetLocation(name: "Poprad", displayName: "Poprad / Tatry"),
         PresetLocation(name: "Vienna", displayName: "Vienna"),
         PresetLocation(name: "Prague", displayName: "Prague")
