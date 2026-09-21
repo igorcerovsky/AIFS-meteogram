@@ -2284,7 +2284,8 @@ window.MeteogramChart = MeteogramChart;
 const PRESET_COORDS = {
   "bratislava-koliba": { name: "Bratislava - Koliba", country: "Slovakia", latitude: 48.1708, longitude: 17.1086, elevation: 287.0, timezone: "Europe/Bratislava" },
   "liptovsky mikulas": { name: "Liptovský Mikuláš", country: "Slovakia", latitude: 49.0833, longitude: 19.6167, elevation: 577.0, timezone: "Europe/Bratislava" },
-  "jasna": { name: "Jasná - Chopok", country: "Slovakia", latitude: 48.9439, longitude: 19.5898, elevation: 2004.0, timezone: "Europe/Bratislava" },
+  "jasna": { name: "Jasná (Demänovská Dolina)", country: "Slovakia", latitude: 48.9709, longitude: 19.5843, elevation: 1118.0, timezone: "Europe/Bratislava" },
+  "jasná": { name: "Jasná (Demänovská Dolina)", country: "Slovakia", latitude: 48.9709, longitude: 19.5843, elevation: 1118.0, timezone: "Europe/Bratislava" },
   "plavecke podhradie": { name: "Plavecké Podhradie", country: "Slovakia", latitude: 48.4908, longitude: 17.2581, elevation: 230.0, timezone: "Europe/Bratislava" },
   "repiska": { name: "Repiská (Demänovská Dolina)", country: "Slovakia", latitude: 48.9905, longitude: 19.5759, elevation: 850.0, timezone: "Europe/Bratislava" },
   "repiská": { name: "Repiská (Demänovská Dolina)", country: "Slovakia", latitude: 48.9905, longitude: 19.5759, elevation: 850.0, timezone: "Europe/Bratislava" },

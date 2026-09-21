@@ -54,7 +54,7 @@ PRESET_LOCATIONS = {
         "timezone": "Europe/Bratislava",
     },
     "jasna": {
-        "name": "Jasná (Low Tatras)",
+        "name": "Jasná (Demänovská Dolina)",
         "country": "Slovakia",
         "latitude": 48.9709,
         "longitude": 19.5843,
@@ -62,7 +62,7 @@ PRESET_LOCATIONS = {
         "timezone": "Europe/Bratislava",
     },
     "jasná": {
-        "name": "Jasná (Nízke Tatry)",
+        "name": "Jasná (Demänovská Dolina)",
         "country": "Slovakia",
         "latitude": 48.9709,
         "longitude": 19.5843,
