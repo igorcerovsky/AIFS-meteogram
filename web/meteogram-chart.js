@@ -933,21 +933,23 @@ class MeteogramChart {
     this._drawLegendBadge(this.marginLeft + 560, p.top + 9, "#f59e0b", t.sun_alt, false, [3, 2]);
     this._drawLegendBadge(this.marginLeft + 670, p.top + 9, "#60a5fa", t.moon_alt, false, [3, 2]);
 
-    // Small Analemma with current sun position in top-right of temperature graph (Transparent background)
-    const anW = 96;
-    const anH = 108;
+    // Small Analemma reflecting given location in top-right of temperature graph (Transparent background)
+    const anW = 104;
+    const anH = 110;
     const anX = this.marginLeft + this.plotWidth - anW - 8;
     const anY = p.top + 18;
     const activeDate = (this.hoverIdx !== null && this.times?.[this.hoverIdx]) 
       ? this.times[this.hoverIdx] 
       : (this.times?.[0] || new Date());
-    this._drawAnalemmaWidget(ctx, anX, anY, anW, anH, activeDate);
+    const lat = (this.data.location && this.data.location.latitude) ?? 48.15;
+    const lon = (this.data.location && this.data.location.longitude) ?? 17.10;
+    this._drawAnalemmaWidget(ctx, anX, anY, anW, anH, activeDate, lat, lon);
 
     ctx.restore();
     this.panels.p1.valToY = valToY;
   }
 
-  _drawAnalemmaWidget(ctx, x, y, width, height, activeDate) {
+  _drawAnalemmaWidget(ctx, x, y, width, height, activeDate, lat = 48.15, lon = 17.10) {
     if (!this.analemmaCurve || this.analemmaCurve.length === 0) return;
     ctx.save();
 
@@ -970,17 +972,21 @@ class MeteogramChart {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Header Title with subtle text shadow for crisp legibility over curves
+    // Location-aware title: "Analemma (48.2°N)"
+    const isNorth = lat >= 0;
+    const absLat = Math.abs(lat);
+    const latStr = `${absLat.toFixed(1)}°${isNorth ? "N" : "S"}`;
+
     ctx.shadowColor = "rgba(255, 255, 255, 0.9)";
     ctx.shadowBlur = 3;
     ctx.fillStyle = "#1e293b";
-    ctx.font = "bold 9px 'Inter', sans-serif";
+    ctx.font = "bold 8.5px 'Inter', sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText("Analemma", x + width / 2, y + 4);
+    ctx.fillText(`Analemma (${latStr})`, x + width / 2, y + 4);
 
     // Inner plot area
-    const padX = 14;
+    const padX = 15;
     const padTop = 18;
     const padBottom = 18;
     const plotW = width - padX * 2;
@@ -988,16 +994,34 @@ class MeteogramChart {
     const plotLeft = x + padX;
     const plotTop = y + padTop;
 
-    // Mapping:
-    // EoT: [-16, +18] minutes -> X
-    // Dec: [-25, +25] degrees -> Y (+25 at top, -25 at bottom)
-    const eotMin = -16.0, eotMax = 18.0;
-    const decMin = -25.0, decMax = 25.0;
-    const eotToX = (eot) => plotLeft + ((eot - eotMin) / (eotMax - eotMin)) * plotW;
-    const decToY = (dec) => plotTop + ((decMax - dec) / (decMax - decMin)) * plotH;
+    // Solar culmination altitude formula for this latitude:
+    // In Northern Hemisphere: h(dec) = 90 - lat + dec (highest in June, lowest in Dec)
+    // In Southern Hemisphere: h(dec) = 90 - |lat| - dec (highest in Dec, lowest in June)
+    const noonAlt = (dec) => {
+      if (lat >= 0) {
+        return 90.0 - lat + dec;
+      } else {
+        return 90.0 + lat - dec;
+      }
+    };
 
-    // Equinox centerline (δ = 0°)
-    const yEq = decToY(0);
+    const altJun = noonAlt(23.44);
+    const altDec = noonAlt(-23.44);
+    const altEq = noonAlt(0);
+    const altMax = Math.max(altJun, altDec);
+    const altMin = Math.min(altJun, altDec);
+
+    // Dynamic vertical mapping bounded to the location's altitude span with margin
+    const yMargin = 2.0;
+    const plotAltMax = altMax + yMargin;
+    const plotAltMin = altMin - yMargin;
+
+    const eotMin = -16.0, eotMax = 18.0;
+    const eotToX = (eot) => plotLeft + ((eot - eotMin) / (eotMax - eotMin)) * plotW;
+    const altToY = (alt) => plotTop + ((plotAltMax - alt) / (plotAltMax - plotAltMin)) * plotH;
+
+    // Equinox centerline (h = altEq)
+    const yEq = altToY(altEq);
     ctx.strokeStyle = "rgba(100, 116, 139, 0.4)";
     ctx.lineWidth = 0.8;
     ctx.setLineDash([3, 2]);
@@ -1007,27 +1031,30 @@ class MeteogramChart {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Solstice marks (+23.4° Jun, -23.4° Dec)
-    const yJun = decToY(23.44);
-    const yDec = decToY(-23.44);
+    // Solstice marks & labels reflecting local altitude
+    const yTopSolstice = altToY(altMax);
+    const yBottomSolstice = altToY(altMin);
+    const topLabel = isNorth ? `Jun ${altMax.toFixed(0)}°` : `Dec ${altMax.toFixed(0)}°`;
+    const bottomLabel = isNorth ? `Dec ${altMin.toFixed(0)}°` : `Jun ${altMin.toFixed(0)}°`;
+
     ctx.fillStyle = "#64748b";
     ctx.font = "7px 'Inter', sans-serif";
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
-    ctx.fillText("Jun", plotLeft - 3, yJun);
-    ctx.fillText("Dec", plotLeft - 3, yDec);
+    ctx.fillText(topLabel, plotLeft - 3, yTopSolstice);
+    ctx.fillText(bottomLabel, plotLeft - 3, yBottomSolstice);
     ctx.textAlign = "left";
-    ctx.fillText("0°", plotLeft + plotW + 3, yEq);
+    ctx.fillText(`${altEq.toFixed(0)}°`, plotLeft + plotW + 3, yEq);
 
-    // Draw full 365-day figure-8 Analemma curve with halo casing for contrast over background graph
-    // Underlay white halo:
+    // Draw full 365-day figure-8 Analemma curve reflecting location's solar elevation
+    // Underlay white halo for contrast over background graph curves:
     ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
     ctx.lineWidth = 3.0;
     ctx.beginPath();
     for (let i = 0; i < this.analemmaCurve.length; i++) {
       const pt = this.analemmaCurve[i];
       const px = eotToX(pt.eot);
-      const py = decToY(pt.dec);
+      const py = altToY(noonAlt(pt.dec));
       if (i === 0) ctx.moveTo(px, py);
       else ctx.lineTo(px, py);
     }
@@ -1041,19 +1068,20 @@ class MeteogramChart {
     for (let i = 0; i < this.analemmaCurve.length; i++) {
       const pt = this.analemmaCurve[i];
       const px = eotToX(pt.eot);
-      const py = decToY(pt.dec);
+      const py = altToY(noonAlt(pt.dec));
       if (i === 0) ctx.moveTo(px, py);
       else ctx.lineTo(px, py);
     }
     ctx.closePath();
     ctx.stroke();
 
-    // Active date sun position
+    // Active date sun position reflecting location
     const curAstro = calculateSolarDeclinationAndEoT(activeDate || new Date());
+    const curAlt = noonAlt(curAstro.dec);
     const sunX = eotToX(curAstro.eot);
-    const sunY = decToY(curAstro.dec);
+    const sunY = altToY(curAlt);
 
-    // Glowing halo around the active sun position
+    // Glowing halo around active sun position
     ctx.fillStyle = "rgba(251, 146, 60, 0.4)";
     ctx.beginPath();
     ctx.arc(sunX, sunY, 6, 0, Math.PI * 2);
@@ -1070,16 +1098,15 @@ class MeteogramChart {
     ctx.arc(sunX, sunY, 1.2, 0, Math.PI * 2);
     ctx.fill();
 
-    // Footer: current declination & EoT
+    // Footer: current local altitude at noon & EoT
     ctx.shadowColor = "rgba(255, 255, 255, 0.9)";
     ctx.shadowBlur = 3;
     ctx.fillStyle = "#334155";
     ctx.font = "bold 8px 'Inter', sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
-    const decSign = curAstro.dec >= 0 ? "+" : "";
     const eotSign = curAstro.eot >= 0 ? "+" : "";
-    ctx.fillText(`δ: ${decSign}${curAstro.dec.toFixed(1)}° (${eotSign}${curAstro.eot.toFixed(0)}m)`, x + width / 2, y + height - 2);
+    ctx.fillText(`Alt: ${curAlt.toFixed(1)}° (${eotSign}${curAstro.eot.toFixed(0)}m)`, x + width / 2, y + height - 2);
 
     ctx.restore();
   }
