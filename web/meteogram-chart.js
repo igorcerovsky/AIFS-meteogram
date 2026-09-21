@@ -133,6 +133,43 @@ function calculateSolarAltitude(dateUtc, lat, lon) {
   return Math.asin(Math.max(-1.0, Math.min(1.0, sin_alt))) * 180.0 / Math.PI;
 }
 
+function calculateSolarDeclinationAndEoT(dateUtc) {
+  const t_epoch = dateUtc.getTime() / 1000.0;
+  const d = (t_epoch - 946728000.0) / 86400.0;
+
+  const g = ((357.529 + 0.98560028 * d) % 360.0 + 360.0) % 360.0;
+  const g_rad = g * Math.PI / 180.0;
+  const q = ((280.459 + 0.98564736 * d) % 360.0 + 360.0) % 360.0;
+  const l_ecl = ((q + 1.915 * Math.sin(g_rad) + 0.020 * Math.sin(2 * g_rad)) % 360.0 + 360.0) % 360.0;
+  const l_rad = l_ecl * Math.PI / 180.0;
+
+  const e = 23.439 - 0.00000036 * d;
+  const e_rad = e * Math.PI / 180.0;
+
+  const sin_dec = Math.sin(e_rad) * Math.sin(l_rad);
+  const dec_rad = Math.asin(sin_dec);
+  const dec = dec_rad * 180.0 / Math.PI;
+
+  const y = Math.cos(e_rad) * Math.sin(l_rad);
+  const x = Math.cos(l_rad);
+  const ra_rad = Math.atan2(y, x);
+
+  const diff_deg = ((q - ra_rad * 180.0 / Math.PI) % 360.0 + 540.0) % 360.0 - 180.0;
+  const eot = 4.0 * diff_deg; // Equation of Time in minutes
+
+  return { dec, eot };
+}
+
+function getAnnualAnalemmaCurve(year = 2026) {
+  const points = [];
+  const start = new Date(Date.UTC(year, 0, 1, 12, 0, 0));
+  for (let day = 0; day < 365; day++) {
+    const d = new Date(start.getTime() + day * 86400000);
+    points.push(calculateSolarDeclinationAndEoT(d));
+  }
+  return points;
+}
+
 function calculateLunarAltitude(dateUtc, lat, lon) {
   const t_epoch = dateUtc.getTime() / 1000.0;
   const d = (t_epoch - 946728000.0) / 86400.0;
@@ -203,6 +240,7 @@ class MeteogramChart {
     this.data = null;
     this.hoverIdx = null;
     this.hoverPos = null;
+    this.analemmaCurve = getAnnualAnalemmaCurve();
 
     this._initDOM();
     this._initEvents();
@@ -227,32 +265,63 @@ class MeteogramChart {
     this.ctx = this.canvas.getContext("2d", { alpha: false, willReadFrequently: false }) || this.canvas.getContext("2d");
     this.container.appendChild(this.canvas);
 
-    // Create Floating HUD Tooltip
-    this.hud = document.createElement("div");
-    this.hud.className = "meteogram-hud";
-    this.hud.style.position = "absolute";
-    this.hud.style.pointerEvents = "none";
-    this.hud.style.display = "none";
-    this.hud.style.zIndex = "50";
-    this.hud.style.background = "rgba(15, 23, 42, 0.92)";
-    this.hud.style.color = "#f8fafc";
-    this.hud.style.backdropFilter = "blur(10px)";
-    this.hud.style.webkitBackdropFilter = "blur(10px)";
-    this.hud.style.border = "1px solid rgba(255, 255, 255, 0.15)";
-    this.hud.style.borderRadius = "12px";
-    this.hud.style.padding = "10px 14px";
-    this.hud.style.fontSize = "12px";
-    this.hud.style.fontFamily = "'Inter', system-ui, sans-serif";
-    this.hud.style.boxShadow = "0 12px 30px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05)";
-    this.hud.style.minWidth = "240px";
-    this.hud.style.transition = "opacity 0.12s ease-out, transform 0.08s ease-out";
-    this.container.appendChild(this.hud);
+    // Dedicated Fixed Interactive Info Pane (Mobile App Style)
+    this._ensureHUDStyles();
+    this.hud = document.getElementById("meteogram-hud-pane");
+    if (!this.hud) {
+      this.hud = document.createElement("div");
+      this.hud.id = "meteogram-hud-pane";
+      this.hud.className = "meteogram-hud-pane";
+      if (this.container.parentNode) {
+        this.container.parentNode.insertBefore(this.hud, this.container);
+      } else {
+        this.container.appendChild(this.hud);
+      }
+    }
+    this._showIdleHUD();
+  }
+
+  _ensureHUDStyles() {
+    if (document.getElementById("meteogram-chart-hud-styles")) return;
+    const style = document.createElement("style");
+    style.id = "meteogram-chart-hud-styles";
+    style.textContent = `
+      .meteogram-hud-pane {
+        position: sticky;
+        top: 10px;
+        z-index: 45;
+        background: var(--card-bg, #ffffff);
+        border: 1px solid var(--card-border, #cbd5e1);
+        border-radius: 10px;
+        padding: 8px 16px;
+        margin-bottom: 12px;
+        box-shadow: var(--chart-box-shadow, 0 4px 18px rgba(0, 0, 0, 0.08));
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        min-height: 52px;
+        display: flex;
+        align-items: center;
+        color: var(--text-main, #0f172a);
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      }
+      [data-theme="dark"] .meteogram-hud-pane {
+        background: rgba(22, 27, 34, 0.92);
+        border-color: rgba(48, 54, 61, 0.8);
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+        color: #f0f6fc;
+      }
+    `;
+    document.head.appendChild(style);
   }
 
   _initEvents() {
-    // Mouse tracking
+    // Mouse & Pointer tracking
     this.canvas.addEventListener("mousemove", (e) => this._handlePointerMove(e));
     this.canvas.addEventListener("mouseleave", () => this._handlePointerLeave());
+    this.canvas.addEventListener("pointermove", (e) => this._handlePointerMove(e));
+    this.canvas.addEventListener("pointerleave", () => this._handlePointerLeave());
+    this.canvas.addEventListener("pointerdown", (e) => this._handlePointerMove(e));
+    this.canvas.addEventListener("click", (e) => this._handlePointerMove(e));
 
     // Touch tracking (mobile / tablet scrub)
     this.canvas.addEventListener("touchstart", (e) => {
@@ -288,6 +357,11 @@ class MeteogramChart {
     this.data = payload;
     this._processData();
     this.render();
+    if (this.hoverIdx !== null) {
+      this._updateHUD(this.hoverIdx);
+    } else {
+      this._showIdleHUD();
+    }
   }
 
   setOptions(newOptions) {
@@ -295,6 +369,13 @@ class MeteogramChart {
     if (this.data) {
       this._processData();
       this.render();
+      if (this.hoverIdx !== null) {
+        this._updateHUD(this.hoverIdx);
+      } else {
+        this._showIdleHUD();
+      }
+    } else {
+      this._showIdleHUD();
     }
   }
 
@@ -667,50 +748,97 @@ class MeteogramChart {
 
     const t = METEO_TRANSLATIONS[this.options.lang] || METEO_TRANSLATIONS.en;
 
-    // Y-Scale calculation: Ensure -10, 0, 10, 20, 30°C are prominently visible
-    let minVal = 999, maxVal = -999;
-    const mins = tStats.min || [];
-    const maxs = tStats.max || [];
-    for (let i = 0; i < mins.length; i++) {
-      if (mins[i] != null && mins[i] < minVal) minVal = mins[i];
-      if (maxs[i] != null && maxs[i] > maxVal) maxVal = maxs[i];
+    // Adaptive Y-Scale calculation:
+    // Curve and percentiles are bounded inside major grid lines (-20, -10, 0, 10, 20, 30, 40°C).
+    // If there are no data between e.g. 20 and 30°C, 30°C is not displayed.
+    // Major grid lines always have a clean margin so they do not touch the top or bottom panel edges.
+    // Primary bounding major grid lines are governed by curve and percentiles (median, Q25, Q75)
+    let pMin = Infinity, pMax = -Infinity;
+    const scanVals = (arr) => {
+      if (!arr) return;
+      for (let i = 0; i < arr.length; i++) {
+        const v = arr[i];
+        if (v != null && !isNaN(v)) {
+          if (v < pMin) pMin = v;
+          if (v > pMax) pMax = v;
+        }
+      }
+    };
+    scanVals(tStats.median);
+    scanVals(tStats.q25);
+    scanVals(tStats.q75);
+
+    if (!isFinite(pMin) || !isFinite(pMax)) {
+      pMin = 5.0; pMax = 25.0;
     }
-    if (minVal === 999) { minVal = -2; maxVal = 25; }
 
-    // Range matching SHMÚ EPSGRAM layout (covers -10 to +30°C consistently)
-    let yMin = Math.min(-2.0, minVal - 2.0);
-    if (minVal < -8.0) yMin = Math.min(-12.0, minVal - 2.0);
-    let yMax = Math.max(32.0, maxVal + 3.0);
+    // Bounded inside major grid lines (-20, -10, 0, 10, 20, 30, 40°C)
+    let bottomMajor = Math.floor(pMin / 10) * 10;
+    let topMajor = Math.ceil(pMax / 10) * 10;
 
-    yMin = Math.floor(yMin / 5) * 5;
-    yMax = Math.ceil(yMax / 5) * 5;
+    // Check extreme envelope (min / max).
+    // An outlier tick shouldn't bump the major grid by 10°C if it already fits inside the margin (~2.5°C)
+    let absMin = pMin, absMax = pMax;
+    if (tStats.min) {
+      for (let i = 0; i < tStats.min.length; i++) {
+        const v = tStats.min[i];
+        if (v != null && !isNaN(v) && v < absMin) absMin = v;
+      }
+    }
+    if (tStats.max) {
+      for (let i = 0; i < tStats.max.length; i++) {
+        const v = tStats.max[i];
+        if (v != null && !isNaN(v) && v > absMax) absMax = v;
+      }
+    }
+
+    if (absMax > topMajor + 2.5) {
+      topMajor = Math.ceil(absMax / 10) * 10;
+    }
+    if (absMin < bottomMajor - 2.5) {
+      bottomMajor = Math.floor(absMin / 10) * 10;
+    }
+
+    if (topMajor <= bottomMajor) {
+      topMajor = bottomMajor + 10;
+    }
+
+    // Breathing margin (~12% of span, bounded between 1.8°C and 3.5°C)
+    // Ensures topMajor and bottomMajor grid lines never sit directly on the top/bottom panel borders
+    const span = topMajor - bottomMajor;
+    const margin = Math.max(1.8, Math.min(3.5, span * 0.12));
+    const yMin = Math.min(bottomMajor - margin, absMin - 0.4);
+    const yMax = Math.max(topMajor + margin, absMax + 0.4);
     const yRange = yMax - yMin;
 
     const valToY = (v) => p.bottom - ((v - yMin) / yRange) * p.height;
 
     // Distinctive colored reference lines:
-    // -10°C: light blue, 0°C: blue, 10°C: yellow, 20°C: orange, 30°C: red
+    // -20°C: light blue, -10°C: light blue, 0°C: blue, 10°C: yellow, 20°C: orange, 30°C: red, 40°C: dark red
     const tempLevels = {
+      "-30": { color: "#38bdf8", lbl: "-30°C" },
+      "-20": { color: "#38bdf8", lbl: "-20°C" },
       "-10": { color: "#38bdf8", lbl: "-10°C" },
       "0":   { color: "#0284c7", lbl: "0°C" },
       "10":  { color: "#eab308", lbl: "10°C" },
       "20":  { color: "#f97316", lbl: "20°C" },
       "30":  { color: "#ef4444", lbl: "30°C" },
+      "40":  { color: "#dc2626", lbl: "40°C" },
     };
 
-    // Grid lines & labels
+    // Grid lines & labels strictly from bottomMajor to topMajor (e.g. 0 to 20°C)
     ctx.save();
     ctx.font = "10px 'Inter', monospace";
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
 
-    for (let v = yMin; v <= yMax; v += 5) {
+    for (let v = bottomMajor; v <= topMajor; v += 5) {
       const y = valToY(v);
       if (y < p.top || y > p.bottom) continue;
 
       const lvl = tempLevels[String(v)];
       if (lvl) {
-        // Distinctive colored thicker dashed line (10, 20, 30°C etc.)
+        // Distinctive colored thicker dashed line (0, 10, 20, 30°C etc.)
         ctx.strokeStyle = lvl.color;
         ctx.lineWidth = 1.5;
         ctx.setLineDash([5, 4]);
@@ -805,8 +933,155 @@ class MeteogramChart {
     this._drawLegendBadge(this.marginLeft + 560, p.top + 9, "#f59e0b", t.sun_alt, false, [3, 2]);
     this._drawLegendBadge(this.marginLeft + 670, p.top + 9, "#60a5fa", t.moon_alt, false, [3, 2]);
 
+    // Small Analemma with current sun position in top-right of temperature graph (Transparent background)
+    const anW = 96;
+    const anH = 108;
+    const anX = this.marginLeft + this.plotWidth - anW - 8;
+    const anY = p.top + 18;
+    const activeDate = (this.hoverIdx !== null && this.times?.[this.hoverIdx]) 
+      ? this.times[this.hoverIdx] 
+      : (this.times?.[0] || new Date());
+    this._drawAnalemmaWidget(ctx, anX, anY, anW, anH, activeDate);
+
     ctx.restore();
     this.panels.p1.valToY = valToY;
+  }
+
+  _drawAnalemmaWidget(ctx, x, y, width, height, activeDate) {
+    if (!this.analemmaCurve || this.analemmaCurve.length === 0) return;
+    ctx.save();
+
+    // 100% Transparent background with subtle boundary guide so underlying graph curves are never obscured
+    const r = 6;
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + width - r, y);
+    ctx.arcTo(x + width, y, x + width, y + r, r);
+    ctx.lineTo(x + width, y + height - r);
+    ctx.arcTo(x + width, y + height, x + width - r, y + height, r);
+    ctx.lineTo(x + r, y + height);
+    ctx.arcTo(x, y + height, x, y + height - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.25)";
+    ctx.lineWidth = 0.8;
+    ctx.setLineDash([2, 2]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Header Title with subtle text shadow for crisp legibility over curves
+    ctx.shadowColor = "rgba(255, 255, 255, 0.9)";
+    ctx.shadowBlur = 3;
+    ctx.fillStyle = "#1e293b";
+    ctx.font = "bold 9px 'Inter', sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText("Analemma", x + width / 2, y + 4);
+
+    // Inner plot area
+    const padX = 14;
+    const padTop = 18;
+    const padBottom = 18;
+    const plotW = width - padX * 2;
+    const plotH = height - padTop - padBottom;
+    const plotLeft = x + padX;
+    const plotTop = y + padTop;
+
+    // Mapping:
+    // EoT: [-16, +18] minutes -> X
+    // Dec: [-25, +25] degrees -> Y (+25 at top, -25 at bottom)
+    const eotMin = -16.0, eotMax = 18.0;
+    const decMin = -25.0, decMax = 25.0;
+    const eotToX = (eot) => plotLeft + ((eot - eotMin) / (eotMax - eotMin)) * plotW;
+    const decToY = (dec) => plotTop + ((decMax - dec) / (decMax - decMin)) * plotH;
+
+    // Equinox centerline (δ = 0°)
+    const yEq = decToY(0);
+    ctx.strokeStyle = "rgba(100, 116, 139, 0.4)";
+    ctx.lineWidth = 0.8;
+    ctx.setLineDash([3, 2]);
+    ctx.beginPath();
+    ctx.moveTo(plotLeft - 5, yEq);
+    ctx.lineTo(plotLeft + plotW + 5, yEq);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Solstice marks (+23.4° Jun, -23.4° Dec)
+    const yJun = decToY(23.44);
+    const yDec = decToY(-23.44);
+    ctx.fillStyle = "#64748b";
+    ctx.font = "7px 'Inter', sans-serif";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    ctx.fillText("Jun", plotLeft - 3, yJun);
+    ctx.fillText("Dec", plotLeft - 3, yDec);
+    ctx.textAlign = "left";
+    ctx.fillText("0°", plotLeft + plotW + 3, yEq);
+
+    // Draw full 365-day figure-8 Analemma curve with halo casing for contrast over background graph
+    // Underlay white halo:
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.lineWidth = 3.0;
+    ctx.beginPath();
+    for (let i = 0; i < this.analemmaCurve.length; i++) {
+      const pt = this.analemmaCurve[i];
+      const px = eotToX(pt.eot);
+      const py = decToY(pt.dec);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.stroke();
+
+    // Foreground amber curve:
+    ctx.strokeStyle = "#d97706";
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    for (let i = 0; i < this.analemmaCurve.length; i++) {
+      const pt = this.analemmaCurve[i];
+      const px = eotToX(pt.eot);
+      const py = decToY(pt.dec);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.stroke();
+
+    // Active date sun position
+    const curAstro = calculateSolarDeclinationAndEoT(activeDate || new Date());
+    const sunX = eotToX(curAstro.eot);
+    const sunY = decToY(curAstro.dec);
+
+    // Glowing halo around the active sun position
+    ctx.fillStyle = "rgba(251, 146, 60, 0.4)";
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Core bright sun marker with white border
+    ctx.fillStyle = "#ea580c";
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, 1.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Footer: current declination & EoT
+    ctx.shadowColor = "rgba(255, 255, 255, 0.9)";
+    ctx.shadowBlur = 3;
+    ctx.fillStyle = "#334155";
+    ctx.font = "bold 8px 'Inter', sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    const decSign = curAstro.dec >= 0 ? "+" : "";
+    const eotSign = curAstro.eot >= 0 ? "+" : "";
+    ctx.fillText(`δ: ${decSign}${curAstro.dec.toFixed(1)}° (${eotSign}${curAstro.eot.toFixed(0)}m)`, x + width / 2, y + height - 2);
+
+    ctx.restore();
   }
 
   _drawCelestialCurves(p) {
@@ -1303,6 +1578,42 @@ class MeteogramChart {
     this._drawLegendBadge(this.marginLeft + 250, p.top + 9, "#334155", t.median);
     this._drawLegendBadge(this.marginLeft + 325, p.top + 9, "rgba(148, 163, 184, 0.6)", t.spread_100, true);
 
+    // Wind Speed Color Scale Bar (Horizontal segmented scale)
+    const scaleX = this.marginLeft + 435;
+    const scaleY = p.top + 7;
+    const tiers = [
+      { label: "< 2", col: "#94a3b8", w: 26 },
+      { label: "2–5", col: "#10b981", w: 28 },
+      { label: "5–10", col: "#2563eb", w: 32 },
+      { label: "10–15", col: "#f59e0b", w: 36 },
+      { label: "> 15 m/s", col: "#ef4444", w: 46 }
+    ];
+
+    ctx.font = "bold 8px 'Inter', sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    let curX = scaleX;
+    const barH = 13;
+    for (let idx = 0; idx < tiers.length; idx++) {
+      const tier = tiers[idx];
+      ctx.fillStyle = tier.col;
+
+      ctx.beginPath();
+      if (idx === 0) {
+        ctx.roundRect ? ctx.roundRect(curX, scaleY, tier.w, barH, [3, 0, 0, 3]) : ctx.rect(curX, scaleY, tier.w, barH);
+      } else if (idx === tiers.length - 1) {
+        ctx.roundRect ? ctx.roundRect(curX, scaleY, tier.w, barH, [0, 3, 3, 0]) : ctx.rect(curX, scaleY, tier.w, barH);
+      } else {
+        ctx.rect(curX, scaleY, tier.w, barH);
+      }
+      ctx.fill();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(tier.label, curX + tier.w / 2, scaleY + barH / 2);
+      curX += tier.w;
+    }
+
     ctx.restore();
     this.panels.p4.valToY = valToY;
   }
@@ -1314,26 +1625,34 @@ class MeteogramChart {
     // Meteorological: arrow points where the wind is blowing towards
     ctx.rotate((dirDeg + 180) * Math.PI / 180.0);
 
-    // Color by speed tier
-    let col = "#10b981"; // calm/gentle < 5
+    // Color by speed tier matching scale bar
+    let col = "#94a3b8"; // light < 2
     if (speedMs >= 15) col = "#ef4444"; // strong/gale
     else if (speedMs >= 10) col = "#f59e0b"; // fresh
-    else if (speedMs >= 5) col = "#3b82f6"; // moderate
+    else if (speedMs >= 5) col = "#2563eb"; // moderate
+    else if (speedMs >= 2) col = "#10b981"; // gentle
+
+    // Dynamic length: shorter for low winds (8px), longer for high winds (up to 28px)
+    const arrowLen = Math.max(8, Math.min(28, 7 + speedMs * 1.3));
+    const halfLen = arrowLen / 2;
+    const headSize = Math.max(3, Math.min(6, arrowLen * 0.24));
+    const shaftWidth = speedMs >= 15 ? 2.0 : (speedMs >= 10 ? 1.7 : (speedMs >= 5 ? 1.4 : 1.1));
 
     ctx.fillStyle = col;
     ctx.strokeStyle = col;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = shaftWidth;
 
-    // Draw arrow
+    // Draw shaft
     ctx.beginPath();
-    ctx.moveTo(0, -9);
-    ctx.lineTo(0, 7);
+    ctx.moveTo(0, -halfLen);
+    ctx.lineTo(0, halfLen - headSize);
     ctx.stroke();
 
+    // Draw arrowhead
     ctx.beginPath();
-    ctx.moveTo(0, 9);
-    ctx.lineTo(-3.5, 4);
-    ctx.lineTo(3.5, 4);
+    ctx.moveTo(0, halfLen);
+    ctx.lineTo(-headSize * 0.7, halfLen - headSize);
+    ctx.lineTo(headSize * 0.7, halfLen - headSize);
     ctx.closePath();
     ctx.fill();
 
@@ -1763,19 +2082,33 @@ class MeteogramChart {
     this.hoverPos = { x: mouseX, y: mouseY, clientX: e.clientX, clientY: e.clientY };
 
     this.render();
-    this._updateHUD(bestIdx, mouseX, mouseY);
+    this._updateHUD(bestIdx);
   }
 
   _handlePointerLeave() {
     if (this.hoverIdx !== null) {
       this.hoverIdx = null;
       this.hoverPos = null;
-      this.hud.style.display = "none";
+      this._showIdleHUD();
       this.render();
     }
   }
 
-  _updateHUD(idx, mouseX, mouseY) {
+  _showIdleHUD() {
+    if (!this.hud) return;
+    const promptText = this.options.lang === "sk"
+      ? "📍 Pohybujte myšou alebo ťahajte prstom po grafe pre zobrazenie hodinových hodnôt"
+      : "📍 Hover or drag across chart to inspect hourly forecast values";
+    this.hud.innerHTML = `
+      <div class="hud-idle-prompt">
+        <span>${promptText}</span>
+      </div>
+    `;
+    this.hud.style.display = "flex";
+  }
+
+  _updateHUD(idx) {
+    if (!this.hud || !this.times || !this.times[idx]) return;
     const dt = this.times[idx];
     const stats = this.data.stats;
     const t = METEO_TRANSLATIONS[this.options.lang] || METEO_TRANSLATIONS.en;
@@ -1801,10 +2134,6 @@ class MeteogramChart {
     const pMaxMember = stats.precipitation?.max?.[idx] || 0.0;
 
     const cTotal = stats.cloud_cover?.median?.[idx];
-    const cTotalQ25 = stats.cloud_cover?.q25?.[idx];
-    const cTotalQ75 = stats.cloud_cover?.q75?.[idx];
-    const cTotalMin = stats.cloud_cover?.min?.[idx];
-    const cTotalMax = stats.cloud_cover?.max?.[idx];
     const cHigh = stats.cloud_cover_high?.median?.[idx];
     const cMid = stats.cloud_cover_mid?.median?.[idx];
     const cLow = stats.cloud_cover_low?.median?.[idx];
@@ -1819,95 +2148,87 @@ class MeteogramChart {
     const moonAlt = this.moonAlts?.[idx];
 
     this.hud.innerHTML = `
-      <div style="font-weight: 700; color: #38bdf8; margin-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px; display: flex; justify-content: space-between;">
-        <span>${dayName} ${dateNum}.${monthNum}.${year} — ${hour}:${min}</span>
-        <span style="font-size: 10px; background: rgba(56, 189, 248, 0.2); padding: 1px 6px; border-radius: 4px;">${tzBadge}</span>
-      </div>
-
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px;">
-        <div>
-          <span style="color: #94a3b8; font-size: 11px;">🌡 ${t.temp.split("[")[0]}</span>
-          <div style="font-size: 14px; font-weight: 700; color: #f87171;">
-            ${tMed != null ? `${tMed.toFixed(1)} °C` : "-"}
+      <div class="hud-content">
+        <!-- Time & Ephemeris -->
+        <div class="hud-col" style="min-width: 140px;">
+          <div class="hud-time-title">
+            <span>📅 ${dayName} ${dateNum}.${monthNum}. ${hour}:${min}</span>
+            <span class="hud-badge">${tzBadge}</span>
           </div>
-          <div style="font-size: 10px; color: #cbd5e1;">
-            Q25–Q75: ${tQ25 != null ? tQ25.toFixed(1) : ""}-${tQ75 != null ? tQ75.toFixed(1) : ""}°C<br/>
-            Spread: ${tMin != null ? tMin.toFixed(1) : ""}-${tMax != null ? tMax.toFixed(1) : ""}°C
+          <div class="hud-sub" style="display: flex; gap: 8px; margin-top: 2px;">
+            <span class="hud-sun">☀ ${sunAlt != null ? `${sunAlt >= 0 ? "+" : ""}${sunAlt.toFixed(0)}°` : "-"}</span>
+            <span class="hud-moon">☽ ${moonAlt != null ? `${moonAlt >= 0 ? "+" : ""}${moonAlt.toFixed(0)}°` : "-"}</span>
           </div>
         </div>
 
-        <div>
-          <span style="color: #94a3b8; font-size: 11px;">💧 ${t.precip.split("[")[0]}</span>
-          <div style="font-size: 14px; font-weight: 700; color: #60a5fa;">
-            ${pRain.toFixed(1)} mm
+        <div class="hud-divider"></div>
+
+        <!-- Temperature -->
+        <div class="hud-col">
+          <div class="hud-label">
+            <span>🌡 ${t.temp.split("[")[0].trim()}</span>
+            <span class="hud-val hud-val-temp">${tMed != null ? `${tMed.toFixed(1)} °C` : "-"}</span>
           </div>
-          <div style="font-size: 10px; color: #cbd5e1;">
-            Max member: ${pMaxMember.toFixed(1)} mm<br/>
-            ${pSnow > 0.05 ? `Snow: ${pSnow.toFixed(1)} cm` : ""}
+          <div class="hud-sub">
+            Q25–Q75: ${tQ25 != null ? tQ25.toFixed(1) : ""}-${tQ75 != null ? tQ75.toFixed(1) : ""}°C${tMin != null && tMax != null ? ` (${tMin.toFixed(0)}–${tMax.toFixed(0)}°)` : ""}
           </div>
         </div>
 
-        <div>
-          <span style="color: #94a3b8; font-size: 11px;">☁ ${t.clouds.split("[")[0]}</span>
-          <div style="font-size: 13px; font-weight: 600; color: #facc15;">
-            ${cTotal != null ? `${Math.round(cTotal)}%` : "-"}
-            ${cTotalQ25 != null && cTotalQ75 != null ? `<span style="font-size: 10px; font-weight: normal; color: #cbd5e1;"> (${Math.round(cTotalQ25)}–${Math.round(cTotalQ75)}%)</span>` : ""}
+        <div class="hud-divider"></div>
+
+        <!-- Precipitation -->
+        <div class="hud-col">
+          <div class="hud-label">
+            <span>💧 ${t.precip.split("[")[0].trim()}</span>
+            <span class="hud-val hud-val-precip">${pRain.toFixed(1)} mm</span>
           </div>
-          <div style="font-size: 10px; color: #cbd5e1;">
-            H: ${cHigh != null ? `${Math.round(cHigh)}%` : "-"} | 
-            M: ${cMid != null ? `${Math.round(cMid)}%` : "-"} | 
-            L: ${cLow != null ? `${Math.round(cLow)}%` : "-"}
-            ${cTotalMin != null && cTotalMax != null ? `<br/><span style="color: #94a3b8;">Spread: ${Math.round(cTotalMin)}–${Math.round(cTotalMax)}%</span>` : ""}
+          <div class="hud-sub">
+            Max: ${pMaxMember.toFixed(1)} mm ${pSnow > 0.05 ? `• ❄ ${pSnow.toFixed(1)} cm` : ""}
           </div>
         </div>
 
-        <div>
-          <span style="color: #94a3b8; font-size: 11px;">💨 ${t.wind.split("[")[0]}</span>
-          <div style="font-size: 13px; font-weight: 600; color: #34d399;">
-            ${wSpeed != null ? `${wSpeed.toFixed(1)} m/s` : "-"}
+        <div class="hud-divider"></div>
+
+        <!-- Clouds -->
+        <div class="hud-col">
+          <div class="hud-label">
+            <span>☁ ${t.clouds.split("[")[0].trim()}</span>
+            <span class="hud-val hud-val-clouds">${cTotal != null ? `${Math.round(cTotal)}%` : "-"}</span>
           </div>
-          <div style="font-size: 10px; color: #cbd5e1;">
+          <div class="hud-sub">
+            <span class="hud-cloud-h">H: ${cHigh != null ? `${Math.round(cHigh)}%` : "-"}</span> | 
+            <span class="hud-cloud-m">M: ${cMid != null ? `${Math.round(cMid)}%` : "-"}</span> | 
+            <span class="hud-cloud-l">L: ${cLow != null ? `${Math.round(cLow)}%` : "-"}</span>
+          </div>
+        </div>
+
+        <div class="hud-divider"></div>
+
+        <!-- Wind -->
+        <div class="hud-col">
+          <div class="hud-label">
+            <span>💨 ${t.wind.split("[")[0].trim()}</span>
+            <span class="hud-val hud-val-wind">${wSpeed != null ? `${wSpeed.toFixed(1)} m/s` : "-"}</span>
+          </div>
+          <div class="hud-sub">
             ${wSpeedKm} km/h • ${wCompass} (${wDir != null ? Math.round(wDir) : "-"}°)
           </div>
         </div>
 
-        <div>
-          <span style="color: #94a3b8; font-size: 11px;">⏱ ${t.pressure.split("[")[0]}</span>
-          <div style="font-size: 13px; font-weight: 600; color: #c084fc;">
-            ${press != null ? `${press.toFixed(1)} hPa` : "-"}
-          </div>
-        </div>
+        <div class="hud-divider"></div>
 
-        <div>
-          <span style="color: #94a3b8; font-size: 11px;">☀️ / 🌙 Ephemeris</span>
-          <div style="font-size: 11px; font-weight: 500; color: #fb923c; margin-top: 2px;">
-            ☀ Sun: ${sunAlt != null ? `${sunAlt >= 0 ? "+" : ""}${sunAlt.toFixed(1)}°` : "-"}
+        <!-- Pressure -->
+        <div class="hud-col">
+          <div class="hud-label">
+            <span>⏱ ${t.pressure.split("[")[0].trim()}</span>
+            <span class="hud-val hud-val-press">${press != null ? `${press.toFixed(1)} hPa` : "-"}</span>
           </div>
-          <div style="font-size: 11px; font-weight: 500; color: #93c5fd;">
-            ☽ Moon: ${moonAlt != null ? `${moonAlt >= 0 ? "+" : ""}${moonAlt.toFixed(1)}°` : "-"}
-          </div>
+          <div class="hud-sub">MSLP Sea Level</div>
         </div>
       </div>
     `;
 
-    this.hud.style.display = "block";
-
-    // Auto-reposition to stay within canvas boundaries
-    const hudRect = this.hud.getBoundingClientRect();
-    const hudW = hudRect.width || 260;
-    const hudH = hudRect.height || 160;
-
-    let left = mouseX + 16;
-    if (left + hudW > this.W - 10) {
-      left = mouseX - hudW - 16;
-    }
-
-    let top = mouseY - hudH / 2;
-    if (top < 10) top = 10;
-    if (top + hudH > this.H - 10) top = this.H - hudH - 10;
-
-    this.hud.style.left = `${left}px`;
-    this.hud.style.top = `${top}px`;
+    this.hud.style.display = "flex";
   }
 }
 

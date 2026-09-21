@@ -153,11 +153,13 @@ public struct NativeMeteogramChartView: View {
                     }
                 }
 
+                let tempDomain = adaptiveTempDomain(points: points)
+
                 // Foreground: Temperature Ensemble & Grid
                 Chart {
                     temperatureSpreadMarks(points: points)
                     temperatureMedianMark(points: points)
-                    temperatureThresholdMarks()
+                    temperatureThresholdMarks(bottomMajor: tempDomain.bottomMajor, topMajor: tempDomain.topMajor)
 
                     // Synchronized Selection Crosshair
                     if let selDate = selectedDate {
@@ -175,9 +177,10 @@ public struct NativeMeteogramChartView: View {
                         }
                     }
                 }
+                .chartYScale(domain: tempDomain.yMin...tempDomain.yMax)
                 .chartXSelection(value: $selectedDate)
                 .chartYAxis {
-                    AxisMarks(position: .leading)
+                    AxisMarks(position: .leading, values: Array(stride(from: tempDomain.bottomMajor, through: tempDomain.topMajor, by: 5.0)))
                 }
                 .chartXAxis {
                     xAxisMarks(points: points)
@@ -255,27 +258,60 @@ public struct NativeMeteogramChartView: View {
         }
     }
 
+    private func adaptiveTempDomain(points: [TimeSeriesPoint]) -> (bottomMajor: Double, topMajor: Double, yMin: Double, yMax: Double) {
+        let mins = points.compactMap { $0.tempMin }
+        let maxs = points.compactMap { $0.tempMax }
+        let medians = points.map { $0.tempMedian }
+        let minVal = mins.min() ?? (medians.min() ?? 5.0)
+        let maxVal = maxs.max() ?? (medians.max() ?? 25.0)
+
+        var bottomMajor = floor(minVal / 10.0) * 10.0
+        var topMajor = ceil(maxVal / 10.0) * 10.0
+        if topMajor <= bottomMajor {
+            topMajor = bottomMajor + 10.0
+        }
+        let span = topMajor - bottomMajor
+        let margin = max(1.8, min(3.5, span * 0.12))
+        return (bottomMajor, topMajor, bottomMajor - margin, topMajor + margin)
+    }
+
     @ChartContentBuilder
-    private func temperatureThresholdMarks() -> some ChartContent {
-        RuleMark(y: .value("Threshold", -10.0))
-            .foregroundStyle(Color.cyan.opacity(0.55))
-            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-
-        RuleMark(y: .value("Freezing", 0.0))
-            .foregroundStyle(Color.blue)
-            .lineStyle(StrokeStyle(lineWidth: 1.4, dash: [5, 3]))
-
-        RuleMark(y: .value("Threshold", 10.0))
-            .foregroundStyle(Color.yellow.opacity(0.65))
-            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-
-        RuleMark(y: .value("Threshold", 20.0))
-            .foregroundStyle(Color.orange.opacity(0.65))
-            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-
-        RuleMark(y: .value("Threshold", 30.0))
-            .foregroundStyle(Color.red.opacity(0.65))
-            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+    private func temperatureThresholdMarks(bottomMajor: Double, topMajor: Double) -> some ChartContent {
+        if bottomMajor <= -20.0 && -20.0 <= topMajor {
+            RuleMark(y: .value("Threshold", -20.0))
+                .foregroundStyle(Color.cyan.opacity(0.55))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+        }
+        if bottomMajor <= -10.0 && -10.0 <= topMajor {
+            RuleMark(y: .value("Threshold", -10.0))
+                .foregroundStyle(Color.cyan.opacity(0.55))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+        }
+        if bottomMajor <= 0.0 && 0.0 <= topMajor {
+            RuleMark(y: .value("Freezing", 0.0))
+                .foregroundStyle(Color.blue)
+                .lineStyle(StrokeStyle(lineWidth: 1.4, dash: [5, 3]))
+        }
+        if bottomMajor <= 10.0 && 10.0 <= topMajor {
+            RuleMark(y: .value("Threshold", 10.0))
+                .foregroundStyle(Color.yellow.opacity(0.65))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+        }
+        if bottomMajor <= 20.0 && 20.0 <= topMajor {
+            RuleMark(y: .value("Threshold", 20.0))
+                .foregroundStyle(Color.orange.opacity(0.65))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+        }
+        if bottomMajor <= 30.0 && 30.0 <= topMajor {
+            RuleMark(y: .value("Threshold", 30.0))
+                .foregroundStyle(Color.red.opacity(0.65))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+        }
+        if bottomMajor <= 40.0 && 40.0 <= topMajor {
+            RuleMark(y: .value("Threshold", 40.0))
+                .foregroundStyle(Color.red.opacity(0.65))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+        }
     }
 
     @AxisContentBuilder

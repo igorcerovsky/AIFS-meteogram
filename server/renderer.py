@@ -412,23 +412,30 @@ class MeteogramRenderer:
         # Thicker lines to -10, 0, 10, 20, 30 degrees with distinctive light colors:
         # -10: light blue, 0: blue, 10: yellow, 20: orange, 30: red
         temp_levels = [
+            (-20, "#38bdf8", " -20°C"),
             (-10, "#38bdf8", " -10°C"),  # light blue
             (0,   "#0284c7", "   0°C"),  # blue
             (10,  "#eab308", "  10°C"),  # yellow
             (20,  "#f97316", "  20°C"),  # orange
             (30,  "#ef4444", "  30°C"),  # red
+            (40,  "#dc2626", "  40°C"),
         ]
 
         t_min_data = float(np.nanmin(temp["min"]))
         t_max_data = float(np.nanmax(temp["max"]))
-        y_min = min(-2.0, t_min_data - 2.0)
-        y_max = max(32.0, t_max_data + 3.0)
-        if t_min_data < -8.0:
-            y_min = min(-12.0, t_min_data - 2.0)
+        bottom_major = math.floor(t_min_data / 10.0) * 10.0
+        top_major = math.ceil(t_max_data / 10.0) * 10.0
+        if top_major <= bottom_major:
+            top_major = bottom_major + 10.0
+        span = top_major - bottom_major
+        margin = max(1.8, min(3.5, span * 0.12))
+        y_min = bottom_major - margin
+        y_max = top_major + margin
         ax_temp.set_ylim(y_min, y_max)
+        ax_temp.set_yticks(np.arange(bottom_major, top_major + 1.0, 5.0))
 
         for deg, color, lbl in temp_levels:
-            if y_min <= deg <= y_max:
+            if bottom_major <= deg <= top_major:
                 ax_temp.axhline(deg, color=color, linestyle="--", linewidth=1.5, alpha=0.85, zorder=3)
                 ax_temp.text(
                     num_times[-1],
