@@ -1623,7 +1623,7 @@ class MeteogramChart {
     ctx.save();
     ctx.translate(x, y);
     // Meteorological: arrow points where the wind is blowing towards
-    ctx.rotate((dirDeg + 180) * Math.PI / 180.0);
+    ctx.rotate(dirDeg * Math.PI / 180.0);
 
     // Color by speed tier matching scale bar
     let col = "#94a3b8"; // light < 2
