@@ -1176,9 +1176,22 @@ class MeteogramChart {
       const y = altToY(peak.alt);
 
       if (iconsOnly) {
-        ctx.font = "bold 13px 'Inter', sans-serif";
+        ctx.save();
+        // Subtle white backing circle so curve does not cut through icon
+        ctx.fillStyle = "rgba(255, 255, 255, 0.82)";
+        ctx.beginPath();
+        ctx.arc(x, y, 6.5, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.strokeStyle = "#fde68a";
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+
+        ctx.font = "bold 12px 'Inter', sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
         ctx.fillStyle = "#b45309";
-        ctx.fillText("☀", x, y - 8);
+        ctx.fillText("☀", x, y);
+        ctx.restore();
       } else {
         const label = `☀ ${peak.tStr} (${Math.round(peak.alt)}°)`;
         ctx.font = "bold 9px 'Inter', sans-serif";
@@ -1201,7 +1214,9 @@ class MeteogramChart {
       if (x < this.marginLeft + 12 || x > this.marginLeft + this.plotWidth - 12) continue;
       const y = altToY(peak.alt);
 
-      this._drawMoonPhaseBadge(x, y + 8, peak.moonPhase, 5.5);
+      // In iconsOnly mode, center of moon icon is placed exactly at max point (x, y)
+      const moonY = iconsOnly ? y : y + 8;
+      this._drawMoonPhaseBadge(x, moonY, peak.moonPhase, 5.5);
 
       if (!iconsOnly) {
         const label = `${peak.tStr} (${Math.round(peak.alt)}°)`;

@@ -1376,14 +1376,15 @@ class MeteogramRenderer:
             if icons_only:
                 ax_cel.text(
                     x_pos,
-                    p_alt + 1.2,
+                    p_alt,
                     "☀",
                     ha="center",
-                    va="bottom",
-                    fontsize=9.5,
+                    va="center",
+                    fontsize=10.0,
                     color="#b45309",
                     fontweight="bold",
-                    zorder=4,
+                    zorder=5,
+                    bbox=dict(boxstyle="circle,pad=0.2", fc="#ffffff", ec="#fde68a", lw=0.6, alpha=0.9),
                 )
             else:
                 label_text = f"☀ {t_str} ({p_alt:.0f}°)" if forecast_days <= 10 else f"☀ {p_alt:.0f}°"
