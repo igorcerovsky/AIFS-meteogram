@@ -253,9 +253,11 @@ public struct NativeMeteogramChartView: View {
                 AreaMark(
                     x: .value("Time", p.date),
                     yStart: .value("Min", pMin),
-                    yEnd: .value("Max", pMax)
+                    yEnd: .value("Max", pMax),
+                    series: .value("TempSpread", "Full")
                 )
                 .foregroundStyle(Color.red.opacity(0.14))
+                .interpolationMethod(.catmullRom)
             }
         }
 
@@ -264,9 +266,11 @@ public struct NativeMeteogramChartView: View {
                 AreaMark(
                     x: .value("Time", p.date),
                     yStart: .value("Q25", pQ25),
-                    yEnd: .value("Q75", pQ75)
+                    yEnd: .value("Q75", pQ75),
+                    series: .value("TempSpread", "IQR")
                 )
                 .foregroundStyle(Color.red.opacity(0.28))
+                .interpolationMethod(.catmullRom)
             }
         }
     }
@@ -277,10 +281,11 @@ public struct NativeMeteogramChartView: View {
             LineMark(
                 x: .value("Time", p.date),
                 y: .value("Temperature", p.tempMedian),
-                series: .value("Temp", "Median")
+                series: .value("TempSpread", "Median")
             )
             .foregroundStyle(Color.red)
             .lineStyle(StrokeStyle(lineWidth: 2.2))
+            .interpolationMethod(.catmullRom)
         }
     }
 
@@ -476,12 +481,13 @@ public struct NativeMeteogramChartView: View {
             HStack {
                 Label("Cloud Cover [%]", systemImage: "cloud.fill")
                     .font(.caption.bold())
-                    .foregroundColor(Color(red: 202/255, green: 138/255, blue: 4/255))
+                    .foregroundColor(Color(red: 234/255, green: 179/255, blue: 8/255))
 
                 Spacer()
 
-                HStack(spacing: 12) {
-                    legendItem(title: "Total (Bars)", color: Color(red: 250/255, green: 204/255, blue: 21/255))
+                HStack(spacing: 10) {
+                    legendItem(title: "Total (Bins)", color: Color(red: 254/255, green: 240/255, blue: 138/255))
+                    legendItem(title: "Total", color: Color(red: 234/255, green: 179/255, blue: 8/255), isLine: true)
                     legendItem(title: "High (cirrus)", color: Color(red: 37/255, green: 99/255, blue: 235/255), isLine: true)
                     legendItem(title: "Medium (alto)", color: Color(red: 16/255, green: 185/255, blue: 129/255), isLine: true)
                     legendItem(title: "Low (stratus)", color: Color(red: 225/255, green: 29/255, blue: 72/255), isLine: true)
@@ -524,13 +530,25 @@ public struct NativeMeteogramChartView: View {
                     x: .value("Time", p.date),
                     y: .value("Total Cloud Cover", p.cloudTotalMedian)
                 )
-                .foregroundStyle(Color(red: 250/255, green: 204/255, blue: 21/255).opacity(0.42))
+                .foregroundStyle(Color(red: 254/255, green: 240/255, blue: 138/255).opacity(0.60))
             }
         }
     }
 
     @ChartContentBuilder
     private func cloudLayerLines(points: [TimeSeriesPoint]) -> some ChartContent {
+
+        // 0. Total Cloud Cover: Darker Pure Yellow (#eab308)
+        ForEach(points) { p in
+            LineMark(
+                x: .value("Time", p.date),
+                y: .value("Total", p.cloudTotalMedian),
+                series: .value("Layer", "Total")
+            )
+            .foregroundStyle(Color(red: 234/255, green: 179/255, blue: 8/255))
+            .lineStyle(StrokeStyle(lineWidth: 2.0))
+            .interpolationMethod(.catmullRom)
+        }
 
         // 1. High Clouds: Royal Blue (#2563eb)
         ForEach(points) { p in
@@ -542,6 +560,7 @@ public struct NativeMeteogramChartView: View {
                 )
                 .foregroundStyle(Color(red: 37/255, green: 99/255, blue: 235/255))
                 .lineStyle(StrokeStyle(lineWidth: 1.8))
+                .interpolationMethod(.catmullRom)
             }
         }
 
@@ -555,6 +574,7 @@ public struct NativeMeteogramChartView: View {
                 )
                 .foregroundStyle(Color(red: 16/255, green: 185/255, blue: 129/255))
                 .lineStyle(StrokeStyle(lineWidth: 1.8))
+                .interpolationMethod(.catmullRom)
             }
         }
 
@@ -568,6 +588,7 @@ public struct NativeMeteogramChartView: View {
                 )
                 .foregroundStyle(Color(red: 225/255, green: 29/255, blue: 72/255))
                 .lineStyle(StrokeStyle(lineWidth: 1.8))
+                .interpolationMethod(.catmullRom)
             }
         }
     }
@@ -585,8 +606,8 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
 
     // MARK: - Panel 4: Wind Speed & Direction [km/h]
     private func windPanelView(points: [TimeSeriesPoint]) -> some View {
-        let maxSpd = points.compactMap { $0.windSpeedMax }.max() ?? 10.0
-        let yMaxWind = max(40.0, ceil((maxSpd * 3.6 + 5.0) / 10.0) * 10.0)
+        let maxSpd = points.compactMap { $0.windSpeedMax }.max() ?? 25.0
+        let yMaxWind = max(35.0, ceil((maxSpd + 5.0) / 10.0) * 10.0)
 
         // 5 Wind Direction Levels from Top to Bottom: N, W, S, E, N (360° loop)
         let yTop = yMaxWind * 0.90
@@ -625,10 +646,12 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                     if let wMin = p.windSpeedMin, let wMax = p.windSpeedMax {
                         AreaMark(
                             x: .value("Time", p.date),
-                            yStart: .value("Min", wMin * 3.6),
-                            yEnd: .value("Max", wMax * 3.6)
+                            yStart: .value("Min", wMin),
+                            yEnd: .value("Max", wMax),
+                            series: .value("WindSpread", "Full")
                         )
                         .foregroundStyle(Color.brown.opacity(0.18))
+                        .interpolationMethod(.catmullRom)
                     }
                 }
 
@@ -636,20 +659,24 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                     if let wQ25 = p.windSpeedQ25, let wQ75 = p.windSpeedQ75 {
                         AreaMark(
                             x: .value("Time", p.date),
-                            yStart: .value("Q25", wQ25 * 3.6),
-                            yEnd: .value("Q75", wQ75 * 3.6)
+                            yStart: .value("Q25", wQ25),
+                            yEnd: .value("Q75", wQ75),
+                            series: .value("WindSpread", "IQR")
                         )
                         .foregroundStyle(Color.brown.opacity(0.32))
+                        .interpolationMethod(.catmullRom)
                     }
                 }
 
                 ForEach(points) { p in
                     LineMark(
                         x: .value("Time", p.date),
-                        y: .value("Speed", p.windSpeedKmH)
+                        y: .value("Speed", p.windSpeedKmH),
+                        series: .value("WindSpread", "Median")
                     )
                     .foregroundStyle(Color.brown)
                     .lineStyle(StrokeStyle(lineWidth: 2.0))
+                    .interpolationMethod(.catmullRom)
                 }
 
                 RuleMark(y: .value("DirLevel", yN_top))
@@ -681,8 +708,8 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                         let dir1 = d1 < 0 ? d1 + 360.0 : d1
                         let d2 = rawDir2.truncatingRemainder(dividingBy: 360.0)
                         let dir2 = d2 < 0 ? d2 + 360.0 : d2
-                        let spd1 = p1.windSpeedMedian
-                        let spd2 = p2.windSpeedMedian
+                        let spd1 = p1.windSpeedMs
+                        let spd2 = p2.windSpeedMs
                         let avgSpd = (spd1 + spd2) / 2.0
                         let segWidth = max(1.2, min(5.5, 1.2 + (avgSpd / 15.0) * 3.8))
 
@@ -797,7 +824,7 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                             y: .value("ArrowY", arrowY)
                         )
                         .symbol {
-                            WindArrowShape(dirDeg: dir, speedMs: p.windSpeedMedian)
+                            WindArrowShape(dirDeg: dir, speedMs: p.windSpeedMs)
                         }
                     }
                 }
@@ -1109,10 +1136,10 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(String(format: "☁ %.0f%%", point.cloudTotalMedian))
                         .font(.subheadline.bold())
-                        .foregroundColor(Color(red: 202/255, green: 138/255, blue: 4/255))
+                        .foregroundColor(Color(red: 234/255, green: 179/255, blue: 8/255))
                     HStack(spacing: 4) {
                         Text(String(format: "H:%.0f", point.cloudHigh ?? 0))
-                            .foregroundColor(Color(red: 6/255, green: 182/255, blue: 212/255))
+                            .foregroundColor(Color(red: 37/255, green: 99/255, blue: 235/255))
                         Text(String(format: "M:%.0f", point.cloudMid ?? 0))
                             .foregroundColor(Color(red: 16/255, green: 185/255, blue: 129/255))
                         Text(String(format: "L:%.0f", point.cloudLow ?? 0))
@@ -1129,7 +1156,7 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                         Text(String(format: "%.0f km/h", point.windSpeedKmH))
                             .font(.subheadline.bold())
                             .foregroundColor(.brown)
-                        Text(String(format: "(%.1f m/s)", point.windSpeedMedian))
+                        Text(String(format: "(%.1f m/s)", point.windSpeedMs))
                             .font(.system(size: 8))
                             .foregroundColor(.secondary)
                     }
@@ -1137,7 +1164,7 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                         if let dir = point.windDirection {
                             Image(systemName: "arrow.down")
                                 .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(windColor(speedMs: point.windSpeedMedian))
+                                .foregroundColor(windColor(speedMs: point.windSpeedMs))
                                 .rotationEffect(.degrees(dir))
                         }
                         Text(point.windCompassDirection)

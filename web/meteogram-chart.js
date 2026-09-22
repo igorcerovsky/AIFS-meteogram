@@ -1651,7 +1651,7 @@ class MeteogramChart {
       ctx.fillText(`${v}%`, this.marginLeft - 6, y);
     }
 
-    // 1. Total Cloud Cover Histogram Bins (anchored at 0% baseline)
+    // 1. Total Cloud Cover Histogram Bins (anchored at 0% baseline) in light yellow
     const cTotal = stats.cloud_cover;
     const nTimes = this.times.length;
     const barWidth = Math.max(2.5, (this.plotWidth / nTimes) * 0.80);
@@ -1665,12 +1665,12 @@ class MeteogramChart {
         const yMed = valToY(Math.min(100.0, Math.max(0.0, med)));
         const barH = p.bottom - yMed;
 
-        // Clean, simplified histogram bar anchored at 0%
-        ctx.fillStyle = "rgba(250, 204, 21, 0.42)"; // soft warm amber/yellow
+        // Clean, light yellow histogram bar anchored at 0%
+        ctx.fillStyle = "rgba(254, 240, 138, 0.55)"; // light pure yellow
         ctx.fillRect(x - barWidth / 2, yMed, barWidth, barH);
 
-        // Crisp top cap defining the bin top
-        ctx.strokeStyle = "#ca8a04"; // golden amber outline
+        // Crisp yellow top cap defining the bin top (no brown)
+        ctx.strokeStyle = "#facc15"; // yellow-400
         ctx.lineWidth = 1.3;
         ctx.beginPath();
         ctx.moveTo(x - barWidth / 2, yMed);
@@ -1679,13 +1679,16 @@ class MeteogramChart {
       }
     }
 
-    // 2. High Clouds (royal blue curve, median only)
+    // 2. Total Cloud Cover Curve (darker pure yellow, not brownish)
+    this._drawCurve(stats.cloud_cover, valToY, "#eab308", 2.0);
+
+    // 3. High Clouds (royal blue curve, median only)
     this._drawCurve(stats.cloud_cover_high, valToY, "#2563eb", 1.8);
 
-    // 3. Mid Clouds (emerald green curve, median only)
+    // 4. Mid Clouds (emerald green curve, median only)
     this._drawCurve(stats.cloud_cover_mid, valToY, "#10b981", 1.8);
 
-    // 4. Low Clouds (crimson curve, median only)
+    // 5. Low Clouds (crimson curve, median only)
     this._drawCurve(stats.cloud_cover_low, valToY, "#e11d48", 1.8);
 
     // Title & Legend
@@ -1694,7 +1697,24 @@ class MeteogramChart {
     ctx.font = "bold 11px 'Inter', sans-serif";
     ctx.fillText(t.clouds, this.marginLeft + 8, p.top + 14);
 
-    this._drawLegendBadge(this.marginLeft + 130, p.top + 9, "#facc15", t.total_clouds, true);
+    // Total Clouds badge showing both light yellow bin and darker yellow line
+    ctx.save();
+    ctx.font = "10px 'Inter', sans-serif";
+    ctx.fillStyle = "rgba(254, 240, 138, 0.75)";
+    ctx.fillRect(this.marginLeft + 130, p.top + 9 - 4, 14, 8);
+    ctx.strokeStyle = "#facc15";
+    ctx.lineWidth = 0.8;
+    ctx.strokeRect(this.marginLeft + 130, p.top + 9 - 4, 14, 8);
+    ctx.strokeStyle = "#eab308";
+    ctx.lineWidth = 2.0;
+    ctx.beginPath();
+    ctx.moveTo(this.marginLeft + 130, p.top + 9);
+    ctx.lineTo(this.marginLeft + 130 + 14, p.top + 9);
+    ctx.stroke();
+    ctx.fillStyle = "#334155";
+    ctx.fillText(t.total_clouds, this.marginLeft + 130 + 18, p.top + 9 + 3);
+    ctx.restore();
+
     this._drawLegendBadge(this.marginLeft + 235, p.top + 9, "#2563eb", t.high_clouds, false);
     this._drawLegendBadge(this.marginLeft + 355, p.top + 9, "#10b981", t.mid_clouds, false);
     this._drawLegendBadge(this.marginLeft + 480, p.top + 9, "#e11d48", t.low_clouds, false);
