@@ -654,14 +654,14 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
         let yE = yTop - ySpan * 0.75
         let yN_bot = yBottom
 
-        let sampleStep = max(1, points.count / 14)
+        let sampleStep = max(1, points.count / 28)
         let arrowPoints = points.enumerated().filter { $0.offset % sampleStep == 0 }.map(\.element)
 
         return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Label("10m Wind Speed [m/s] & Direction", systemImage: "wind")
                     .font(.caption.bold())
-                    .foregroundColor(.brown)
+                    .foregroundColor(Color(red: 51/255, green: 65/255, blue: 85/255))
 
                 Spacer()
 
@@ -670,8 +670,8 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                 windSpeedScaleBar
 
                 HStack(spacing: 6) {
-                    legendItem(title: "Median", color: .brown, isLine: true)
-                    legendItem(title: "Spread", color: .brown.opacity(0.2))
+                    legendItem(title: "Median", color: Color(red: 51/255, green: 65/255, blue: 85/255), isLine: true)
+                    legendItem(title: "Spread", color: Color(red: 148/255, green: 163/255, blue: 184/255).opacity(0.35))
                 }
                 .font(.caption2)
             }
@@ -685,7 +685,7 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                             yEnd: .value("Max", wMax),
                             series: .value("WindSpread", "Full")
                         )
-                        .foregroundStyle(Color.brown.opacity(0.18))
+                        .foregroundStyle(Color(red: 148/255, green: 163/255, blue: 184/255).opacity(0.20))
                         .interpolationMethod(.catmullRom)
                     }
                 }
@@ -698,7 +698,7 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                             yEnd: .value("Q75", wQ75),
                             series: .value("WindSpread", "IQR")
                         )
-                        .foregroundStyle(Color.brown.opacity(0.32))
+                        .foregroundStyle(Color(red: 148/255, green: 163/255, blue: 184/255).opacity(0.35))
                         .interpolationMethod(.catmullRom)
                     }
                 }
@@ -709,8 +709,8 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                         y: .value("Speed", p.windSpeedMs),
                         series: .value("WindSpread", "Median")
                     )
-                    .foregroundStyle(Color.brown)
-                    .lineStyle(StrokeStyle(lineWidth: 2.0))
+                    .foregroundStyle(Color(red: 51/255, green: 65/255, blue: 85/255))
+                    .lineStyle(StrokeStyle(lineWidth: 1.8))
                     .interpolationMethod(.catmullRom)
                 }
 
@@ -734,7 +734,7 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                     .foregroundStyle(Color.secondary.opacity(0.35))
                     .lineStyle(StrokeStyle(lineWidth: 0.85, dash: [3, 3]))
 
-                // Wind direction trajectory curve colored continuously by wind direction, thickness scaled by wind speed (PoC)
+                // Wind direction trajectory curve colored continuously by wind speed, thickness scaled by wind speed
                 ForEach(0..<max(0, points.count - 1), id: \.self) { idx in
                     let p1 = points[idx]
                     let p2 = points[idx + 1]
@@ -746,7 +746,7 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                         let spd1 = p1.windSpeedMs
                         let spd2 = p2.windSpeedMs
                         let avgSpd = (spd1 + spd2) / 2.0
-                        let segWidth = max(1.2, min(5.5, 1.2 + (avgSpd / 15.0) * 3.8))
+                        let segWidth = max(1.2, min(5.8, 1.2 + (avgSpd / 15.0) * 4.0))
 
                         if dir1 - dir2 > 180 {
                             // Crossing N clockwise (e.g. 350° -> 10°)
@@ -754,6 +754,8 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                             let timeDiff = p2.date.timeIntervalSince(p1.date)
                             let midDate = p1.date.addingTimeInterval(timeDiff * frac)
                             let spdMid = spd1 + (spd2 - spd1) * frac
+                            let colA = windColor(speedMs: (spd1 + spdMid) / 2.0)
+                            let colB = windColor(speedMs: (spdMid + spd2) / 2.0)
 
                             // Sub-segment 1: (p1.date, y1) to (midDate, yN_top)
                             LineMark(
@@ -761,7 +763,7 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                                 y: .value("WindWave", calcWindDirY(dirDeg: dir1, yMaxWind: yMaxWind)),
                                 series: .value("WindWaveSeg", "\(idx)_a")
                             )
-                            .foregroundStyle(windColor(speedMs: spd1))
+                            .foregroundStyle(colA)
                             .lineStyle(StrokeStyle(lineWidth: segWidth, lineCap: .round))
 
                             LineMark(
@@ -769,7 +771,7 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                                 y: .value("WindWave", yN_top),
                                 series: .value("WindWaveSeg", "\(idx)_a")
                             )
-                            .foregroundStyle(windColor(speedMs: spdMid))
+                            .foregroundStyle(colA)
                             .lineStyle(StrokeStyle(lineWidth: segWidth, lineCap: .round))
 
                             // Sub-segment 2: (midDate, yN_bot) to (p2.date, y2)
@@ -778,7 +780,7 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                                 y: .value("WindWave", yN_bot),
                                 series: .value("WindWaveSeg", "\(idx)_b")
                             )
-                            .foregroundStyle(windColor(speedMs: spdMid))
+                            .foregroundStyle(colB)
                             .lineStyle(StrokeStyle(lineWidth: segWidth, lineCap: .round))
 
                             LineMark(
@@ -786,7 +788,7 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                                 y: .value("WindWave", calcWindDirY(dirDeg: dir2, yMaxWind: yMaxWind)),
                                 series: .value("WindWaveSeg", "\(idx)_b")
                             )
-                            .foregroundStyle(windColor(speedMs: spd2))
+                            .foregroundStyle(colB)
                             .lineStyle(StrokeStyle(lineWidth: segWidth, lineCap: .round))
                         } else if dir2 - dir1 > 180 {
                             // Crossing N counter-clockwise (e.g. 10° -> 350°)
@@ -794,6 +796,8 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                             let timeDiff = p2.date.timeIntervalSince(p1.date)
                             let midDate = p1.date.addingTimeInterval(timeDiff * frac)
                             let spdMid = spd1 + (spd2 - spd1) * frac
+                            let colA = windColor(speedMs: (spd1 + spdMid) / 2.0)
+                            let colB = windColor(speedMs: (spdMid + spd2) / 2.0)
 
                             // Sub-segment 1: (p1.date, y1) to (midDate, yN_bot)
                             LineMark(
@@ -801,7 +805,7 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                                 y: .value("WindWave", calcWindDirY(dirDeg: dir1, yMaxWind: yMaxWind)),
                                 series: .value("WindWaveSeg", "\(idx)_a")
                             )
-                            .foregroundStyle(windColor(speedMs: spd1))
+                            .foregroundStyle(colA)
                             .lineStyle(StrokeStyle(lineWidth: segWidth, lineCap: .round))
 
                             LineMark(
@@ -809,7 +813,7 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                                 y: .value("WindWave", yN_bot),
                                 series: .value("WindWaveSeg", "\(idx)_a")
                             )
-                            .foregroundStyle(windColor(speedMs: spdMid))
+                            .foregroundStyle(colA)
                             .lineStyle(StrokeStyle(lineWidth: segWidth, lineCap: .round))
 
                             // Sub-segment 2: (midDate, yN_top) to (p2.date, y2)
@@ -818,7 +822,7 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                                 y: .value("WindWave", yN_top),
                                 series: .value("WindWaveSeg", "\(idx)_b")
                             )
-                            .foregroundStyle(windColor(speedMs: spdMid))
+                            .foregroundStyle(colB)
                             .lineStyle(StrokeStyle(lineWidth: segWidth, lineCap: .round))
 
                             LineMark(
@@ -826,17 +830,18 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                                 y: .value("WindWave", calcWindDirY(dirDeg: dir2, yMaxWind: yMaxWind)),
                                 series: .value("WindWaveSeg", "\(idx)_b")
                             )
-                            .foregroundStyle(windColor(speedMs: spd2))
+                            .foregroundStyle(colB)
                             .lineStyle(StrokeStyle(lineWidth: segWidth, lineCap: .round))
                         } else {
                             let y1 = calcWindDirY(dirDeg: dir1, yMaxWind: yMaxWind)
                             let y2 = calcWindDirY(dirDeg: dir2, yMaxWind: yMaxWind)
+                            let segCol = windColor(speedMs: avgSpd)
                             LineMark(
                                 x: .value("Time", p1.date),
                                 y: .value("WindWave", y1),
                                 series: .value("WindWaveSeg", "\(idx)")
                             )
-                            .foregroundStyle(windColor(speedMs: spd1))
+                            .foregroundStyle(segCol)
                             .lineStyle(StrokeStyle(lineWidth: segWidth, lineCap: .round))
 
                             LineMark(
@@ -844,7 +849,7 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                                 y: .value("WindWave", y2),
                                 series: .value("WindWaveSeg", "\(idx)")
                             )
-                            .foregroundStyle(windColor(speedMs: spd2))
+                            .foregroundStyle(segCol)
                             .lineStyle(StrokeStyle(lineWidth: segWidth, lineCap: .round))
                         }
                     }
