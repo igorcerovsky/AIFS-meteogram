@@ -1651,70 +1651,36 @@ class MeteogramChart {
       ctx.fillText(`${v}%`, this.marginLeft - 6, y);
     }
 
-    // 1. Total Cloud Cover Bars with Percentiles (Yellow color)
+    // 1. Total Cloud Cover Histogram Bins (anchored at 0% baseline)
     const cTotal = stats.cloud_cover;
     const nTimes = this.times.length;
-    const barWidth = Math.max(2.5, (this.plotWidth / nTimes) * 0.72);
+    const barWidth = Math.max(2.5, (this.plotWidth / nTimes) * 0.80);
 
     if (cTotal && cTotal.median) {
       for (let i = 0; i < nTimes; i++) {
+        const med = cTotal.median[i];
+        if (med == null || med <= 0) continue;
+
         const x = this._timeToX(this.times[i].getTime());
-        const minVal = cTotal.min ? cTotal.min[i] : null;
-        const maxVal = cTotal.max ? cTotal.max[i] : null;
-        const q25 = cTotal.q25 ? cTotal.q25[i] : null;
-        const q75 = cTotal.q75 ? cTotal.q75[i] : null;
-        const med = cTotal.median ? cTotal.median[i] : null;
+        const yMed = valToY(Math.min(100.0, Math.max(0.0, med)));
+        const barH = p.bottom - yMed;
 
-        if (med == null) continue;
+        // Clean, simplified histogram bar anchored at 0%
+        ctx.fillStyle = "rgba(250, 204, 21, 0.42)"; // soft warm amber/yellow
+        ctx.fillRect(x - barWidth / 2, yMed, barWidth, barH);
 
-        if (minVal != null && maxVal != null && (maxVal > 0 || minVal > 0)) {
-          // Full ensemble spread: Min - Max (light translucent yellow)
-          const yMin = valToY(minVal);
-          const yMax = valToY(maxVal);
-          ctx.fillStyle = "rgba(254, 240, 138, 0.52)"; // #fef08a
-          ctx.fillRect(x - barWidth / 2, yMax, barWidth, Math.max(1.5, yMin - yMax));
-
-          // 50% interquartile spread: Q25 - Q75 (rich warm yellow)
-          if (q25 != null && q75 != null) {
-            const yQ25 = valToY(q25);
-            const yQ75 = valToY(q75);
-            ctx.fillStyle = "rgba(250, 204, 21, 0.82)"; // #facc15
-            ctx.fillRect(x - barWidth / 2, yQ75, barWidth, Math.max(1.5, yQ25 - yQ75));
-          }
-
-          // Median tick mark across the bar
-          const yMed = valToY(med);
-          ctx.strokeStyle = "#ca8a04"; // golden yellow
-          ctx.lineWidth = 1.8;
-          ctx.beginPath();
-          ctx.moveTo(x - barWidth / 2, yMed);
-          ctx.lineTo(x + barWidth / 2, yMed);
-          ctx.stroke();
-        } else if (med > 0) {
-          // Deterministic / single member: bar from 0 up to median
-          const yMed = valToY(med);
-          ctx.fillStyle = "rgba(250, 204, 21, 0.82)";
-          ctx.fillRect(x - barWidth / 2, yMed, barWidth, Math.max(1.5, p.bottom - yMed));
-        }
+        // Crisp top cap defining the bin top
+        ctx.strokeStyle = "#ca8a04"; // golden amber outline
+        ctx.lineWidth = 1.3;
+        ctx.beginPath();
+        ctx.moveTo(x - barWidth / 2, yMed);
+        ctx.lineTo(x + barWidth / 2, yMed);
+        ctx.stroke();
       }
-
-      // Median trajectory line connecting the medians across the bars
-      ctx.strokeStyle = "#ca8a04";
-      ctx.lineWidth = 1.8;
-      ctx.beginPath();
-      let started = false;
-      for (let i = 0; i < nTimes; i++) {
-        const v = cTotal.median[i];
-        if (v == null) continue;
-        const x = this._timeToX(this.times[i].getTime());
-        const y = valToY(v);
-        if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
     }
 
-    // 2. High Clouds (cyan curve, median only)
-    this._drawCurve(stats.cloud_cover_high, valToY, "#06b6d4", 1.8);
+    // 2. High Clouds (royal blue curve, median only)
+    this._drawCurve(stats.cloud_cover_high, valToY, "#2563eb", 1.8);
 
     // 3. Mid Clouds (emerald green curve, median only)
     this._drawCurve(stats.cloud_cover_mid, valToY, "#10b981", 1.8);
@@ -1729,7 +1695,7 @@ class MeteogramChart {
     ctx.fillText(t.clouds, this.marginLeft + 8, p.top + 14);
 
     this._drawLegendBadge(this.marginLeft + 130, p.top + 9, "#facc15", t.total_clouds, true);
-    this._drawLegendBadge(this.marginLeft + 235, p.top + 9, "#06b6d4", t.high_clouds, false);
+    this._drawLegendBadge(this.marginLeft + 235, p.top + 9, "#2563eb", t.high_clouds, false);
     this._drawLegendBadge(this.marginLeft + 355, p.top + 9, "#10b981", t.mid_clouds, false);
     this._drawLegendBadge(this.marginLeft + 480, p.top + 9, "#e11d48", t.low_clouds, false);
 

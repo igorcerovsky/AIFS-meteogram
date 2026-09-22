@@ -166,8 +166,8 @@ python3 server/meteogram.py --location "48.148,17.107" --output custom_coords.pn
      - **Solar Analemma**: Annual figure-8 tracking solar declination against the Equation of Time ($+16\text{m}$ to $-14\text{m}$) for the active location.
      - **Lunar Analemma**: Closed monthly figure-8 loop reflecting orbital inclination to the celestial equator and Equation of Time harmonics, with an illuminated phase-accurate Moon marker locked strictly on the curve.
 3. **Multi-layer Cloud Cover (%)**:
-   - **Total Cloud Cover**: Yellow vertical percentile bars with light yellow min-max spread, warm yellow Q25–Q75 interquartile bars, and golden median ticks and trajectory line.
-   - **Cloud Layers (Single Curves)**: High Cirrus (cyan `#06b6d4`), Medium Alto (emerald `#10b981`), and Low Stratus (crimson `#e11d48`) rendered as clean single median lines.
+   - **Total Cloud Cover**: Clean, simplified amber histogram bins anchored at 0% baseline representing total cloud volume across time.
+   - **Cloud Layers (Single Curves)**: High Cirrus (royal blue `#2563eb`), Medium Alto (emerald `#10b981`), and Low Stratus (crimson `#e11d48`) rendered as distinct, vibrant median lines.
 4. **10m Wind Speed & Direction**:
    - **Continuous 5-Point Direction Loop**: Mapped to `N` (top), `W`, `S`, `E`, and `N` (bottom) across a unified, continuous grid to prevent discontinuous edge jumps for north-westerly and northerly winds.
    - **Dual Speed Encoding**:

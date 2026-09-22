@@ -482,7 +482,7 @@ public struct NativeMeteogramChartView: View {
 
                 HStack(spacing: 12) {
                     legendItem(title: "Total (Bars)", color: Color(red: 250/255, green: 204/255, blue: 21/255))
-                    legendItem(title: "High (cirrus)", color: Color(red: 6/255, green: 182/255, blue: 212/255), isLine: true)
+                    legendItem(title: "High (cirrus)", color: Color(red: 37/255, green: 99/255, blue: 235/255), isLine: true)
                     legendItem(title: "Medium (alto)", color: Color(red: 16/255, green: 185/255, blue: 129/255), isLine: true)
                     legendItem(title: "Low (stratus)", color: Color(red: 225/255, green: 29/255, blue: 72/255), isLine: true)
                 }
@@ -518,52 +518,21 @@ public struct NativeMeteogramChartView: View {
 
     @ChartContentBuilder
     private func cloudBars(points: [TimeSeriesPoint]) -> some ChartContent {
-        // Full ensemble min-max spread
         ForEach(points) { p in
-            if let cMin = p.cloudTotalMin, let cMax = p.cloudTotalMax, (cMax > 0 || cMin > 0) {
+            if p.cloudTotalMedian > 0 {
                 BarMark(
                     x: .value("Time", p.date),
-                    yStart: .value("Min", cMin),
-                    yEnd: .value("Max", cMax)
+                    y: .value("Total Cloud Cover", p.cloudTotalMedian)
                 )
-                .foregroundStyle(Color(red: 254/255, green: 240/255, blue: 138/255).opacity(0.55))
-            } else if p.cloudTotalMin == nil && p.cloudTotalMedian > 0 {
-                // Deterministic / single-member fallback
-                BarMark(
-                    x: .value("Time", p.date),
-                    y: .value("Total", p.cloudTotalMedian)
-                )
-                .foregroundStyle(Color(red: 250/255, green: 204/255, blue: 21/255).opacity(0.82))
-            }
-        }
-
-        // 50% interquartile spread (Q25-Q75)
-        ForEach(points) { p in
-            if let cQ25 = p.cloudTotalQ25, let cQ75 = p.cloudTotalQ75, cQ75 > 0 {
-                BarMark(
-                    x: .value("Time", p.date),
-                    yStart: .value("Q25", cQ25),
-                    yEnd: .value("Q75", cQ75)
-                )
-                .foregroundStyle(Color(red: 250/255, green: 204/255, blue: 21/255).opacity(0.85))
+                .foregroundStyle(Color(red: 250/255, green: 204/255, blue: 21/255).opacity(0.42))
             }
         }
     }
 
     @ChartContentBuilder
     private func cloudLayerLines(points: [TimeSeriesPoint]) -> some ChartContent {
-        // 1. Total Cloud Median line (Golden amber)
-        ForEach(points) { p in
-            LineMark(
-                x: .value("Time", p.date),
-                y: .value("Total Median", p.cloudTotalMedian),
-                series: .value("Layer", "Total")
-            )
-            .foregroundStyle(Color(red: 202/255, green: 138/255, blue: 4/255))
-            .lineStyle(StrokeStyle(lineWidth: 1.8))
-        }
 
-        // 2. High Clouds: Blue / Cyan (#06b6d4)
+        // 1. High Clouds: Royal Blue (#2563eb)
         ForEach(points) { p in
             if let cHigh = p.cloudHigh {
                 LineMark(
@@ -571,7 +540,7 @@ public struct NativeMeteogramChartView: View {
                     y: .value("High", cHigh),
                     series: .value("Layer", "High")
                 )
-                .foregroundStyle(Color(red: 6/255, green: 182/255, blue: 212/255))
+                .foregroundStyle(Color(red: 37/255, green: 99/255, blue: 235/255))
                 .lineStyle(StrokeStyle(lineWidth: 1.8))
             }
         }

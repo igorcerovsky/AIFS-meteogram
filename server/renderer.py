@@ -655,7 +655,7 @@ class MeteogramRenderer:
             zorder=6,
         )
 
-        # 2. High Clouds: Vivid Cyan / Sky Blue (#0096c7), thick line (lw=2.4)
+        # 2. High Clouds: Royal Blue (#2563eb), thick line (lw=2.4)
         if cloud_high is not None and "median" in cloud_high:
             c_high_smooth = self._smooth_curve(
                 num_times, cloud_high["median"], num_times_dense, clip_min=0.0, clip_max=100.0
@@ -663,7 +663,7 @@ class MeteogramRenderer:
             ax_cloud.plot(
                 num_times_dense,
                 c_high_smooth,
-                color="#0096c7",
+                color="#2563eb",
                 linewidth=2.4,
                 label=f"{self.t['cloud_high']}",
                 zorder=5,
