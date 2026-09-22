@@ -82,12 +82,13 @@ public struct EnsembleStat: Codable, Sendable {
     public let median: [Double]
     public let q25: [Double]?
     public let q75: [Double]?
+    public let p90: [Double]?
     public let min: [Double]?
     public let max: [Double]?
     public let membersCount: Int?
 
     enum CodingKeys: String, CodingKey {
-        case median, q25, q75, min, max
+        case median, q25, q75, p90, min, max
         case membersCount = "members_count"
     }
 }
@@ -134,6 +135,7 @@ public struct TimeSeriesPoint: Identifiable, Sendable {
     // Precipitation (mm) & Snowfall (cm)
     public let precipMedian: Double
     public let precipMax: Double?
+    public let precipP90: Double?
     public let snowMedian: Double
 
     // Cloud Cover (%)
@@ -211,6 +213,7 @@ extension ForecastResponse {
 
             let pMed = stats.precipitation?.median[safe: i] ?? 0.0
             let pMax = stats.precipitation?.max?[safe: i]
+            let pP90 = stats.precipitation?.p90?[safe: i] ?? pMax
             let sMed = stats.snowfall?.median[safe: i] ?? 0.0
 
             let cMed = stats.cloudCover?.median[safe: i] ?? 0.0
@@ -248,6 +251,7 @@ extension ForecastResponse {
                 tempMax: tMax,
                 precipMedian: pMed,
                 precipMax: pMax,
+                precipP90: pP90,
                 snowMedian: sMed,
                 cloudTotalMedian: cMed,
                 cloudTotalQ25: cQ25,

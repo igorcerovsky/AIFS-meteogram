@@ -1483,11 +1483,11 @@ class MeteogramChart {
 
     const t = METEO_TRANSLATIONS[this.options.lang] || METEO_TRANSLATIONS.en;
 
-    // Find max rain to scale
+    // Find max rain to scale (anchored on P90 upper scenario to prevent outlier spikes from distorting scale)
     let maxP = 2.0;
-    const rMax = pRain.max || [];
-    for (let i = 0; i < rMax.length; i++) {
-      if (rMax[i] != null && rMax[i] > maxP) maxP = rMax[i];
+    const rP90 = pRain.p90 || pRain.max || [];
+    for (let i = 0; i < rP90.length; i++) {
+      if (rP90[i] != null && rP90[i] > maxP) maxP = rP90[i];
     }
     const yMax = Math.max(2.0, maxP * 1.15);
     const v0 = 0.2; // Transition parameter for log scaling (expands low precipitation)
@@ -1531,38 +1531,43 @@ class MeteogramChart {
     const barWidth = Math.max(2, (this.plotWidth / nTimes) * 0.75);
 
     const rainMed = pRain.median || [];
-    const rainMax = pRain.max || [];
+    const rainP90Arr = pRain.p90 || pRain.max || [];
     const snowMed = pSnow ? (pSnow.median || []) : [];
 
     for (let i = 0; i < nTimes; i++) {
       const x = this._timeToX(this.times[i].getTime());
       const r = rainMed[i] || 0.0;
       const s = snowMed[i] || 0.0;
-      const m = rainMax[i] || 0.0;
+      const p90 = rainP90Arr[i] || 0.0;
 
+      // 1. 90th Percentile (P90) Transparent Light Blue Bar (upper scenario)
+      if (p90 > 0.05) {
+        const yP90 = valToY(p90);
+        ctx.fillStyle = "rgba(147, 197, 253, 0.45)"; // transparent light blue
+        ctx.fillRect(x - barWidth / 2, yP90, barWidth, p.bottom - yP90);
+
+        // Crisp light blue top cap at P90 level
+        ctx.strokeStyle = "#60a5fa";
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(x - barWidth / 2, yP90);
+        ctx.lineTo(x + barWidth / 2, yP90);
+        ctx.stroke();
+      }
+
+      // 2. Expected (Median / 100% scenario) Rain & Snow Solid Bars in contrast
       if (r > 0 || s > 0) {
-        // Rain bar (blue)
+        // Rain bar (solid vibrant blue)
         const yR = valToY(r);
         ctx.fillStyle = "#2563eb";
         ctx.fillRect(x - barWidth / 2, yR, barWidth, p.bottom - yR);
 
-        // Snow bar (cyan stacked on top or separate)
+        // Snow bar (cyan stacked on top)
         if (s > 0) {
           const yS = valToY(r + s);
           ctx.fillStyle = "#06b6d4";
           ctx.fillRect(x - barWidth / 2, yS, barWidth, yR - yS);
         }
-      }
-
-      // Max member tick (horizontal cap)
-      if (m > 0.05) {
-        const yM = valToY(m);
-        ctx.strokeStyle = "#1e40af";
-        ctx.lineWidth = 1.4;
-        ctx.beginPath();
-        ctx.moveTo(x - barWidth, yM);
-        ctx.lineTo(x + barWidth, yM);
-        ctx.stroke();
       }
     }
 
@@ -1573,8 +1578,8 @@ class MeteogramChart {
     ctx.fillText(`${t.precip} [log]`, this.marginLeft + 8, p.top + 14);
 
     this._drawLegendBadge(this.marginLeft + 235, p.top + 9, "#2563eb", t.rain, true);
-    this._drawLegendBadge(this.marginLeft + 295, p.top + 9, "#06b6d4", t.snow, true);
-    this._drawLegendBadge(this.marginLeft + 360, p.top + 9, "#1e40af", "Max member tick", false, [0, 0]);
+    this._drawLegendBadge(this.marginLeft + 295, p.top + 9, "rgba(147, 197, 253, 0.75)", "P90 (90%)", true);
+    this._drawLegendBadge(this.marginLeft + 385, p.top + 9, "#06b6d4", t.snow, true);
 
     // Side-by-side Analemma widgets (Sun & Moon) with transparent background in precipitation pane
     const cardW = 104;
@@ -2660,7 +2665,7 @@ class MeteogramChart {
 
     const pRain = stats.precipitation?.median?.[idx] || 0.0;
     const pSnow = stats.snowfall?.median?.[idx] || 0.0;
-    const pMaxMember = stats.precipitation?.max?.[idx] || 0.0;
+    const pP90 = stats.precipitation?.p90?.[idx] ?? stats.precipitation?.max?.[idx] ?? 0.0;
 
     const cTotal = stats.cloud_cover?.median?.[idx];
     const cHigh = stats.cloud_cover_high?.median?.[idx];
@@ -2712,7 +2717,7 @@ class MeteogramChart {
             <span class="hud-val hud-val-precip">${pRain.toFixed(1)} mm</span>
           </div>
           <div class="hud-sub">
-            Max: ${pMaxMember.toFixed(1)} mm ${pSnow > 0.05 ? `• ❄ ${pSnow.toFixed(1)} cm` : ""}
+            P90: ${pP90.toFixed(1)} mm ${pSnow > 0.05 ? `• ❄ ${pSnow.toFixed(1)} cm` : ""}
           </div>
         </div>
 
@@ -2986,6 +2991,7 @@ window.MeteogramAPI = {
       const med = new Array(numSteps);
       const q25 = new Array(numSteps);
       const q75 = new Array(numSteps);
+      const p90 = new Array(numSteps);
       const minArr = new Array(numSteps);
       const maxArr = new Array(numSteps);
 
@@ -2997,7 +3003,7 @@ window.MeteogramAPI = {
         }
 
         if (vals.length === 0) {
-          med[t] = null; q25[t] = null; q75[t] = null; minArr[t] = null; maxArr[t] = null;
+          med[t] = null; q25[t] = null; q75[t] = null; p90[t] = null; minArr[t] = null; maxArr[t] = null;
           continue;
         }
 
@@ -3012,6 +3018,7 @@ window.MeteogramAPI = {
           vals.sort((a, b) => a - b);
           q25[t] = vals[Math.floor(vals.length * 0.25)];
           q75[t] = vals[Math.floor(vals.length * 0.75)];
+          p90[t] = vals[Math.min(vals.length - 1, Math.floor(vals.length * 0.90))];
           minArr[t] = vals[0];
           maxArr[t] = vals[vals.length - 1];
         } else {
@@ -3019,6 +3026,7 @@ window.MeteogramAPI = {
           med[t] = vals[Math.floor(vals.length * 0.5)];
           q25[t] = vals[Math.floor(vals.length * 0.25)];
           q75[t] = vals[Math.floor(vals.length * 0.75)];
+          p90[t] = vals[Math.min(vals.length - 1, Math.floor(vals.length * 0.90))];
           minArr[t] = vals[0];
           maxArr[t] = vals[vals.length - 1];
         }
@@ -3028,6 +3036,7 @@ window.MeteogramAPI = {
         median: med,
         q25: q25,
         q75: q75,
+        p90: p90,
         min: minArr,
         max: maxArr,
         members_count: memberKeys.length,

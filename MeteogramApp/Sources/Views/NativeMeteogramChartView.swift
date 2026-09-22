@@ -365,9 +365,9 @@ public struct NativeMeteogramChartView: View {
 
     // MARK: - Panel 2: Precipitation & Snowfall [mm]
     private func precipitationPanelView(points: [TimeSeriesPoint]) -> some View {
-        let maxRain = points.compactMap { $0.precipMax }.max() ?? 0.0
+        let maxP90 = points.compactMap { $0.precipP90 ?? $0.precipMax }.max() ?? 0.0
         let maxMedian = points.map { $0.precipMedian + $0.snowMedian }.max() ?? 0.0
-        let rawMaxP = max(maxRain, maxMedian)
+        let rawMaxP = max(maxP90, maxMedian)
         let yMax = max(2.0, rawMaxP * 1.15)
         let v0 = 0.2
         let logDenom = log10(1.0 + yMax / v0)
@@ -392,24 +392,37 @@ public struct NativeMeteogramChartView: View {
 
                 HStack(spacing: 12) {
                     legendItem(title: "Rain", color: .blue)
+                    legendItem(title: "P90 (90%)", color: Color(red: 147/255, green: 197/255, blue: 253/255))
                     legendItem(title: "Snow", color: .cyan)
-                    legendItem(title: "Max Member", color: .indigo, isLine: true)
                 }
                 .font(.caption2)
             }
 
             ZStack(alignment: .topTrailing) {
                 Chart {
+                    // 1. 90th percentile (P90) transparent light blue bars
+                    ForEach(points) { p in
+                        if let p90 = p.precipP90, p90 > 0.05 {
+                            BarMark(
+                                x: .value("Time", p.date),
+                                y: .value("P90", pseudoLog(p90))
+                            )
+                            .foregroundStyle(Color(red: 147/255, green: 197/255, blue: 253/255).opacity(0.45))
+                        }
+                    }
+
+                    // 2. Solid expected rain (median)
                     ForEach(points) { p in
                         if p.precipMedian > 0 {
                             BarMark(
                                 x: .value("Time", p.date),
                                 y: .value("Rain", pseudoLog(p.precipMedian))
                             )
-                            .foregroundStyle(Color.blue.opacity(0.85))
+                            .foregroundStyle(Color.blue)
                         }
                     }
 
+                    // 3. Snowfall (median)
                     ForEach(points) { p in
                         if p.snowMedian > 0 {
                             BarMark(
@@ -417,18 +430,6 @@ public struct NativeMeteogramChartView: View {
                                 y: .value("Snow", pseudoLog(p.snowMedian))
                             )
                             .foregroundStyle(Color.cyan.opacity(0.85))
-                        }
-                    }
-
-                    ForEach(points) { p in
-                        if let pMax = p.precipMax, pMax > 0 {
-                            RuleMark(
-                                xStart: .value("Time", p.date.addingTimeInterval(-1200)),
-                                xEnd: .value("Time", p.date.addingTimeInterval(1200)),
-                                y: .value("Max", pseudoLog(pMax))
-                            )
-                            .foregroundStyle(Color.indigo)
-                            .lineStyle(StrokeStyle(lineWidth: 1.5))
                         }
                     }
 
@@ -1123,6 +1124,11 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                     Text(String(format: "%.1f mm", point.precipMedian))
                         .font(.subheadline.bold())
                         .foregroundColor(.blue)
+                    if let p90 = point.precipP90, p90 > 0.05 {
+                        Text(String(format: "P90: %.1f mm", p90))
+                            .font(.system(size: 8))
+                            .foregroundColor(.secondary)
+                    }
                     if point.snowMedian > 0 {
                         Text(String(format: "❄️ %.1f cm", point.snowMedian))
                             .font(.system(size: 9))
