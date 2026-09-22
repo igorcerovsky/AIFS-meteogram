@@ -1110,9 +1110,20 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                         .font(.caption2)
                         .foregroundColor(.secondary)
                     Spacer()
-                    Text("Latest: \(String(format: "%.1f°C", firstPoint.tempMedian)) • \(String(format: "%.1f m/s", firstPoint.windSpeedMs)) (\(String(format: "%.0f km/h", firstPoint.windSpeedKmH)))")
-                        .font(.caption2.bold())
-                        .foregroundColor(.secondary)
+                    HStack(spacing: 4) {
+                        Text("Latest: \(String(format: "%.1f°C", firstPoint.tempMedian)) •")
+                            .font(.caption2.bold())
+                            .foregroundColor(.secondary)
+                        if let dir = firstPoint.windDirection {
+                            WindDirectionBadge(dirDeg: dir, speedMs: firstPoint.windSpeedMs, size: 13)
+                        }
+                        Text(String(format: "%.1f m/s", firstPoint.windSpeedMs))
+                            .font(.caption2.bold())
+                            .foregroundColor(windColor(speedMs: firstPoint.windSpeedMs))
+                        Text(String(format: "(%.0f km/h)", firstPoint.windSpeedKmH))
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
@@ -1202,24 +1213,26 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
 
                 // Wind
                 VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 5) {
+                        if let dir = point.windDirection {
+                            WindDirectionBadge(dirDeg: dir, speedMs: point.windSpeedMs, size: 14)
+                        }
                         Text(String(format: "%.1f m/s", point.windSpeedMs))
                             .font(.subheadline.bold())
-                            .foregroundColor(.brown)
+                            .foregroundColor(windColor(speedMs: point.windSpeedMs))
                         Text(String(format: "(%.0f km/h)", point.windSpeedKmH))
                             .font(.system(size: 8))
                             .foregroundColor(.secondary)
                     }
                     HStack(spacing: 4) {
-                        if let dir = point.windDirection {
-                            Image(systemName: "arrow.down")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(windColor(speedMs: point.windSpeedMs))
-                                .rotationEffect(.degrees(dir))
-                        }
                         Text(point.windCompassDirection)
-                            .font(.system(size: 9))
+                            .font(.system(size: 9, weight: .bold))
                             .foregroundColor(.secondary)
+                        if let dir = point.windDirection {
+                            Text(String(format: "(%.0f°)", dir))
+                                .font(.system(size: 8))
+                                .foregroundColor(.secondary.opacity(0.8))
+                        }
                     }
                 }
 
@@ -1516,6 +1529,32 @@ public struct WindArrowShape: View {
             .rotationEffect(.degrees(dirDeg))
         }
         .frame(width: 26, height: 26)
+    }
+}
+
+// MARK: - Wind Direction Symbol Badge
+public struct WindDirectionBadge: View {
+    public let dirDeg: Double
+    public let speedMs: Double
+    public var size: CGFloat = 14
+
+    public init(dirDeg: Double, speedMs: Double, size: CGFloat = 14) {
+        self.dirDeg = dirDeg
+        self.speedMs = speedMs
+        self.size = size
+    }
+
+    public var body: some View {
+        let col = windColor(speedMs: speedMs)
+        ZStack {
+            Circle()
+                .fill(col.opacity(0.16))
+                .frame(width: size + 4, height: size + 4)
+            Image(systemName: "arrow.down")
+                .font(.system(size: size * 0.62, weight: .bold))
+                .foregroundColor(col)
+                .rotationEffect(.degrees(dirDeg))
+        }
     }
 }
 
