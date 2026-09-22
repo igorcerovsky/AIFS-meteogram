@@ -1181,6 +1181,7 @@
         } else {
           chart.setOptions({ lang, tz });
         }
+        window.chart = chart;
 
         chart.setData(data);
         hideLoader();

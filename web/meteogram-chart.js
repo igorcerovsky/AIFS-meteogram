@@ -2676,6 +2676,10 @@ class MeteogramChart {
     const wSpeedKm = wSpeed != null ? (wSpeed * 3.6).toFixed(1) : "-";
     const wDir = stats.wind_direction_10m?.median?.[idx];
     const wCompass = wDir != null ? getCompassDir(wDir, this.options.lang) : "";
+    const wSpeedColor = this._getWindSpeedColor(wSpeed);
+    const wBgColor = wSpeedColor.startsWith("rgb(")
+      ? wSpeedColor.replace("rgb(", "rgba(").replace(")", ", 0.16)")
+      : "rgba(148, 163, 184, 0.16)";
 
     const press = stats.pressure_msl?.median?.[idx];
     const sunAlt = this.sunAlts?.[idx];
@@ -2742,7 +2746,16 @@ class MeteogramChart {
         <div class="hud-col">
           <div class="hud-label">
             <span>💨 ${t.wind.split("[")[0].trim()}</span>
-            <span class="hud-val hud-val-wind">${wSpeed != null ? `${wSpeed.toFixed(1)} m/s` : "-"}</span>
+            <span class="hud-val hud-val-wind" style="color: ${wSpeedColor}; display: inline-flex; align-items: center;">
+              ${wDir != null ? `
+              <span class="hud-wind-badge" style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:${wBgColor}; margin-right:5px; flex-shrink:0;">
+                <svg width="12" height="12" viewBox="0 0 16 16" style="transform: rotate(${wDir}deg); transform-origin: center; display: block;">
+                  <path d="M8 2.5v9M4.5 8.5L8 12l3.5-3.5" stroke="${wSpeedColor}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                </svg>
+              </span>
+              ` : ""}
+              ${wSpeed != null ? `${wSpeed.toFixed(1)} m/s` : "-"}
+            </span>
           </div>
           <div class="hud-sub">
             ${wSpeedKm} km/h • ${wCompass} (${wDir != null ? Math.round(wDir) : "-"}°)
