@@ -129,11 +129,14 @@ public struct NativeMeteogramChartView: View {
                 .font(.caption2)
             }
 
+            let xDomain = chartXDomain(points: points)
+
             ZStack(alignment: .topTrailing) {
                 // Background: Celestial Altitude (0° .. 92°, anchored at horizon = 0°)
                 Chart {
                     celestialMarks(points: points)
                 }
+                .chartXScale(domain: xDomain)
                 .chartYScale(domain: 0...92)
                 .chartXAxis(.hidden)
                 .chartYAxis {
@@ -174,6 +177,7 @@ public struct NativeMeteogramChartView: View {
                         }
                     }
                 }
+                .chartXScale(domain: xDomain)
                 .chartYScale(domain: tempDomain.yMin...tempDomain.yMax)
                 .chartXSelection(value: $selectedDate)
                 .chartYAxis {
@@ -296,7 +300,7 @@ public struct NativeMeteogramChartView: View {
         let minVal = mins.min() ?? (medians.min() ?? 5.0)
         let maxVal = maxs.max() ?? (medians.max() ?? 25.0)
 
-        var bottomMajor = floor(minVal / 10.0) * 10.0
+        let bottomMajor = floor(minVal / 10.0) * 10.0
         var topMajor = ceil(maxVal / 10.0) * 10.0
         if topMajor <= bottomMajor {
             topMajor = bottomMajor + 10.0
@@ -345,6 +349,12 @@ public struct NativeMeteogramChartView: View {
         }
     }
 
+    private func chartXDomain(points: [TimeSeriesPoint]) -> ClosedRange<Date> {
+        let firstDate = points.first?.date ?? Date()
+        let lastDate = points.last?.date ?? Date()
+        return firstDate < lastDate ? firstDate...lastDate : Date()...Date().addingTimeInterval(3600)
+    }
+
     @AxisContentBuilder
     private func xAxisMarks(points: [TimeSeriesPoint]) -> some AxisContent {
         let isShort = (points.count <= 72)
@@ -372,15 +382,9 @@ public struct NativeMeteogramChartView: View {
         let v0 = 0.2
         let logDenom = log10(1.0 + yMax / v0)
 
-        let pseudoLog: (Double) -> Double = { v in
-            guard v > 0 else { return 0 }
-            let frac = min(1.0, log10(1.0 + v / v0) / logDenom)
-            return frac * yMax
-        }
-
         let candidateTicks = [0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 15.0, 20.0, 30.0, 50.0]
         let ticks = candidateTicks.filter { $0 <= yMax }
-        let tickValues = ticks.map { pseudoLog($0) }
+        let tickValues = ticks.map { calcPrecipPseudoLog($0, yMax: yMax) }
 
         return VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -398,40 +402,11 @@ public struct NativeMeteogramChartView: View {
                 .font(.caption2)
             }
 
+            let xDomain = chartXDomain(points: points)
+
             ZStack(alignment: .topTrailing) {
                 Chart {
-                    // 1. 90th percentile (P90) transparent light blue bars
-                    ForEach(points) { p in
-                        if let p90 = p.precipP90, p90 > 0.05 {
-                            BarMark(
-                                x: .value("Time", p.date),
-                                y: .value("P90", pseudoLog(p90))
-                            )
-                            .foregroundStyle(Color(red: 147/255, green: 197/255, blue: 253/255).opacity(0.45))
-                        }
-                    }
-
-                    // 2. Solid expected rain (median)
-                    ForEach(points) { p in
-                        if p.precipMedian > 0 {
-                            BarMark(
-                                x: .value("Time", p.date),
-                                y: .value("Rain", pseudoLog(p.precipMedian))
-                            )
-                            .foregroundStyle(Color.blue)
-                        }
-                    }
-
-                    // 3. Snowfall (median)
-                    ForEach(points) { p in
-                        if p.snowMedian > 0 {
-                            BarMark(
-                                x: .value("Time", p.date),
-                                y: .value("Snow", pseudoLog(p.snowMedian))
-                            )
-                            .foregroundStyle(Color.cyan.opacity(0.85))
-                        }
-                    }
+                    precipitationMarks(points: points, yMax: yMax)
 
                     if let selDate = selectedDate {
                         RuleMark(x: .value("Selected", selDate))
@@ -439,6 +414,7 @@ public struct NativeMeteogramChartView: View {
                             .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
                     }
                 }
+                .chartXScale(domain: xDomain)
                 .chartXSelection(value: $selectedDate)
                 .chartYScale(domain: 0...yMax)
                 .chartYAxis {
@@ -475,6 +451,63 @@ public struct NativeMeteogramChartView: View {
             }
         }
     }
+ 
+    private func calcPrecipPseudoLog(_ v: Double, yMax: Double) -> Double {
+        guard v > 0 else { return 0 }
+        let v0 = 0.2
+        let logDenom = log10(1.0 + yMax / v0)
+        let frac = min(1.0, log10(1.0 + v / v0) / logDenom)
+        return frac * yMax
+    }
+
+    @ChartContentBuilder
+    private func precipitationMarks(points: [TimeSeriesPoint], yMax: Double) -> some ChartContent {
+        // Full-domain invisible baseline anchor to lock bar widths and domain even when rain is 0
+        ForEach(points) { p in
+            LineMark(
+                x: .value("Time", p.date),
+                y: .value("Zero", 0.0)
+            )
+            .foregroundStyle(.clear)
+            .opacity(0)
+        }
+
+        // 1. 90th percentile (P90) transparent light blue bars
+        ForEach(points) { p in
+            if let p90 = p.precipP90, p90 > 0.05 {
+                BarMark(
+                    x: .value("Time", p.date),
+                    y: .value("P90", calcPrecipPseudoLog(p90, yMax: yMax)),
+                    stacking: .unstacked
+                )
+                .foregroundStyle(Color(red: 147/255, green: 197/255, blue: 253/255).opacity(0.45))
+            }
+        }
+
+        // 2. Solid expected rain (median)
+        ForEach(points) { p in
+            if p.precipMedian > 0 {
+                BarMark(
+                    x: .value("Time", p.date),
+                    y: .value("Rain", calcPrecipPseudoLog(p.precipMedian, yMax: yMax)),
+                    stacking: .unstacked
+                )
+                .foregroundStyle(Color.blue)
+            }
+        }
+
+        // 3. Snowfall (median)
+        ForEach(points) { p in
+            if p.snowMedian > 0 {
+                BarMark(
+                    x: .value("Time", p.date),
+                    y: .value("Snow", calcPrecipPseudoLog(p.snowMedian, yMax: yMax)),
+                    stacking: .unstacked
+                )
+                .foregroundStyle(Color.cyan.opacity(0.85))
+            }
+        }
+    }
 
     // MARK: - Panel 3: Multi-Layer Cloud Cover [%]
     private func cloudCoverPanelView(points: [TimeSeriesPoint]) -> some View {
@@ -506,6 +539,7 @@ public struct NativeMeteogramChartView: View {
                         .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
                 }
             }
+            .chartXScale(domain: chartXDomain(points: points))
             .chartXSelection(value: $selectedDate)
             .chartYScale(domain: 0...100)
             .chartYAxis {
@@ -836,6 +870,7 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                         .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
                 }
             }
+            .chartXScale(domain: chartXDomain(points: points))
             .chartXSelection(value: $selectedDate)
             .chartYScale(domain: 0...yMaxWind)
             .chartYAxis {
@@ -920,11 +955,14 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                 .font(.caption2)
             }
 
+            let xDomain = chartXDomain(points: points)
+
             ZStack(alignment: .topTrailing) {
                 // Background: Celestial Altitude (0° .. 92°, anchored at horizon = 0°)
                 Chart {
                     celestialMarks(points: points)
                 }
+                .chartXScale(domain: xDomain)
                 .chartYScale(domain: 0...92)
                 .chartXAxis(.hidden)
                 .chartYAxis {
@@ -984,6 +1022,7 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                         }
                     }
                 }
+                .chartXScale(domain: xDomain)
                 .chartXSelection(value: $selectedDate)
                 .chartYScale(domain: yDomain)
                 .chartYAxis {
