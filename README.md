@@ -64,6 +64,9 @@ python3 server/server.py 8080
   - Automatically scales with `devicePixelRatio` for razor-sharp rendering on Retina and HiDPI displays.
   - Interactive crosshair tracking across all 5 synchronized panels with real-time value indicators.
   - Floating glassmorphism HUD tooltip showing exact temperature, precipitation, cloud breakdown, wind speed/direction, pressure, and celestial altitudes at the hovered timestamp.
+  - **Location-Aware Celestial Analemmas**: Side-by-side Solar & Lunar figure-8 analemma cards embedded directly in the precipitation pane with transparent backgrounds.
+  - **Logarithmic Precipitation Scaling**: Pseudo-logarithmic scaling that expands low-intensity precipitation ($0.1 - 2.0\text{ mm}$) for clear visibility of light rain, drizzle, and snow.
+  - **Continuous Loop Wind Direction & Dual Velocity Encoding**: Continuous `N-W-S-E-N` looping trajectory with speed-proportional stroke thickness and multi-threshold color coding.
 - **Search & Quick Presets**: Type any city name or GPS coordinates (`lat, lon`), or tap preset chips (*Bratislava-Koliba, Jasná, Liptovský Mikuláš, Plavecké Podhradie, Košice, Poprad/Tatry, Vienna, Prague*).
 - **Model Selection**:
   - **ECMWF AIFS Global Ensemble**: 15 days, 10 days, 7 days (50 AI members).
@@ -84,6 +87,7 @@ A native SwiftUI multiplatform application running seamlessly on **macOS 14.0+**
 - **Swipe Between Models**: Swipe left or right directly on the chart to cycle models in the natural order:
   $$\mathbf{15\text{ days}} \longleftrightarrow \mathbf{2\text{ days}} \longleftrightarrow \mathbf{5\text{ days}} \longleftrightarrow \mathbf{10\text{ days}} \longleftrightarrow \mathbf{7\text{ days}}$$
   *(Automatically bypasses 2-day ICON-D2 when a location is outside coverage).*
+- **Native Swift Charts**: Feature parity with web canvas including pseudo-logarithmic precipitation scaling, transparent side-by-side Solar & Lunar Analemma cards, and continuous wind direction curves.
 - **Sleek Model Pill Bar**: Compact `[ 15d | 2d | 5d | 10d | 7d ]` selector with real-time status and active indicator.
 - **Interactive Gesture Zoom**: Fluid pinch-to-zoom (up to 400%), smooth panning, double-tap zoom reset, and floating zoom controls.
 - **Off-Screen Pan Boundary Constraints**: Clamped viewport mathematics ensure the graph cannot be accidentally dragged outside the visible screen.
@@ -155,12 +159,21 @@ python3 server/meteogram.py --location "48.148,17.107" --output custom_coords.pn
    - **Sun & Moon Celestial Trajectories**: Continuous elevation arcs rising from and landing strictly at the bottom horizon line, annotated with culmination peak badges (`☀ HH:MM (XX°)`, `☾ HH:MM (XX°)`).
    - **Right Y-Axis Celestial Degree Scale**: Dedicated $0^\circ$, $45^\circ$, $90^\circ$ `[Alt]` reference ticks.
 2. **Precipitation & Snowfall (mm)**:
-   - Liquid rain bars, snowfall bars, max-member tick caps, and separate daily cumulative sum badges (`Σ X.X mm`) arranged cleanly below the legend.
+   - **Logarithmic Scaling `[log]`**: Formulated with a transition factor ($v_0 = 0.2\text{ mm}$) to expand light precipitation events ($0.1 - 2.0\text{ mm}$) that would otherwise be imperceptible on linear scales.
+   - **Logarithmic Reference Grid**: Non-linear grid lines at $0.1, 0.2, 0.5, 1, 2, 5, 10, \dots\text{ mm}$.
+   - Liquid rain bars, snowfall bars, max-member tick caps, and daily cumulative sum badges (`Σ X.X mm`).
+   - **Side-by-Side Solar & Lunar Analemmas**: Embedded in the top-right with transparent backgrounds:
+     - **Solar Analemma**: Annual figure-8 tracking solar declination against the Equation of Time ($+16\text{m}$ to $-14\text{m}$) for the active location.
+     - **Lunar Analemma**: Closed monthly figure-8 loop reflecting orbital inclination to the celestial equator and Equation of Time harmonics, with an illuminated phase-accurate Moon marker locked strictly on the curve.
 3. **Multi-layer Cloud Cover (%)**:
    - **Total Cloud Cover**: Yellow vertical percentile bars with light yellow min-max spread, warm yellow Q25–Q75 interquartile bars, and golden median ticks and trajectory line.
    - **Cloud Layers (Single Curves)**: High Cirrus (cyan `#06b6d4`), Medium Alto (emerald `#10b981`), and Low Stratus (crimson `#e11d48`) rendered as clean single median lines.
 4. **10m Wind Speed & Direction**:
-   - Median curve and ensemble spread, Beaufort scale reference lines (Bft 4, 6, 8), and rotating meteorological wind direction arrows color-coded by speed.
+   - **Continuous 5-Point Direction Loop**: Mapped to `N` (top), `W`, `S`, `E`, and `N` (bottom) across a unified, continuous grid to prevent discontinuous edge jumps for north-westerly and northerly winds.
+   - **Dual Speed Encoding**:
+     - **Curve Thickness**: Line weight scales proportionally with wind speed ($< 2\text{ m/s}$ hairline to $\ge 15\text{ m/s}$ heavy).
+     - **Speed Color Categories**: Segmented into grey ($< 2\text{ m/s}$), teal ($2-5\text{ m/s}$), emerald ($5-10\text{ m/s}$), amber ($10-15\text{ m/s}$), and crimson ($> 15\text{ m/s}$).
+   - **Wind Direction Arrows**: Rotational meteorological arrows pointing in the direction of wind flow.
 5. **Mean Sea Level Pressure (MSLP, hPa)**:
    - Atmospheric pressure curve and ensemble spread, $1013.25\text{ hPa}$ standard atmosphere reference line, and synchronized Sun/Moon celestial elevation trajectories with the right-axis `[Alt]` scale.
 6. **Daytime & Night Shading Across All Panels**:

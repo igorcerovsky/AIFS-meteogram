@@ -22,7 +22,8 @@ Runs seamlessly on:
   - Search by city name or `lat, lon` coordinates.
   - One-tap **GPS Location** (`CoreLocation`).
   - Star / Favorites system.
-- **Interactive Meteogram Viewer**:
+- **Interactive Native Chart & Image Viewer**:
+  - Native **Swift Charts** engine with real-time gesture selection, pseudo-logarithmic precipitation scaling, transparent side-by-side Solar & Lunar Analemma cards, and continuous wind curve loops.
   - Pinch-to-zoom (up to 400%), smooth panning, and double-tap zoom reset.
   - Floating zoom controls overlay (+, -, reset).
   - High-DPI crisp rendering.
@@ -81,6 +82,7 @@ MeteogramApp/
 │   ├── MeteogramApp.swift      # App lifecycle & macOS menu commands
 │   ├── Models/
 │   │   ├── ForecastModel.swift # Horizons, models, languages, timezones
+│   │   ├── ForecastData.swift  # Time-series ephemeris & lunar/solar analemma math
 │   │   └── MeteogramConfig.swift # Presets and domain validation
 │   ├── Services/
 │   │   ├── MeteogramService.swift # URLSession client & header parser
@@ -89,6 +91,7 @@ MeteogramApp/
 │   │   └── MeteogramViewModel.swift # State manager & caching
 │   ├── Views/
 │   │   ├── ContentView.swift      # Adaptive root container
+│   │   ├── NativeMeteogramChartView.swift # Native Swift Charts meteogram & analemmas
 │   │   ├── ControlPanelView.swift # Controls & parameters form
 │   │   ├── MeteogramImageViewer.swift # Gesture-enabled image viewer
 │   │   ├── FallbackAlertBanner.swift  # Model fallback warning banner
