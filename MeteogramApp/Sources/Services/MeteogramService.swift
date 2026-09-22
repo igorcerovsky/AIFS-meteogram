@@ -92,7 +92,8 @@ public class MeteogramService {
         location: String,
         horizon: ForecastHorizon,
         language: ForecastLanguage,
-        timeZone: ForecastTimeZone
+        timeZone: ForecastTimeZone,
+        forceRefresh: Bool = false
     ) async throws -> MeteogramFetchResult {
         // 1. Try configured server (e.g. localhost or custom cloud URL)
         do {
@@ -101,7 +102,8 @@ public class MeteogramService {
                 location: location,
                 horizon: horizon,
                 language: language,
-                timeZone: timeZone
+                timeZone: timeZone,
+                forceRefresh: forceRefresh
             )
         } catch {
             // 2. If primary server is unavailable, attempt GitHub Pages CDN fallback for preset locations
@@ -118,6 +120,9 @@ public class MeteogramService {
                 let staticUrlString = "\(MeteogramConfig.githubPagesBaseUrl)/images/\(slug)_\(effectiveModel)_\(language.rawValue).png"
                 if let staticUrl = URL(string: staticUrlString) {
                     var request = URLRequest(url: staticUrl)
+                    if forceRefresh {
+                        request.cachePolicy = .reloadIgnoringLocalCacheData
+                    }
                     request.timeoutInterval = 15.0
                     let startTime = CFAbsoluteTimeGetCurrent()
                     if let (data, response) = try? await session.data(for: request),
@@ -146,7 +151,8 @@ public class MeteogramService {
         location: String,
         horizon: ForecastHorizon,
         language: ForecastLanguage,
-        timeZone: ForecastTimeZone
+        timeZone: ForecastTimeZone,
+        forceRefresh: Bool = false
     ) async throws -> MeteogramFetchResult {
         var base = serverBaseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         if !base.hasPrefix("http://") && !base.hasPrefix("https://") {
@@ -160,7 +166,7 @@ public class MeteogramService {
             throw MeteogramServiceError.invalidUrl
         }
 
-        components.queryItems = [
+        var queryItems = [
             URLQueryItem(name: "location", value: location),
             URLQueryItem(name: "days", value: String(horizon.daysParam)),
             URLQueryItem(name: "model", value: horizon.modelParam),
@@ -168,12 +174,19 @@ public class MeteogramService {
             URLQueryItem(name: "tz", value: timeZone.rawValue),
             URLQueryItem(name: "_t", value: String(Int64(Date().timeIntervalSince1970 * 1000)))
         ]
+        if forceRefresh {
+            queryItems.append(URLQueryItem(name: "refresh", value: "1"))
+        }
+        components.queryItems = queryItems
 
         guard let url = components.url else {
             throw MeteogramServiceError.invalidUrl
         }
 
         var request = URLRequest(url: url)
+        if forceRefresh {
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+        }
         // If connecting to localhost / local network, fail fast to allow smooth fallback
         request.timeoutInterval = (base.contains("localhost") || base.contains("127.0.0.1") || base.contains(".local")) ? 6.0 : 35.0
 
@@ -220,7 +233,8 @@ public class MeteogramService {
         location: String,
         horizon: ForecastHorizon,
         language: ForecastLanguage,
-        timeZone: ForecastTimeZone
+        timeZone: ForecastTimeZone,
+        forceRefresh: Bool = false
     ) async throws -> ForecastFetchResult {
         var base = serverBaseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         if !base.hasPrefix("http://") && !base.hasPrefix("https://") {
@@ -234,7 +248,7 @@ public class MeteogramService {
             throw MeteogramServiceError.invalidUrl
         }
 
-        components.queryItems = [
+        var queryItems = [
             URLQueryItem(name: "location", value: location),
             URLQueryItem(name: "days", value: String(horizon.daysParam)),
             URLQueryItem(name: "model", value: horizon.modelParam),
@@ -242,12 +256,19 @@ public class MeteogramService {
             URLQueryItem(name: "tz", value: timeZone.rawValue),
             URLQueryItem(name: "_t", value: String(Int64(Date().timeIntervalSince1970 * 1000)))
         ]
+        if forceRefresh {
+            queryItems.append(URLQueryItem(name: "refresh", value: "1"))
+        }
+        components.queryItems = queryItems
 
         guard let url = components.url else {
             throw MeteogramServiceError.invalidUrl
         }
 
         var request = URLRequest(url: url)
+        if forceRefresh {
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+        }
         request.timeoutInterval = (base.contains("localhost") || base.contains("127.0.0.1") || base.contains(".local")) ? 8.0 : 35.0
 
         let startTime = CFAbsoluteTimeGetCurrent()

@@ -145,8 +145,15 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
             cache_key = hashlib.md5(f"forecast_{loc_param}_{days_param}_{model_param}_{client_mtime}".encode()).hexdigest()
             cache_file = os.path.join(CACHE_DIR, f"{cache_key}.json")
 
+            force_refresh = (
+                query.get("refresh", ["0"])[0].lower() in ["1", "true", "yes"]
+                or query.get("nocache", ["0"])[0].lower() in ["1", "true", "yes"]
+                or "no-cache" in self.headers.get("Cache-Control", "")
+                or self.headers.get("Pragma") == "no-cache"
+            )
+
             use_cache = False
-            if os.path.exists(cache_file):
+            if not force_refresh and os.path.exists(cache_file):
                 import time
                 if time.time() - os.path.getmtime(cache_file) < 3600:
                     use_cache = True
@@ -159,6 +166,7 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
                     self.send_header("Content-Type", "application/json; charset=utf-8")
                     self.send_header("Content-Length", str(len(body)))
                     self.send_header("Cache-Control", "public, max-age=1800")
+                    self.send_header("X-Cache", "HIT")
                     self.end_headers()
                     self.wfile.write(body)
                     return
@@ -253,13 +261,20 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
             cache_file = os.path.join(CACHE_DIR, f"{cache_key}.png")
             meta_file = os.path.join(CACHE_DIR, f"{cache_key}.json")
 
+            force_refresh = (
+                query.get("refresh", ["0"])[0].lower() in ["1", "true", "yes"]
+                or query.get("nocache", ["0"])[0].lower() in ["1", "true", "yes"]
+                or "no-cache" in self.headers.get("Cache-Control", "")
+                or self.headers.get("Pragma") == "no-cache"
+            )
+
             # Check if cached recently (under 1 hour)
             use_cache = False
             actual_model = model_param
             fallback_used = False
             fallback_from = ""
 
-            if os.path.exists(cache_file) and os.path.exists(meta_file):
+            if not force_refresh and os.path.exists(cache_file) and os.path.exists(meta_file):
                 mtime = os.path.getmtime(cache_file)
                 import time
                 if time.time() - mtime < 3600:

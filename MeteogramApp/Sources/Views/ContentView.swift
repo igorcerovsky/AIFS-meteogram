@@ -58,7 +58,7 @@ public struct ContentView: View {
                         .lineLimit(1)
                     Spacer()
                     Button("Retry") {
-                        viewModel.fetchMeteogram()
+                        viewModel.refresh()
                     }
                     .font(.caption2.bold())
                     .buttonStyle(.bordered)
@@ -98,7 +98,7 @@ public struct ContentView: View {
                         statusText: viewModel.loadingStatusText,
                         errorMessage: viewModel.errorMessage,
                         onRetry: {
-                            viewModel.fetchMeteogram()
+                            viewModel.refresh()
                         },
                         onSwipeLeft: {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
@@ -145,7 +145,7 @@ public struct ContentView: View {
                 .help("Toggle between Native Swift Charts and Server Image")
 
                 // Refresh
-                Button(action: { viewModel.fetchMeteogram() }) {
+                Button(action: { viewModel.refresh() }) {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
                 .keyboardShortcut("r", modifiers: .command)
@@ -238,6 +238,25 @@ public struct ContentView: View {
                     .font(.body)
             }
             .buttonStyle(.plain)
+            .help("Search Location")
+
+            // Refresh latest data icon
+            Button(action: {
+                viewModel.refresh()
+            }) {
+                Image(systemName: "arrow.clockwise")
+                    .foregroundColor(.secondary)
+                    .font(.body)
+                    .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))
+                    .animation(
+                        viewModel.isLoading
+                            ? Animation.linear(duration: 0.9).repeatForever(autoreverses: false)
+                            : .default,
+                        value: viewModel.isLoading
+                    )
+            }
+            .buttonStyle(.plain)
+            .help("Download Latest Forecast Data")
 
             // Settings gear
             Button(action: { showSettings = true }) {
@@ -246,6 +265,7 @@ public struct ContentView: View {
                     .font(.body)
             }
             .buttonStyle(.plain)
+            .help("Settings")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)

@@ -225,13 +225,22 @@ public class MeteogramViewModel: ObservableObject {
             self.rawImageData = cachedImg.data
         }
 
-        fetchMeteogram(fallbackToPreviousOnFailure: (
-            horizon: previousHorizon,
-            forecast: previousForecast,
-            timeSeries: previousTimeSeries,
-            image: previousImage,
-            rawData: previousRawData
-        ))
+        // By changing model, always try to download latest data from network
+        fetchMeteogram(
+            forceRefresh: true,
+            fallbackToPreviousOnFailure: (
+                horizon: previousHorizon,
+                forecast: previousForecast,
+                timeSeries: previousTimeSeries,
+                image: previousImage,
+                rawData: previousRawData
+            )
+        )
+    }
+
+    /// User-initiated refresh to pull the latest forecast data
+    public func refresh() {
+        fetchMeteogram(forceRefresh: true)
     }
 
     public enum MeteogramDisplayMode: String, CaseIterable, Identifiable {
@@ -252,7 +261,10 @@ public class MeteogramViewModel: ObservableObject {
         return timeSeries.min(by: { abs($0.date.timeIntervalSince(selDate)) < abs($1.date.timeIntervalSince(selDate)) })
     }
 
-    public func fetchMeteogram(fallbackToPreviousOnFailure: (horizon: ForecastHorizon, forecast: ForecastResponse?, timeSeries: [TimeSeriesPoint], image: PlatformImage?, rawData: Data?)? = nil) {
+    public func fetchMeteogram(
+        forceRefresh: Bool = false,
+        fallbackToPreviousOnFailure: (horizon: ForecastHorizon, forecast: ForecastResponse?, timeSeries: [TimeSeriesPoint], image: PlatformImage?, rawData: Data?)? = nil
+    ) {
         currentTask?.cancel()
         self.selectedDate = nil
 
@@ -282,7 +294,7 @@ public class MeteogramViewModel: ObservableObject {
 
         isLoading = true
         errorMessage = nil
-        loadingStatusText = "Updating \(horizon.shortName) forecast..."
+        loadingStatusText = forceRefresh ? "Downloading latest \(horizon.shortName) data..." : "Updating \(horizon.shortName) forecast..."
 
         currentTask = Task {
             var forecastFetchSucceeded = false
@@ -294,7 +306,8 @@ public class MeteogramViewModel: ObservableObject {
                     location: loc,
                     horizon: horizon,
                     language: language,
-                    timeZone: timeZone
+                    timeZone: timeZone,
+                    forceRefresh: forceRefresh
                 )
 
                 if Task.isCancelled { return }
@@ -331,7 +344,8 @@ public class MeteogramViewModel: ObservableObject {
                     location: loc,
                     horizon: horizon,
                     language: language,
-                    timeZone: timeZone
+                    timeZone: timeZone,
+                    forceRefresh: forceRefresh
                 )
 
                 if Task.isCancelled { return }

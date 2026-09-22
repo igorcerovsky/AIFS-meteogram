@@ -2805,9 +2805,13 @@ const PRESET_COORDS = {
 };
 
 window.MeteogramAPI = {
-  async fetchForecast(locationQuery, days = 15, model = "aifs") {
+  async fetchForecast(locationQuery, days = 15, model = "aifs", forceRefresh = false) {
     const cleanLoc = (locationQuery || "").toLowerCase().trim().replace(/[\s\/]+/g, "_");
     const cacheKey = `meteogram_fc_${cleanLoc}_${model}_${days}`;
+
+    if (forceRefresh) {
+      try { localStorage.removeItem(cacheKey); } catch (e) {}
+    }
 
     // 1. Try local server API first if running locally
     const isLocalhost = typeof window !== "undefined" && Boolean(
@@ -2818,9 +2822,13 @@ window.MeteogramAPI = {
     );
 
     if (isLocalhost) {
-      const localUrl = `/api/forecast?location=${encodeURIComponent(locationQuery)}&days=${days}&model=${model}&_t=${Date.now()}`;
+      const refreshParam = forceRefresh ? '&refresh=1' : '';
+      const localUrl = `/api/forecast?location=${encodeURIComponent(locationQuery)}&days=${days}&model=${model}${refreshParam}&_t=${Date.now()}`;
       try {
-        const resp = await fetch(localUrl);
+        const fetchOptions = forceRefresh
+          ? { cache: 'no-store', headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' } }
+          : {};
+        const resp = await fetch(localUrl, fetchOptions);
         if (resp.ok) {
           const data = await resp.json();
           try { localStorage.setItem(cacheKey, JSON.stringify({ time: Date.now(), data })); } catch (e) {}
@@ -2833,7 +2841,7 @@ window.MeteogramAPI = {
 
     // 2. Direct Open-Meteo fetch fallback (GitHub Pages / Standalone)
     try {
-      const data = await this.fetchDirectOpenMeteo(locationQuery, days, model);
+      const data = await this.fetchDirectOpenMeteo(locationQuery, days, model, forceRefresh);
       if (data && data.stats) {
         try { localStorage.setItem(cacheKey, JSON.stringify({ time: Date.now(), data })); } catch (e) {}
         return data;
@@ -2919,7 +2927,7 @@ window.MeteogramAPI = {
     return PRESET_COORDS["bratislava-koliba"];
   },
 
-  async fetchDirectOpenMeteo(locationQuery, days, model) {
+  async fetchDirectOpenMeteo(locationQuery, days, model, forceRefresh = false) {
     const loc = await this.geocode(locationQuery);
     const lat = loc.latitude;
     const lon = loc.longitude;
@@ -2952,14 +2960,16 @@ window.MeteogramAPI = {
       "pressure_msl"
     ].join(",");
 
-    const ensembleUrl = `https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&models=${apiModel}&hourly=${hourlyVars}&forecast_days=${actualDays}&timezone=UTC`;
+    const cacheBust = forceRefresh ? `&_t=${Date.now()}` : '';
+    const ensembleUrl = `https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&models=${apiModel}&hourly=${hourlyVars}&forecast_days=${actualDays}&timezone=UTC${cacheBust}`;
     // For ICON-EU and ICON-D2, ensemble endpoint returns nulls for low/mid/high cloud layers.
     // Request cloud_cover_low, cloud_cover_mid, cloud_cover_high from deterministic forecast endpoint to backfill.
-    const forecastEndpoint = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&models=${apiModel}&daily=sunrise,sunset,moonrise,moonset,moon_phase&hourly=cloud_cover_low,cloud_cover_mid,cloud_cover_high&forecast_days=${Math.min(actualDays + 2, 16)}&timezone=UTC`;
+    const forecastEndpoint = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&models=${apiModel}&daily=sunrise,sunset,moonrise,moonset,moon_phase&hourly=cloud_cover_low,cloud_cover_mid,cloud_cover_high&forecast_days=${Math.min(actualDays + 2, 16)}&timezone=UTC${cacheBust}`;
 
+    const fetchOpts = forceRefresh ? { cache: 'reload' } : {};
     const [ensRes, astroRes] = await Promise.all([
-      fetch(ensembleUrl).then(r => r.json()).catch(() => null),
-      fetch(forecastEndpoint).then(r => r.json()).catch(() => null),
+      fetch(ensembleUrl, fetchOpts).then(r => r.json()).catch(() => null),
+      fetch(forecastEndpoint, fetchOpts).then(r => r.json()).catch(() => null),
     ]);
 
     if (!ensRes || !ensRes.hourly) {

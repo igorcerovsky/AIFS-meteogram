@@ -322,6 +322,55 @@
       color: var(--text-main, #0f172a);
     }
 
+    /* Refresh Button */
+    .refresh-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 42px;
+      padding: 0 14px;
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    .refresh-btn:hover {
+      background: rgba(56, 139, 253, 0.12);
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+      box-shadow: 0 0 0 2px rgba(56, 139, 253, 0.15);
+      transform: translateY(-1px);
+    }
+
+    .refresh-btn:active {
+      transform: scale(0.97);
+    }
+
+    .refresh-btn .refresh-icon {
+      transition: transform 0.3s ease;
+      flex-shrink: 0;
+    }
+
+    .refresh-btn.loading .refresh-icon {
+      animation: spin 0.8s linear infinite;
+      color: var(--accent-blue);
+    }
+
+    .refresh-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
     /* Model Pills Bar (Native App Style) */
     .model-pills-container {
       width: 100%;
@@ -851,6 +900,15 @@
                 <option value="utc">UTC</option>
               </select>
             </div>
+
+            <!-- Refresh Button -->
+            <button type="button" id="refresh-btn" class="refresh-btn" onclick="updateMeteogram(false, true)" title="Refresh forecast (Download latest data)" aria-label="Refresh forecast">
+              <svg class="refresh-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+              </svg>
+              <span id="refresh-label" class="refresh-text">Refresh</span>
+            </button>
           </div>
         </div>
 
@@ -1002,7 +1060,8 @@
       }
       document.getElementById('days').value = horizonVal;
       updateModelPillsUI(horizonVal);
-      updateMeteogram(false);
+      // Changing model always downloads latest data
+      updateMeteogram(false, true);
     }
 
     function checkLocationAndSyncDropdown(loc) {
@@ -1065,12 +1124,22 @@
       document.getElementById('loader').style.display = 'flex';
       const genBtn = document.getElementById('generate-btn');
       if (genBtn) genBtn.disabled = true;
+      const refBtn = document.getElementById('refresh-btn');
+      if (refBtn) {
+        refBtn.classList.add('loading');
+        refBtn.disabled = true;
+      }
     }
 
     function hideLoader() {
       document.getElementById('loader').style.display = 'none';
       const genBtn = document.getElementById('generate-btn');
       if (genBtn) genBtn.disabled = false;
+      const refBtn = document.getElementById('refresh-btn');
+      if (refBtn) {
+        refBtn.classList.remove('loading');
+        refBtn.disabled = false;
+      }
     }
 
     function handleError(msg) {
@@ -1078,9 +1147,14 @@
       document.getElementById('loader-status').innerHTML = msg || 'Error loading forecast. Please check location name or network.';
       const genBtn = document.getElementById('generate-btn');
       if (genBtn) genBtn.disabled = false;
+      const refBtn = document.getElementById('refresh-btn');
+      if (refBtn) {
+        refBtn.classList.remove('loading');
+        refBtn.disabled = false;
+      }
     }
 
-    async function updateMeteogram(optionsOnly = false) {
+    async function updateMeteogram(optionsOnly = false, forceRefresh = false) {
       const locInput = document.getElementById('location');
       const loc = locInput.value.trim();
       let rawHorizon = document.getElementById('days').value;
@@ -1150,7 +1224,7 @@
       const requestId = ++currentRequestId;
 
       try {
-        const data = await MeteogramAPI.fetchForecast(loc, days, model);
+        const data = await MeteogramAPI.fetchForecast(loc, days, model, forceRefresh);
         if (requestId !== currentRequestId) return;
 
         currentData = data;
@@ -1213,11 +1287,18 @@
         this.value = 'icon_eu_5';
         showAlert(loc, 'icon_d2', 'icon_eu', document.getElementById('lang').value);
       }
-      updateMeteogram(false);
+      updateMeteogram(false, true);
     });
 
     // Instant local redraw on Language or Timezone toggle
-    document.getElementById('lang').addEventListener('change', () => updateMeteogram(true));
+    document.getElementById('lang').addEventListener('change', () => {
+      const l = document.getElementById('lang').value;
+      const refLabel = document.getElementById('refresh-label');
+      const refBtn = document.getElementById('refresh-btn');
+      if (refLabel) refLabel.innerText = l === 'sk' ? 'Obnoviť' : 'Refresh';
+      if (refBtn) refBtn.title = l === 'sk' ? 'Stiahnuť najnovšie dáta' : 'Refresh forecast (Download latest data)';
+      updateMeteogram(true);
+    });
     document.getElementById('tz').addEventListener('change', () => updateMeteogram(true));
 
     // Theme Management: Light / Dark / Auto (System)
