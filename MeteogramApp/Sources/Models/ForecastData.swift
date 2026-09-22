@@ -165,14 +165,14 @@ public struct TimeSeriesPoint: Identifiable, Sendable {
     public let sunAltitude: Double?
     public let moonAltitude: Double?
 
-    /// Wind speed in km/h (Open-Meteo wind_speed_10m is returned in km/h)
-    public var windSpeedKmH: Double {
+    /// Wind speed in m/s (standard meteogram wind unit matching web chart)
+    public var windSpeedMs: Double {
         windSpeedMedian
     }
 
-    /// Wind speed in m/s
-    public var windSpeedMs: Double {
-        windSpeedMedian / 3.6
+    /// Wind speed in km/h
+    public var windSpeedKmH: Double {
+        windSpeedMedian * 3.6
     }
 
     public var windCompassDirection: String {

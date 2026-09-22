@@ -624,7 +624,7 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
 
         return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
-                Label("10m Wind Speed [km/h] & Direction", systemImage: "wind")
+                Label("10m Wind Speed [m/s] & Direction", systemImage: "wind")
                     .font(.caption.bold())
                     .foregroundColor(.brown)
 
@@ -671,7 +671,7 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                 ForEach(points) { p in
                     LineMark(
                         x: .value("Time", p.date),
-                        y: .value("Speed", p.windSpeedKmH),
+                        y: .value("Speed", p.windSpeedMs),
                         series: .value("WindSpread", "Median")
                     )
                     .foregroundStyle(Color.brown)
@@ -1065,7 +1065,7 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                         .font(.caption2)
                         .foregroundColor(.secondary)
                     Spacer()
-                    Text("Latest: \(String(format: "%.1f°C", firstPoint.tempMedian)) • \(String(format: "%.0f km/h", firstPoint.windSpeedKmH))")
+                    Text("Latest: \(String(format: "%.1f°C", firstPoint.tempMedian)) • \(String(format: "%.1f m/s", firstPoint.windSpeedMs)) (\(String(format: "%.0f km/h", firstPoint.windSpeedKmH)))")
                         .font(.caption2.bold())
                         .foregroundColor(.secondary)
                 }
@@ -1153,10 +1153,10 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                 // Wind
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 4) {
-                        Text(String(format: "%.0f km/h", point.windSpeedKmH))
+                        Text(String(format: "%.1f m/s", point.windSpeedMs))
                             .font(.subheadline.bold())
                             .foregroundColor(.brown)
-                        Text(String(format: "(%.1f m/s)", point.windSpeedMs))
+                        Text(String(format: "(%.0f km/h)", point.windSpeedKmH))
                             .font(.system(size: 8))
                             .foregroundColor(.secondary)
                     }
