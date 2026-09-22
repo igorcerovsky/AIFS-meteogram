@@ -4,29 +4,27 @@ An advanced meteorological visualization system inspired by [SHMÚ's ECMWF EPSGR
 
 🌐 **Live Meteogram Web Page**: [https://igorcerovsky.github.io/AIFS-meteogram/](https://igorcerovsky.github.io/AIFS-meteogram/)
 
-![ECMWF AIFS 15-Day High-Resolution Meteogram Preview](assets/meteogram_preview.png)
+![ECMWF AIFS Interactive Meteogram Dashboard](assets/web_dashboard_preview.png)
 
 ---
 
 ## 🏛️ Project Architecture
 
-The repository is structured into three clean, dedicated components:
+The repository is structured into three dedicated components:
 
 ```
 meteogram/
-├── server/           # ⚡ Python backend server, CLI generator & rendering engine
-│   ├── server.py     # HTTP server & API (/api/forecast, /api/image, /api/check_location)
-│   ├── renderer.py   # High-resolution matplotlib EPSGRAM rendering engine
-│   ├── aifs_client.py# Open-Meteo ensemble API client & geocoder
-│   ├── meteogram.py  # Standalone CLI generation tool
-│   └── requirements.txt
-├── web/              # 🌐 Web dashboard frontend (HTML5, CSS3, Vanilla JS)
-│   ├── index.html    # Interactive client with search, presets, model alerts & theme adaptation
-│   └── meteogram-chart.js # Dynamic Retina canvas engine with HUD crosshair & direct API fallback
-└── MeteogramApp/     # 📱 Native Apple Multiplatform App (iOS, iPadOS & macOS)
-    ├── MeteogramApp.xcodeproj
-    ├── Sources/      # SwiftUI views, models, services & viewmodels
-    └── README.md     # Detailed iOS & macOS setup guide
+├── web/              # 🌐 Modern interactive Web Dashboard (HTML5 Canvas, CSS3, Vanilla JS)
+│   ├── index.html    # Interactive client with search, presets, model switching & theme adaptation
+│   └── meteogram-chart.js # Dynamic Retina canvas engine with HUD crosshair, analemmas & direct API
+├── MeteogramApp/     # 📱 Native Apple Multiplatform App (iOS, iPadOS & macOS)
+│   ├── MeteogramApp.xcodeproj
+│   ├── Sources/      # SwiftUI views, models, services & viewmodels
+│   └── README.md     # Detailed iOS & macOS setup guide
+└── server/           # ⚡ Lightweight Python backend server & API
+    ├── server.py     # HTTP server & API (/api/forecast, /api/check_location)
+    ├── aifs_client.py# Open-Meteo ensemble API client & geocoder
+    └── requirements.txt
 ```
 
 ---
@@ -56,8 +54,6 @@ python3 server/server.py 8080
 ## 🌐 1. Interactive Web Dashboard (`web/`)
 - 🚀 **Live GitHub Pages Web App**: [https://igorcerovsky.github.io/AIFS-meteogram/](https://igorcerovsky.github.io/AIFS-meteogram/)
 - 💻 **Local Development**: Open [http://localhost:8080](http://localhost:8080) in your browser once the server is running.
-
-![ECMWF AIFS Interactive Web Dashboard Preview](assets/web_dashboard_preview.png)
 
 ### Key Features
 - **Dynamic HTML5 Canvas Engine (`web/meteogram-chart.js`)**:
@@ -117,49 +113,20 @@ Select **My Mac** or your **iPhone Simulator** / physical device in Xcode and pr
 
 ---
 
-## ⚡ 3. Python Server & CLI (`server/`)
+## ⚡ 3. Python Backend Server & API (`server/`)
 
-### CLI Usage (`server/meteogram.py`)
-
-Generate a publication-quality meteogram directly from the command line:
+The backend is a lightweight Python server (standard library `http.server`) providing forecast data fetching, automatic caching, geocoding validation, and CORS proxying for local web and native Apple app clients:
 
 ```bash
-# Default location (Bratislava-Koliba, 15 days, English)
-python3 server/meteogram.py
-
-# High-resolution regional 5-day ICON-EU forecast
-python3 server/meteogram.py --location "Bratislava-Koliba" --model icon_eu --days 5 --lang en
-
-# High-resolution regional 2-day ICON-D2 forecast in Slovak
-python3 server/meteogram.py --location "Bratislava-Koliba" --model icon_d2 --days 2 --lang sk
-
-# Specify custom location, duration, and output file
-python3 server/meteogram.py --location "Liptovsky Mikulas" --days 10 --output liptov.png
-
-# Exact GPS coordinates (lat, lon)
-python3 server/meteogram.py --location "48.148,17.107" --output custom_coords.png
+# Start server on port 8080
+python3 server/server.py 8080
 ```
 
-#### CLI Options
+### HTTP Endpoints
 
-| Argument | Default | Description |
-| --- | --- | --- |
-| `-l`, `--location` | `Bratislava-Koliba` | City name or `lat,lon` coordinates |
-| `-m`, `--model` | `aifs` | Model: `aifs` (ECMWF AI, 7–15d), `icon_eu` (7.0 km, 5d), `icon_d2` (2.2 km, 48h) |
-| `-d`, `--days` | `15` | Forecast duration in days |
-| `-o`, `--output` | `.img/<loc>_meteogram.png` | Output file path (`.png`, `.svg`, `.pdf`) |
-| `--lang` | `en` | Label language: `en` (English) or `sk` (Slovak) |
-| `--tz` | `local` | Timezone: `local` (summer/winter auto-detected) or `utc` |
-| `--dpi` | `200` | Resolution for rendered raster image |
-
-### HTTP API (`server/server.py`)
-
-- **`GET /api/forecast`**: Serves structured forecast JSON data, ensemble statistics (median, P90, IQR, min/max spreads), and astronomical ephemeris for the dynamic web canvas.
+- **`GET /api/forecast`**: Serves structured forecast JSON data, ensemble statistics (median, P90, IQR, min/max spreads), and astronomical ephemeris for the dynamic web canvas and native SwiftUI app.
   - Parameters: `location`, `days`, `model`, `lang`, `tz`, `refresh` (`1` to bypass disk cache).
   - Caching: Automatic server-side disk cache with 1-hour validity ($< 1\text{ ms}$ response), instantly bypassable via `refresh=1` or `Cache-Control: no-cache`.
-- **`GET /api/image`**: Generates and serves high-resolution raster PNG meteograms for native apps or static embedding.
-  - Parameters: `location`, `days`, `model`, `lang`, `tz`, `refresh`.
-  - Response Headers: `X-Actual-Model`, `X-Model-Fallback`, `X-Fallback-From`.
 - **`GET /api/check_location`**: Geocodes locations, resolves elevation, and validates DWD ICON-D2 domain boundaries.
 
 ---
