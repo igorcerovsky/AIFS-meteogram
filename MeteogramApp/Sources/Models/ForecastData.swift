@@ -391,29 +391,40 @@ public func getAnnualAnalemmaCurve(year: Int = 2026) -> [AnalemmaPoint] {
     }
 }
 
-public struct LunarAnalemmaPoint: Sendable {
-    public let dec: Double
+public struct LunarAnalemmaPoint: Sendable, Equatable {
     public let alt: Double
-    public let timeOffset: Double
-    public let phase: Double
-    public let step: Int
+    public let eot: Double
 
-    public init(dec: Double, alt: Double, timeOffset: Double, phase: Double, step: Int) {
-        self.dec = dec
+    public init(alt: Double, eot: Double) {
         self.alt = alt
-        self.timeOffset = timeOffset
-        self.phase = phase
-        self.step = step
+        self.eot = eot
     }
 }
 
-public func calculateLunarDeclinationAndAnomaly(date: Date, lon: Double = 17.10) -> (dec: Double, timeOffset: Double, haDeg: Double, phase: Double) {
+public struct LunarAnalemmaResult: Sendable, Equatable {
+    public let activeAlt: Double
+    public let activeEoT: Double
+    public let phase: Double
+    public let inclinationToEquator: Double
+    public let curve: [LunarAnalemmaPoint]
+
+    public init(activeAlt: Double, activeEoT: Double, phase: Double, inclinationToEquator: Double, curve: [LunarAnalemmaPoint]) {
+        self.activeAlt = activeAlt
+        self.activeEoT = activeEoT
+        self.phase = phase
+        self.inclinationToEquator = inclinationToEquator
+        self.curve = curve
+    }
+}
+
+public func calculateLunarAnalemma(date: Date, latitude: Double = 48.15, longitude: Double = 17.10) -> LunarAnalemmaResult {
     let tEpoch = date.timeIntervalSince1970
     let d = (tEpoch - 946728000.0) / 86400.0
 
     let lMoon = ((218.316 + 13.176396 * d).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)
     let mMoon = ((134.963 + 13.064993 * d).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)
     let fMoon = ((93.272 + 13.229350 * d).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)
+    let node = ((125.044 - 0.0529538 * d).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)
 
     let mRad = mMoon * .pi / 180.0
     let fRad = fMoon * .pi / 180.0
@@ -431,39 +442,55 @@ public func calculateLunarDeclinationAndAnomaly(date: Date, lon: Double = 17.10)
     let decRad = asin(max(-1.0, min(1.0, sinDec)))
     let dec = decRad * 180.0 / .pi
 
-    let y = sin(lonRad) * cos(eRad) - tan(latRadMoon) * sin(eRad)
-    let x = cos(lonRad)
-    let raRad = atan2(y, x)
+    let nodeRad = node * .pi / 180.0
+    let iEclRad = 5.145 * .pi / 180.0
+    let cosIEq = cos(eRad) * cos(iEclRad) - sin(eRad) * sin(iEclRad) * cos(nodeRad)
+    let iEqRad = acos(max(-1.0, min(1.0, cosIEq)))
+    let iEq = iEqRad * 180.0 / .pi
 
-    let gmst = ((280.46061837 + 360.98564736629 * d).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)
-    let lstRad = ((gmst + lon).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0) * .pi / 180.0
+    let dNext = d + 0.01
+    let lNext = ((218.316 + 13.176396 * dNext).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)
+    let mNext = ((134.963 + 13.064993 * dNext).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)
+    let fNext = ((93.272 + 13.229350 * dNext).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)
+    let lonNext = (lNext + 6.289 * sin(mNext * .pi / 180.0)) * .pi / 180.0
+    let latNext = (5.128 * sin(fNext * .pi / 180.0)) * .pi / 180.0
+    let sinDecNext = sin(latNext) * cos(eRad) + cos(latNext) * sin(eRad) * sin(lonNext)
+    let dDec = sinDecNext - sinDec
 
-    var haRad = lstRad - raRad
-    while haRad > .pi { haRad -= 2.0 * .pi }
-    while haRad < -.pi { haRad += 2.0 * .pi }
+    let sU = max(-1.0, min(1.0, sinDec / sin(iEqRad)))
+    var u = asin(sU)
+    if dDec < 0 {
+        u = .pi - u
+    }
+    while u < 0 { u += 2.0 * .pi }
+    while u >= 2.0 * .pi { u -= 2.0 * .pi }
 
-    let haDeg = haRad * 180.0 / .pi
-    let timeOffset = -haDeg * 4.0
+    let aTilt = pow(tan(iEqRad / 2.0), 2.0) * (180.0 / .pi) * 4.0
+    let bEcc = 10.5
+
+    let activeAlt = latitude >= 0 ? (90.0 - latitude + dec) : (90.0 + latitude - dec)
+    let activeEoT = -aTilt * sin(2.0 * u) + bEcc * cos(u)
 
     let sunMeanLon = ((280.459 + 0.98564736 * d).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0)
     let phase = ((lonMoon - sunMeanLon).truncatingRemainder(dividingBy: 360.0) + 360.0).truncatingRemainder(dividingBy: 360.0) / 360.0
 
-    return (dec: dec, timeOffset: timeOffset, haDeg: haDeg, phase: phase)
-}
-
-public func getMonthlyLunarAnalemmaCurve(centerDate: Date, latitude: Double = 48.15, longitude: Double = 17.10) -> [LunarAnalemmaPoint] {
-    var t = centerDate
-    for _ in 0..<3 {
-        let st = calculateLunarDeclinationAndAnomaly(date: t, lon: longitude)
-        t = t.addingTimeInterval(-Double(st.haDeg / 14.49) * 3600.0)
+    let nPts = 80
+    var curve: [LunarAnalemmaPoint] = []
+    for step in 0...nPts {
+        let uPt = Double(step) * 2.0 * .pi / Double(nPts)
+        let ptDec = asin(max(-1.0, min(1.0, sin(iEqRad) * sin(uPt)))) * 180.0 / .pi
+        let ptAlt = latitude >= 0 ? (90.0 - latitude + ptDec) : (90.0 + latitude - ptDec)
+        let ptEoT = -aTilt * sin(2.0 * uPt) + bEcc * cos(uPt)
+        curve.append(LunarAnalemmaPoint(alt: ptAlt, eot: ptEoT))
     }
 
-    return (0...28).map { k in
-        let tk = t.addingTimeInterval(Double(k) * 24.84119 * 3600.0)
-        let st = calculateLunarDeclinationAndAnomaly(date: tk, lon: longitude)
-        let alt = latitude >= 0 ? (90.0 - latitude + st.dec) : (90.0 + latitude - st.dec)
-        return LunarAnalemmaPoint(dec: st.dec, alt: alt, timeOffset: st.timeOffset, phase: st.phase, step: k)
-    }
+    return LunarAnalemmaResult(
+        activeAlt: activeAlt,
+        activeEoT: activeEoT,
+        phase: phase,
+        inclinationToEquator: iEq,
+        curve: curve
+    )
 }
 
 extension Array {

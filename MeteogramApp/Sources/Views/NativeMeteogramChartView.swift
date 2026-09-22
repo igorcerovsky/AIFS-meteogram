@@ -182,14 +182,6 @@ public struct NativeMeteogramChartView: View {
                 .chartXAxis {
                     xAxisMarks(points: points)
                 }
-
-                // Analemma Widget reflecting location latitude & active solar/lunar culmination
-                let lat = viewModel.forecastData?.location.latitude ?? 48.15
-                let lon = viewModel.forecastData?.location.longitude ?? 17.10
-                let activeDate = selectedDate ?? points.first?.date ?? Date()
-                AnalemmaWidgetView(date: activeDate, latitude: lat, longitude: lon)
-                    .padding(.top, 4)
-                    .padding(.trailing, 26)
             }
             .frame(height: 155)
             .background(Color(white: 0.98).opacity(0.04))
@@ -368,9 +360,26 @@ public struct NativeMeteogramChartView: View {
 
     // MARK: - Panel 2: Precipitation & Snowfall [mm]
     private func precipitationPanelView(points: [TimeSeriesPoint]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let maxRain = points.compactMap { $0.precipMax }.max() ?? 0.0
+        let maxMedian = points.map { $0.precipMedian + $0.snowMedian }.max() ?? 0.0
+        let rawMaxP = max(maxRain, maxMedian)
+        let yMax = max(2.0, rawMaxP * 1.15)
+        let v0 = 0.2
+        let logDenom = log10(1.0 + yMax / v0)
+
+        let pseudoLog: (Double) -> Double = { v in
+            guard v > 0 else { return 0 }
+            let frac = min(1.0, log10(1.0 + v / v0) / logDenom)
+            return frac * yMax
+        }
+
+        let candidateTicks = [0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 15.0, 20.0, 30.0, 50.0]
+        let ticks = candidateTicks.filter { $0 <= yMax }
+        let tickValues = ticks.map { pseudoLog($0) }
+
+        return VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Label("Precipitation & Snowfall [mm]", systemImage: "cloud.rain.fill")
+                Label("Precipitation & Snowfall [mm] (log)", systemImage: "cloud.rain.fill")
                     .font(.caption.bold())
                     .foregroundColor(.blue)
 
@@ -384,58 +393,80 @@ public struct NativeMeteogramChartView: View {
                 .font(.caption2)
             }
 
-            Chart {
-                ForEach(points) { p in
-                    if p.precipMedian > 0 {
-                        BarMark(
-                            x: .value("Time", p.date),
-                            y: .value("Rain", p.precipMedian)
-                        )
-                        .foregroundStyle(Color.blue.opacity(0.85))
+            ZStack(alignment: .topTrailing) {
+                Chart {
+                    ForEach(points) { p in
+                        if p.precipMedian > 0 {
+                            BarMark(
+                                x: .value("Time", p.date),
+                                y: .value("Rain", pseudoLog(p.precipMedian))
+                            )
+                            .foregroundStyle(Color.blue.opacity(0.85))
+                        }
+                    }
+
+                    ForEach(points) { p in
+                        if p.snowMedian > 0 {
+                            BarMark(
+                                x: .value("Time", p.date),
+                                y: .value("Snow", pseudoLog(p.snowMedian))
+                            )
+                            .foregroundStyle(Color.cyan.opacity(0.85))
+                        }
+                    }
+
+                    ForEach(points) { p in
+                        if let pMax = p.precipMax, pMax > 0 {
+                            RuleMark(
+                                xStart: .value("Time", p.date.addingTimeInterval(-1200)),
+                                xEnd: .value("Time", p.date.addingTimeInterval(1200)),
+                                y: .value("Max", pseudoLog(pMax))
+                            )
+                            .foregroundStyle(Color.indigo)
+                            .lineStyle(StrokeStyle(lineWidth: 1.5))
+                        }
+                    }
+
+                    if let selDate = selectedDate {
+                        RuleMark(x: .value("Selected", selDate))
+                            .foregroundStyle(Color.primary.opacity(0.75))
+                            .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
                     }
                 }
-
-                ForEach(points) { p in
-                    if p.snowMedian > 0 {
-                        BarMark(
-                            x: .value("Time", p.date),
-                            y: .value("Snow", p.snowMedian)
-                        )
-                        .foregroundStyle(Color.cyan.opacity(0.85))
+                .chartXSelection(value: $selectedDate)
+                .chartYScale(domain: 0...yMax)
+                .chartYAxis {
+                    AxisMarks(position: .leading, values: tickValues) { value in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.8, dash: [2, 2]))
+                        AxisTick()
+                        if let pv = value.as(Double.self),
+                           let idx = tickValues.firstIndex(where: { abs($0 - pv) < 0.001 }) {
+                            let origV = ticks[idx]
+                            AxisValueLabel {
+                                Text(origV >= 1.0 ? String(format: "%.0f", origV) : String(format: "%.1f", origV))
+                                    .font(.system(size: 8, design: .monospaced))
+                            }
+                        }
                     }
                 }
-
-                ForEach(points) { p in
-                    if let pMax = p.precipMax, pMax > 0 {
-                        RuleMark(
-                            xStart: .value("Time", p.date.addingTimeInterval(-1200)),
-                            xEnd: .value("Time", p.date.addingTimeInterval(1200)),
-                            y: .value("Max", pMax)
-                        )
-                        .foregroundStyle(Color.indigo)
-                        .lineStyle(StrokeStyle(lineWidth: 1.5))
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 6)) { _ in
+                        AxisGridLine()
                     }
                 }
+                .frame(height: 110)
+                .background(Color(white: 0.98).opacity(0.04))
+                .cornerRadius(8)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.15), lineWidth: 1))
 
-                if let selDate = selectedDate {
-                    RuleMark(x: .value("Selected", selDate))
-                        .foregroundStyle(Color.primary.opacity(0.75))
-                        .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
-                }
+                // Analemma Widget reflecting location latitude & active solar/lunar culmination
+                let lat = viewModel.forecastData?.location.latitude ?? 48.15
+                let lon = viewModel.forecastData?.location.longitude ?? 17.10
+                let activeDate = selectedDate ?? points.first?.date ?? Date()
+                AnalemmaWidgetView(date: activeDate, latitude: lat, longitude: lon)
+                    .padding(.top, 6)
+                    .padding(.trailing, 8)
             }
-            .chartXSelection(value: $selectedDate)
-            .chartYAxis {
-                AxisMarks(position: .leading)
-            }
-            .chartXAxis {
-                AxisMarks(values: .automatic(desiredCount: 6)) { _ in
-                    AxisGridLine()
-                }
-            }
-            .frame(height: 100)
-            .background(Color(white: 0.98).opacity(0.04))
-            .cornerRadius(8)
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.15), lineWidth: 1))
         }
     }
 
@@ -1646,30 +1677,23 @@ public struct AnalemmaWidgetView: View {
         }
         .padding(3)
         .frame(width: 78, height: 88)
-        .background(Color.primary.opacity(0.04))
+        .background(Color.clear)
         .cornerRadius(6)
-        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.orange.opacity(0.3), lineWidth: 0.8))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.orange.opacity(0.35), style: StrokeStyle(lineWidth: 0.8, dash: [2, 2])))
     }
 
     private var lunarCard: some View {
-        let lunarCurve = getMonthlyLunarAnalemmaCurve(centerDate: date, latitude: latitude, longitude: longitude)
-        let curMoon = lunarCurve.first ?? LunarAnalemmaPoint(dec: 0, alt: 90 - abs(latitude), timeOffset: 0, phase: 0.5, step: 0)
-
-        var minAlt = 999.0, maxAlt = -999.0
-        var minOffset = -38.0, maxOffset = 38.0
-        for p in lunarCurve {
-            if p.alt < minAlt { minAlt = p.alt }
-            if p.alt > maxAlt { maxAlt = p.alt }
-            if p.timeOffset < minOffset { minOffset = p.timeOffset }
-            if p.timeOffset > maxOffset { maxOffset = p.timeOffset }
-        }
-
-        let plotAltMin = max(0.0, minAlt - 3.0)
-        let plotAltMax = min(90.0, maxAlt + 3.0)
-        let offsetSpan = max(70.0, max(abs(minOffset), abs(maxOffset)) * 2.2)
-
-        let eqAlt = 90.0 - abs(latitude)
+        let lunar = calculateLunarAnalemma(date: date, latitude: latitude, longitude: longitude)
+        let lunarCurve = lunar.curve
         let isNorth = latitude >= 0
+        let eqAlt = 90.0 - abs(latitude)
+        let altMax = eqAlt + lunar.inclinationToEquator
+        let altMin = max(0.0, eqAlt - lunar.inclinationToEquator)
+
+        let plotAltMax = altMax + 3.0
+        let plotAltMin = max(0.0, altMin - 3.0)
+        let eotSpan = 48.0 // -24 to +24 minutes
+
         let latTitle = String(format: "Moon (%.1f°%@)", abs(latitude), isNorth ? "N" : "S")
 
         return VStack(spacing: 2) {
@@ -1681,8 +1705,8 @@ public struct AnalemmaWidgetView: View {
                 let w = geo.size.width
                 let h = geo.size.height
 
-                let toX: (Double) -> CGFloat = { to in
-                    let norm = (to + offsetSpan / 2.0) / offsetSpan
+                let toX: (Double) -> CGFloat = { eot in
+                    let norm = (eot + 24.0) / eotSpan
                     return CGFloat(norm) * w
                 }
 
@@ -1701,28 +1725,28 @@ public struct AnalemmaWidgetView: View {
                     .stroke(Color(red: 56/255, green: 189/255, blue: 248/255).opacity(0.35), style: StrokeStyle(lineWidth: 0.8, dash: [2, 2]))
 
                     // Altitude labels
-                    Text("Max \(Int(round(maxAlt)))°")
+                    Text(String(format: "Max %d°", Int(round(altMax))))
                         .font(.system(size: 5.5, weight: .semibold))
                         .foregroundColor(.secondary)
                         .position(x: 14, y: 5)
 
-                    Text("Min \(Int(round(minAlt)))°")
+                    Text(String(format: "Min %d°", Int(round(altMin))))
                         .font(.system(size: 5.5, weight: .semibold))
                         .foregroundColor(.secondary)
                         .position(x: 14, y: h - 5)
 
                     // Equator label
-                    Text("\(Int(round(eqAlt)))°")
+                    Text(String(format: "%d°", Int(round(eqAlt))))
                         .font(.system(size: 5.5, weight: .semibold))
                         .foregroundColor(.secondary.opacity(0.85))
                         .position(x: w - 8, y: eqY - 4)
 
-                    // Lunar Analemma Loop Path
+                    // Figure-8 Lunar Analemma Loop Path
                     Path { path in
                         guard let first = lunarCurve.first else { return }
-                        path.move(to: CGPoint(x: toX(first.timeOffset), y: toY(first.alt)))
+                        path.move(to: CGPoint(x: toX(first.eot), y: toY(first.alt)))
                         for pt in lunarCurve.dropFirst() {
-                            path.addLine(to: CGPoint(x: toX(pt.timeOffset), y: toY(pt.alt)))
+                            path.addLine(to: CGPoint(x: toX(pt.eot), y: toY(pt.alt)))
                         }
                         path.closeSubpath()
                     }
@@ -1732,8 +1756,8 @@ public struct AnalemmaWidgetView: View {
                     )
 
                     // Current Moon Position on Lunar Analemma
-                    let moonX = toX(curMoon.timeOffset)
-                    let moonY = toY(curMoon.alt)
+                    let moonX = toX(lunar.activeEoT)
+                    let moonY = toY(lunar.activeAlt)
 
                     // Cyan halo behind moon
                     Circle()
@@ -1741,22 +1765,22 @@ public struct AnalemmaWidgetView: View {
                         .frame(width: 10, height: 10)
                         .position(x: moonX, y: moonY)
 
-                    MiniMoonPhaseView(phase: curMoon.phase, size: 6.5)
+                    MiniMoonPhaseView(phase: lunar.phase, size: 6.5)
                         .position(x: moonX, y: moonY)
                 }
             }
             .frame(height: 58)
 
             // Current Moon Alt & Time offset info
-            let signStr = curMoon.timeOffset >= 0 ? "+" : ""
-            Text(String(format: "Alt: %.1f° (%@%dm)", curMoon.alt, signStr, Int(round(curMoon.timeOffset))))
+            let signStr = lunar.activeEoT >= 0 ? "+" : ""
+            Text(String(format: "Alt: %.1f° (%@%dm)", lunar.activeAlt, signStr, Int(round(lunar.activeEoT))))
                 .font(.system(size: 6.2, weight: .semibold))
                 .foregroundColor(Color(red: 2/255, green: 132/255, blue: 199/255))
         }
         .padding(3)
         .frame(width: 78, height: 88)
-        .background(Color.primary.opacity(0.04))
+        .background(Color.clear)
         .cornerRadius(6)
-        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 56/255, green: 189/255, blue: 248/255).opacity(0.35), lineWidth: 0.8))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 56/255, green: 189/255, blue: 248/255).opacity(0.35), style: StrokeStyle(lineWidth: 0.8, dash: [2, 2])))
     }
 }

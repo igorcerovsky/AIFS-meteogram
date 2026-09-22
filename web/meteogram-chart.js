@@ -172,76 +172,87 @@ function getAnnualAnalemmaCurve(year = 2026) {
   return points;
 }
 
-function calculateLunarDeclinationAndAnomaly(dateUtc, lon = 17.10) {
+function calculateLunarAnalemma(dateUtc, lat = 48.15, lon = 17.10) {
   const t_epoch = dateUtc.getTime() / 1000.0;
   const d = (t_epoch - 946728000.0) / 86400.0;
 
+  // Mean orbital elements (Meeus Astronomical Algorithms)
   const l_moon = ((218.316 + 13.176396 * d) % 360.0 + 360.0) % 360.0;
   const m_moon = ((134.963 + 13.064993 * d) % 360.0 + 360.0) % 360.0;
   const f_moon = ((93.272 + 13.229350 * d) % 360.0 + 360.0) % 360.0;
+  const node = ((125.044 - 0.0529538 * d) % 360.0 + 360.0) % 360.0; // Ascending node
 
   const m_rad = m_moon * Math.PI / 180.0;
   const f_rad = f_moon * Math.PI / 180.0;
 
+  // Ecliptic coordinates with primary inequalities
   const lon_moon = l_moon + 6.289 * Math.sin(m_rad);
   const lat_moon = 5.128 * Math.sin(f_rad);
 
   const lon_rad = lon_moon * Math.PI / 180.0;
-  const lat_rad_moon = lat_moon * Math.PI / 180.0;
+  const lat_rad = lat_moon * Math.PI / 180.0;
 
   const e = 23.439 - 0.00000036 * d;
   const e_rad = e * Math.PI / 180.0;
 
-  const sin_dec = (Math.sin(lat_rad_moon) * Math.cos(e_rad) +
-                   Math.cos(lat_rad_moon) * Math.sin(e_rad) * Math.sin(lon_rad));
+  // Equatorial declination
+  const sin_dec = (Math.sin(lat_rad) * Math.cos(e_rad) +
+                   Math.cos(lat_rad) * Math.sin(e_rad) * Math.sin(lon_rad));
   const dec_rad = Math.asin(Math.max(-1.0, Math.min(1.0, sin_dec)));
   const dec = dec_rad * 180.0 / Math.PI;
 
-  const y = (Math.sin(lon_rad) * Math.cos(e_rad) -
-             Math.tan(lat_rad_moon) * Math.sin(e_rad));
-  const x = Math.cos(lon_rad);
-  const ra_rad = Math.atan2(y, x);
+  // Moon inclination to celestial equator: cos(i_eq) = cos(e)*cos(i) - sin(e)*sin(i)*cos(node)
+  const node_rad = node * Math.PI / 180.0;
+  const i_ecl_rad = 5.145 * Math.PI / 180.0;
+  const cos_i_eq = Math.cos(e_rad) * Math.cos(i_ecl_rad) - Math.sin(e_rad) * Math.sin(i_ecl_rad) * Math.cos(node_rad);
+  const i_eq_rad = Math.acos(Math.max(-1.0, Math.min(1.0, cos_i_eq)));
+  const i_eq = i_eq_rad * 180.0 / Math.PI;
 
-  const gmst = ((280.46061837 + 360.98564736629 * d) % 360.0 + 360.0) % 360.0;
-  const lst_rad = (((gmst + lon) % 360.0 + 360.0) % 360.0) * Math.PI / 180.0;
+  // Rate of change of dec (for orbital direction)
+  const d_next = d + 0.01;
+  const l_next = ((218.316 + 13.176396 * d_next) % 360.0 + 360.0) % 360.0;
+  const m_next = ((134.963 + 13.064993 * d_next) % 360.0 + 360.0) % 360.0;
+  const f_next = ((93.272 + 13.229350 * d_next) % 360.0 + 360.0) % 360.0;
+  const lon_next = (l_next + 6.289 * Math.sin(m_next * Math.PI / 180.0)) * Math.PI / 180.0;
+  const lat_next = (5.128 * Math.sin(f_next * Math.PI / 180.0)) * Math.PI / 180.0;
+  const sin_dec_next = (Math.sin(lat_next) * Math.cos(e_rad) + Math.cos(lat_next) * Math.sin(e_rad) * Math.sin(lon_next));
+  const d_dec = sin_dec_next - sin_dec;
 
-  let ha_rad = lst_rad - ra_rad;
-  while (ha_rad > Math.PI) ha_rad -= 2 * Math.PI;
-  while (ha_rad < -Math.PI) ha_rad += 2 * Math.PI;
+  // Orbital phase angle u (0..2pi)
+  const s_u = Math.max(-1.0, Math.min(1.0, sin_dec / Math.sin(i_eq_rad)));
+  let u = Math.asin(s_u);
+  if (d_dec < 0) {
+    u = Math.PI - u;
+  }
+  if (u < 0) u += 2 * Math.PI;
+  if (u >= 2 * Math.PI) u -= 2 * Math.PI;
 
-  const ha_deg = ha_rad * 180.0 / Math.PI;
-  const timeOffset = -ha_deg * 4.0; // minutes earlier (-) or later (+)
+  // Harmonic amplitudes for figure-8 analemma:
+  // A_tilt: reduction to equator creates 2-cycle harmonic crossing at equator
+  const A_tilt = Math.pow(Math.tan(i_eq_rad / 2.0), 2) * (180.0 / Math.PI) * 4.0;
+  const B_ecc = 10.5; // minutes (eccentricity 1-cycle asymmetry between lobes)
 
-  const sun_mean_lon = (280.459 + 0.98564736 * d) % 360.0;
+  const activeAlt = lat >= 0 ? (90.0 - lat + dec) : (90.0 + lat - dec);
+  const activeEoT = -A_tilt * Math.sin(2.0 * u) + B_ecc * Math.cos(u);
+
+  // Phase fraction (0..1)
+  const sun_mean_lon = ((280.459 + 0.98564736 * d) % 360.0 + 360.0) % 360.0;
   const phase = (((lon_moon - sun_mean_lon) % 360.0 + 360.0) % 360.0) / 360.0;
 
-  return { dec, timeOffset, ha_deg, phase };
-}
-
-function getMonthlyLunarAnalemmaCurve(centerDateUtc, lat = 48.15, lon = 17.10) {
-  // Find nearest local meridian transit to centerDateUtc
-  let t = new Date(centerDateUtc.getTime());
-  for (let iter = 0; iter < 3; iter++) {
-    const st = calculateLunarDeclinationAndAnomaly(t, lon);
-    t = new Date(t.getTime() - (st.ha_deg / 14.49) * 3600 * 1000);
+  // Continuous figure-8 curve
+  const curve = [];
+  const nPts = 80;
+  for (let step = 0; step <= nPts; step++) {
+    const u_pt = step * 2.0 * Math.PI / nPts;
+    const pt_dec = Math.asin(Math.max(-1.0, Math.min(1.0, Math.sin(i_eq_rad) * Math.sin(u_pt)))) * 180.0 / Math.PI;
+    const pt_alt = lat >= 0 ? (90.0 - lat + pt_dec) : (90.0 + lat - pt_dec);
+    const pt_eot = -A_tilt * Math.sin(2.0 * u_pt) + B_ecc * Math.cos(u_pt);
+    curve.push({ alt: pt_alt, eot: pt_eot });
   }
 
-  // Sample 28 consecutive mean lunar transit cycles (24.8412h apart) for complete monthly loop
-  const points = [];
-  for (let k = 0; k <= 28; k++) {
-    const tk = new Date(t.getTime() + k * 24.84119 * 3600 * 1000);
-    const st = calculateLunarDeclinationAndAnomaly(tk, lon);
-    const alt = lat >= 0 ? (90.0 - lat + st.dec) : (90.0 + lat - st.dec);
-    points.push({
-      dec: st.dec,
-      alt: alt,
-      timeOffset: st.timeOffset,
-      phase: st.phase,
-      step: k
-    });
-  }
-  return points;
+  return { activeAlt, activeEoT, phase, i_eq, curve };
 }
+
 
 function drawMiniMoonPhase(ctx, cx, cy, radius, phase) {
   ctx.save();
@@ -1042,20 +1053,6 @@ class MeteogramChart {
     this._drawLegendBadge(this.marginLeft + 560, p.top + 9, "#f59e0b", t.sun_alt, false, [3, 2]);
     this._drawLegendBadge(this.marginLeft + 670, p.top + 9, "#60a5fa", t.moon_alt, false, [3, 2]);
 
-    // Side-by-side Analemma widgets (Sun & Moon) in top-right of temperature graph
-    const cardW = 104;
-    const cardH = 110;
-    const gap = 8;
-    const totalW = cardW * 2 + gap; // 216px
-    const anX = this.marginLeft + this.plotWidth - totalW - 8;
-    const anY = p.top + 18;
-    const activeDate = (this.hoverIdx !== null && this.times?.[this.hoverIdx]) 
-      ? this.times[this.hoverIdx] 
-      : (this.times?.[0] || new Date());
-    const lat = (this.data.location && this.data.location.latitude) ?? 48.15;
-    const lon = (this.data.location && this.data.location.longitude) ?? 17.10;
-    this._drawAnalemmaWidget(ctx, anX, anY, totalW, cardH, activeDate, lat, lon);
-
     ctx.restore();
     this.panels.p1.valToY = valToY;
   }
@@ -1075,11 +1072,11 @@ class MeteogramChart {
   _drawSolarAnalemmaCard(ctx, x, y, width, height, activeDate, lat = 48.15) {
     ctx.save();
 
-    // 100% Transparent background with subtle boundary guide
+    // Transparent boundary guide
     const r = 6;
     ctx.beginPath();
     ctx.roundRect ? ctx.roundRect(x, y, width, height, r) : ctx.rect(x, y, width, height);
-    ctx.strokeStyle = "rgba(148, 163, 184, 0.25)";
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.35)";
     ctx.lineWidth = 0.8;
     ctx.setLineDash([2, 2]);
     ctx.stroke();
@@ -1215,17 +1212,17 @@ class MeteogramChart {
   _drawLunarAnalemmaCard(ctx, x, y, width, height, activeDate, lat = 48.15, lon = 17.10) {
     ctx.save();
 
-    // Boundary with subtle cyan tint
+    // Transparent boundary guide
     const r = 6;
     ctx.beginPath();
     ctx.roundRect ? ctx.roundRect(x, y, width, height, r) : ctx.rect(x, y, width, height);
-    ctx.strokeStyle = "rgba(56, 189, 248, 0.35)";
+    ctx.strokeStyle = "rgba(56, 189, 248, 0.4)";
     ctx.lineWidth = 0.8;
     ctx.setLineDash([2, 2]);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Location & period title: "Moon (48.2°N)"
+    // Location title: "Moon (48.2°N)"
     const isNorth = lat >= 0;
     const absLat = Math.abs(lat);
     const latStr = `${absLat.toFixed(1)}°${isNorth ? "N" : "S"}`;
@@ -1247,30 +1244,25 @@ class MeteogramChart {
     const plotLeft = x + padX;
     const plotTop = y + padTop;
 
-    // Generate monthly lunar curve
-    const lunarCurve = getMonthlyLunarAnalemmaCurve(activeDate || new Date(), lat, lon);
-    if (!lunarCurve || lunarCurve.length === 0) {
+    // Calculate lunar analemma data
+    const lunarData = calculateLunarAnalemma(activeDate || new Date(), lat, lon);
+    if (!lunarData || !lunarData.curve || lunarData.curve.length === 0) {
       ctx.restore();
       return;
     }
 
-    let minAlt = 999, maxAlt = -999;
-    let minOffset = -38, maxOffset = 38;
-    for (const p of lunarCurve) {
-      if (p.alt < minAlt) minAlt = p.alt;
-      if (p.alt > maxAlt) maxAlt = p.alt;
-      if (p.timeOffset < minOffset) minOffset = p.timeOffset;
-      if (p.timeOffset > maxOffset) maxOffset = p.timeOffset;
-    }
-    const plotAltMin = Math.max(0, minAlt - 3.0);
-    const plotAltMax = Math.min(90, maxAlt + 3.0);
-    const offsetSpan = Math.max(70.0, Math.max(Math.abs(minOffset), Math.abs(maxOffset)) * 2.2);
+    const eqAlt = 90.0 - absLat;
+    const altMax = eqAlt + lunarData.i_eq;
+    const altMin = Math.max(0.0, eqAlt - lunarData.i_eq);
 
-    const toX = (to) => plotLeft + ((to + offsetSpan / 2.0) / offsetSpan) * plotW;
+    const plotAltMax = altMax + 3.0;
+    const plotAltMin = Math.max(0.0, altMin - 3.0);
+    const eotMin = -24.0, eotMax = 24.0;
+
+    const eotToX = (eot) => plotLeft + ((eot - eotMin) / (eotMax - eotMin)) * plotW;
     const altToY = (alt) => plotTop + ((plotAltMax - alt) / (plotAltMax - plotAltMin)) * plotH;
 
     // Equator transit line (Dec = 0° -> alt = 90 - |lat|)
-    const eqAlt = 90.0 - Math.abs(lat);
     const yEq = altToY(eqAlt);
     ctx.strokeStyle = "rgba(56, 189, 248, 0.35)";
     ctx.lineWidth = 0.8;
@@ -1286,18 +1278,18 @@ class MeteogramChart {
     ctx.font = "7px 'Inter', sans-serif";
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
-    ctx.fillText(`Max ${maxAlt.toFixed(0)}°`, plotLeft - 2, altToY(maxAlt));
-    ctx.fillText(`Min ${minAlt.toFixed(0)}°`, plotLeft - 2, altToY(minAlt));
+    ctx.fillText(`Max ${altMax.toFixed(0)}°`, plotLeft - 2, altToY(altMax));
+    ctx.fillText(`Min ${altMin.toFixed(0)}°`, plotLeft - 2, altToY(altMin));
     ctx.textAlign = "left";
     ctx.fillText(`${eqAlt.toFixed(0)}°`, plotLeft + plotW + 2, yEq);
 
-    // Draw full monthly Lunar Analemma loop
+    // Draw full Figure-8 Lunar Analemma loop
     ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
     ctx.lineWidth = 2.8;
     ctx.beginPath();
-    for (let i = 0; i < lunarCurve.length; i++) {
-      const pt = lunarCurve[i];
-      const px = toX(pt.timeOffset);
+    for (let i = 0; i < lunarData.curve.length; i++) {
+      const pt = lunarData.curve[i];
+      const px = eotToX(pt.eot);
       const py = altToY(pt.alt);
       if (i === 0) ctx.moveTo(px, py);
       else ctx.lineTo(px, py);
@@ -1308,9 +1300,9 @@ class MeteogramChart {
     ctx.strokeStyle = "#0284c7";
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    for (let i = 0; i < lunarCurve.length; i++) {
-      const pt = lunarCurve[i];
-      const px = toX(pt.timeOffset);
+    for (let i = 0; i < lunarData.curve.length; i++) {
+      const pt = lunarData.curve[i];
+      const px = eotToX(pt.eot);
       const py = altToY(pt.alt);
       if (i === 0) ctx.moveTo(px, py);
       else ctx.lineTo(px, py);
@@ -1318,10 +1310,9 @@ class MeteogramChart {
     ctx.closePath();
     ctx.stroke();
 
-    // Active date Moon transit state (step k=0 on the curve)
-    const curMoon = lunarCurve[0] || { alt: minAlt, timeOffset: 0, phase: 0.5 };
-    const moonX = toX(curMoon.timeOffset);
-    const moonY = altToY(curMoon.alt);
+    // Active date Moon marker (100% strictly on the curve)
+    const moonX = eotToX(lunarData.activeEoT);
+    const moonY = altToY(lunarData.activeAlt);
 
     // Glowing cyan halo around active Moon position
     ctx.fillStyle = "rgba(56, 189, 248, 0.4)";
@@ -1330,7 +1321,7 @@ class MeteogramChart {
     ctx.fill();
 
     // Draw mini phase-accurate Moon marker
-    drawMiniMoonPhase(ctx, moonX, moonY, 3.5, curMoon.phase);
+    drawMiniMoonPhase(ctx, moonX, moonY, 3.5, lunarData.phase);
 
     // Footer: current Moon culmination altitude & time anomaly
     ctx.shadowColor = "rgba(255, 255, 255, 0.9)";
@@ -1339,8 +1330,8 @@ class MeteogramChart {
     ctx.font = "bold 8px 'Inter', sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
-    const toSign = curMoon.timeOffset >= 0 ? "+" : "";
-    ctx.fillText(`Alt: ${curMoon.alt.toFixed(1)}° (${toSign}${curMoon.timeOffset.toFixed(0)}m)`, x + width / 2, y + height - 2);
+    const toSign = lunarData.activeEoT >= 0 ? "+" : "";
+    ctx.fillText(`Alt: ${lunarData.activeAlt.toFixed(1)}° (${toSign}${lunarData.activeEoT.toFixed(0)}m)`, x + width / 2, y + height - 2);
 
     ctx.restore();
   }
@@ -1498,31 +1489,41 @@ class MeteogramChart {
     for (let i = 0; i < rMax.length; i++) {
       if (rMax[i] != null && rMax[i] > maxP) maxP = rMax[i];
     }
-    const yMax = Math.ceil(maxP * 1.25 / 2.0) * 2.0;
-    const valToY = (v) => p.bottom - (v / yMax) * p.height;
+    const yMax = Math.max(2.0, maxP * 1.15);
+    const v0 = 0.2; // Transition parameter for log scaling (expands low precipitation)
+    const logDenom = Math.log10(1.0 + yMax / v0);
+    const valToY = (v) => {
+      if (v <= 0) return p.bottom;
+      const frac = Math.min(1.0, Math.log10(1.0 + v / v0) / logDenom);
+      return p.bottom - frac * p.height;
+    };
 
-    // Grid lines
+    // Logarithmic grid lines and ticks
     ctx.save();
     ctx.font = "10px 'Inter', monospace";
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
 
-    const step = yMax <= 5 ? 1 : (yMax <= 15 ? 2.5 : 5);
-    for (let v = 0; v <= yMax; v += step) {
+    const candidateTicks = [0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 15.0, 20.0, 30.0, 50.0, 100.0];
+    const ticks = candidateTicks.filter(t => t <= yMax);
+
+    let lastY = p.bottom;
+    for (const v of ticks) {
       const y = valToY(v);
-      if (y < p.top || y > p.bottom) continue;
+      if (lastY - y >= 14 && y >= p.top + 8) {
+        ctx.strokeStyle = "#e2e8f0";
+        ctx.lineWidth = 0.8;
+        ctx.setLineDash([2, 2]);
+        ctx.beginPath();
+        ctx.moveTo(this.marginLeft, y);
+        ctx.lineTo(this.marginLeft + this.plotWidth, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
 
-      ctx.strokeStyle = "#e2e8f0";
-      ctx.lineWidth = 0.8;
-      ctx.setLineDash([2, 2]);
-      ctx.beginPath();
-      ctx.moveTo(this.marginLeft, y);
-      ctx.lineTo(this.marginLeft + this.plotWidth, y);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      ctx.fillStyle = "#64748b";
-      ctx.fillText(`${v.toFixed(step < 1 ? 1 : 0)} mm`, this.marginLeft - 6, y);
+        ctx.fillStyle = "#64748b";
+        ctx.fillText(`${v >= 1 ? v.toFixed(0) : v.toFixed(1)} mm`, this.marginLeft - 6, y);
+        lastY = y;
+      }
     }
 
     // Draw bars
@@ -1569,11 +1570,29 @@ class MeteogramChart {
     ctx.textAlign = "left";
     ctx.fillStyle = "#1e293b";
     ctx.font = "bold 11px 'Inter', sans-serif";
-    ctx.fillText(t.precip, this.marginLeft + 8, p.top + 14);
+    ctx.fillText(`${t.precip} [log]`, this.marginLeft + 8, p.top + 14);
 
-    this._drawLegendBadge(this.marginLeft + 245, p.top + 9, "#2563eb", t.rain, true);
-    this._drawLegendBadge(this.marginLeft + 310, p.top + 9, "#06b6d4", t.snow, true);
-    this._drawLegendBadge(this.marginLeft + 380, p.top + 9, "#1e40af", "Max member tick", false, [0, 0]);
+    this._drawLegendBadge(this.marginLeft + 235, p.top + 9, "#2563eb", t.rain, true);
+    this._drawLegendBadge(this.marginLeft + 295, p.top + 9, "#06b6d4", t.snow, true);
+    this._drawLegendBadge(this.marginLeft + 360, p.top + 9, "#1e40af", "Max member tick", false, [0, 0]);
+
+    // Side-by-side Analemma widgets (Sun & Moon) with transparent background in precipitation pane
+    const cardW = 104;
+    const cardH = 105;
+    const gap = 8;
+    const totalW = cardW * 2 + gap; // 216px
+    const anX = this.marginLeft + this.plotWidth - totalW - 8;
+    const anY = p.top + 8;
+    const activeDate = (this.hoverIdx !== null && this.times?.[this.hoverIdx]) 
+      ? this.times[this.hoverIdx] 
+      : (this.times?.[0] || new Date());
+    const lat = (this.data && this.data.location && this.data.location.latitude != null) 
+      ? Number(this.data.location.latitude) 
+      : 48.15;
+    const lon = (this.data && this.data.location && this.data.location.longitude != null) 
+      ? Number(this.data.location.longitude) 
+      : 17.10;
+    this._drawAnalemmaWidget(ctx, anX, anY, totalW, cardH, activeDate, lat, lon);
 
     // Daily precipitation accumulation badges (placed below the legend strip at p.top + 28)
     ctx.textAlign = "center";
@@ -1582,7 +1601,7 @@ class MeteogramChart {
       if (agg.rain > 0.05 || agg.snow > 0.05) {
         const midTime = Math.floor((this.times[agg.startIdx].getTime() + this.times[agg.endIdx].getTime()) / 2);
         const x = this._timeToX(midTime);
-        if (x > this.marginLeft + 20 && x < this.marginLeft + this.plotWidth - 20) {
+        if (x > this.marginLeft + 20 && x < anX - 10) {
           const label = `Σ ${agg.rain.toFixed(1)} mm${agg.snow > 0.1 ? ` (❄${agg.snow.toFixed(1)}cm)` : ""}`;
           const textW = ctx.measureText(label).width;
           const badgeY = p.top + 28;
