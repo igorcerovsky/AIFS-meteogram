@@ -61,12 +61,18 @@ python3 server/server.py 8080
 
 ### Key Features
 - **Dynamic HTML5 Canvas Engine (`web/meteogram-chart.js`)**:
-  - Automatically scales with `devicePixelRatio` for razor-sharp rendering on Retina and HiDPI displays.
+  - Automatically scales with `devicePixelRatio` for razor-sharp rendering on Retina and 4K/HiDPI displays.
   - Interactive crosshair tracking across all 5 synchronized panels with real-time value indicators.
-  - Floating glassmorphism HUD tooltip showing exact temperature, precipitation, cloud breakdown, wind speed/direction, pressure, and celestial altitudes at the hovered timestamp.
+  - **Floating Glassmorphism HUD Tooltip**: Real-time inspection pane displaying exact temperature, precipitation, cloud volume, pressure, and celestial altitudes at the hovered timestamp.
+  - **Dynamic Wind Direction Arrow in HUD**: Displays an SVG meteorological directional arrow that rotates smoothly to indicate wind flow, dynamically color-coded by the active wind speed category (calm slate, teal, emerald green, warm orange, storm crimson).
+  - **Precipitation 90th Percentile (P90) Envelope**: Semi-transparent light-blue bars render the 90th percentile ensemble upper bound behind solid median precipitation bars, highlighting probabilistic extreme rain risks.
+  - **Luminous Golden Yellow Cloud Cover**: Total cloud volume rendered as a luminous golden-yellow spline curve (`#eab308`) and subtle histogram bins, paired with isolated High Cirrus (royal blue `#2563eb`), Medium Alto (emerald `#10b981`), and Low Stratus (crimson `#e11d48`) layers.
   - **Location-Aware Celestial Analemmas**: Side-by-side Solar & Lunar figure-8 analemma cards embedded directly in the precipitation pane with transparent backgrounds.
-  - **Logarithmic Precipitation Scaling**: Pseudo-logarithmic scaling that expands low-intensity precipitation ($0.1 - 2.0\text{ mm}$) for clear visibility of light rain, drizzle, and snow.
+  - **Logarithmic Precipitation Scaling**: Pseudo-logarithmic scaling ($v_0 = 0.2\text{ mm}$) that expands low-intensity precipitation ($0.1 - 2.0\text{ mm}$) for clear visibility of light rain, drizzle, and snow.
   - **Continuous Loop Wind Direction & Dual Velocity Encoding**: Continuous `N-W-S-E-N` looping trajectory with speed-proportional stroke thickness and multi-threshold color coding.
+- **Always-Fresh Data & One-Tap Refresh**:
+  - **`[ ↻ Refresh ]` Button**: Instantly forces a fresh network fetch from Open-Meteo, bypassing browser and server caches (`refresh=1`, `Cache-Control: no-cache`) to immediately pick up new model runs (00z, 06z, 12z, 18z).
+  - **Fresh Model Switching**: Toggling model pills (`15d`, `2d`, `5d`, `10d`, `7d`) automatically fetches up-to-date ensemble data.
 - **Search & Quick Presets**: Type any city name or GPS coordinates (`lat, lon`), or tap preset chips (*Bratislava-Koliba, Jasná, Liptovský Mikuláš, Plavecké Podhradie, Košice, Poprad/Tatry, Vienna, Prague*).
 - **Model Selection**:
   - **ECMWF AIFS Global Ensemble**: 15 days, 10 days, 7 days (50 AI members).
@@ -84,10 +90,17 @@ python3 server/server.py 8080
 A native SwiftUI multiplatform application running seamlessly on **macOS 14.0+** (Apple Silicon & Intel) and **iOS / iPadOS 17.0+** (iPhone & iPad).
 
 ### Key Features
-- **Swipe Between Models**: Swipe left or right directly on the chart to cycle models in the natural order:
+- **One-Tap Refresh & Cache Invalidation**: Dedicated `arrow.clockwise` button in the header bar and macOS toolbar (`⌘R`) to bypass caches and instantly download the latest forecast runs.
+- **Seamless Swipe Between Models**: Swipe horizontally directly on the chart to cycle models in the natural order:
   $$\mathbf{15\text{ days}} \longleftrightarrow \mathbf{2\text{ days}} \longleftrightarrow \mathbf{5\text{ days}} \longleftrightarrow \mathbf{10\text{ days}} \longleftrightarrow \mathbf{7\text{ days}}$$
   *(Automatically bypasses 2-day ICON-D2 when a location is outside coverage).*
-- **Native Swift Charts**: Feature parity with web canvas including pseudo-logarithmic precipitation scaling, transparent side-by-side Solar & Lunar Analemma cards, and continuous wind direction curves.
+- **Gesture Stability & Locked Time Domains**: Mathematically clamped time scales ensure precipitation bars and curves maintain rigid alignment without zoom jumps or lateral shifting during swipe transitions.
+- **Native Swift Charts Engine**: Complete visual parity with the web dashboard, featuring:
+  - 90th percentile (P90) semi-transparent precipitation bars alongside solid median rain and snowfall.
+  - Luminous golden-yellow total cloud volume curve with isolated cirrus, alto, and stratus layers.
+  - Continuous `N-W-S-E-N` wind trajectory curves with velocity color weighting.
+  - Interactive HUD inspection with dynamic rotating wind direction arrow colored by speed threshold.
+  - Transparent side-by-side Solar & Lunar Analemma cards.
 - **Sleek Model Pill Bar**: Compact `[ 15d | 2d | 5d | 10d | 7d ]` selector with real-time status and active indicator.
 - **Interactive Gesture Zoom**: Fluid pinch-to-zoom (up to 400%), smooth panning, double-tap zoom reset, and floating zoom controls.
 - **Off-Screen Pan Boundary Constraints**: Clamped viewport mathematics ensure the graph cannot be accidentally dragged outside the visible screen.
@@ -141,11 +154,11 @@ python3 server/meteogram.py --location "48.148,17.107" --output custom_coords.pn
 
 ### HTTP API (`server/server.py`)
 
-- **`GET /api/forecast`**: Serves structured forecast JSON data, ensemble statistics (median, IQR, min/max spreads), and astronomical ephemeris for the dynamic web canvas.
-  - Parameters: `location`, `days`, `model`, `lang`, `tz`.
-  - Caching: Automatic server-side disk cache with 1-hour validity ($< 1\text{ ms}$ response).
+- **`GET /api/forecast`**: Serves structured forecast JSON data, ensemble statistics (median, P90, IQR, min/max spreads), and astronomical ephemeris for the dynamic web canvas.
+  - Parameters: `location`, `days`, `model`, `lang`, `tz`, `refresh` (`1` to bypass disk cache).
+  - Caching: Automatic server-side disk cache with 1-hour validity ($< 1\text{ ms}$ response), instantly bypassable via `refresh=1` or `Cache-Control: no-cache`.
 - **`GET /api/image`**: Generates and serves high-resolution raster PNG meteograms for native apps or static embedding.
-  - Parameters: `location`, `days`, `model`, `lang`, `tz`.
+  - Parameters: `location`, `days`, `model`, `lang`, `tz`, `refresh`.
   - Response Headers: `X-Actual-Model`, `X-Model-Fallback`, `X-Fallback-From`.
 - **`GET /api/check_location`**: Geocodes locations, resolves elevation, and validates DWD ICON-D2 domain boundaries.
 
@@ -159,6 +172,7 @@ python3 server/meteogram.py --location "48.148,17.107" --output custom_coords.pn
    - **Sun & Moon Celestial Trajectories**: Continuous elevation arcs rising from and landing strictly at the bottom horizon line, annotated with culmination peak badges (`☀ HH:MM (XX°)`, `☾ HH:MM (XX°)`).
    - **Right Y-Axis Celestial Degree Scale**: Dedicated $0^\circ$, $45^\circ$, $90^\circ$ `[Alt]` reference ticks.
 2. **Precipitation & Snowfall (mm)**:
+   - **90th Percentile (P90) Probability Bars**: Light semi-transparent blue bars render the 90th percentile ensemble volume behind solid median precipitation bars, highlighting high-probability upper rain limits without distorting baseline median expectations.
    - **Logarithmic Scaling `[log]`**: Formulated with a transition factor ($v_0 = 0.2\text{ mm}$) to expand light precipitation events ($0.1 - 2.0\text{ mm}$) that would otherwise be imperceptible on linear scales.
    - **Logarithmic Reference Grid**: Non-linear grid lines at $0.1, 0.2, 0.5, 1, 2, 5, 10, \dots\text{ mm}$.
    - Liquid rain bars, snowfall bars, max-member tick caps, and daily cumulative sum badges (`Σ X.X mm`).
@@ -166,14 +180,14 @@ python3 server/meteogram.py --location "48.148,17.107" --output custom_coords.pn
      - **Solar Analemma**: Annual figure-8 tracking solar declination against the Equation of Time ($+16\text{m}$ to $-14\text{m}$) for the active location.
      - **Lunar Analemma**: Closed monthly figure-8 loop reflecting orbital inclination to the celestial equator and Equation of Time harmonics, with an illuminated phase-accurate Moon marker locked strictly on the curve.
 3. **Multi-layer Cloud Cover (%)**:
-   - **Total Cloud Cover**: Clean, simplified amber histogram bins anchored at 0% baseline representing total cloud volume across time.
+   - **Total Cloud Cover**: Luminous golden-yellow spline curve (`#eab308`) and subtle histogram bins anchored at 0% baseline representing overall cloud volume across time.
    - **Cloud Layers (Single Curves)**: High Cirrus (royal blue `#2563eb`), Medium Alto (emerald `#10b981`), and Low Stratus (crimson `#e11d48`) rendered as distinct, vibrant median lines.
 4. **10m Wind Speed & Direction**:
    - **Continuous 5-Point Direction Loop**: Mapped to `N` (top), `W`, `S`, `E`, and `N` (bottom) across a unified, continuous grid to prevent discontinuous edge jumps for north-westerly and northerly winds.
    - **Dual Speed Encoding**:
      - **Curve Thickness**: Line weight scales proportionally with wind speed ($< 2\text{ m/s}$ hairline to $\ge 15\text{ m/s}$ heavy).
-     - **Speed Color Categories**: Segmented into grey ($< 2\text{ m/s}$), teal ($2-5\text{ m/s}$), emerald ($5-10\text{ m/s}$), amber ($10-15\text{ m/s}$), and crimson ($> 15\text{ m/s}$).
-   - **Wind Direction Arrows**: Rotational meteorological arrows pointing in the direction of wind flow.
+     - **Speed Color Categories**: Segmented into calm grey ($< 2\text{ m/s}$), teal ($2-5\text{ m/s}$), emerald ($5-10\text{ m/s}$), warm orange ($10-15\text{ m/s}$), and storm crimson ($> 15\text{ m/s}$).
+   - **Interactive Rotational Wind Arrow in HUD**: Displays directional arrow matching meteorological wind angle, color-coded by the active velocity tier.
 5. **Mean Sea Level Pressure (MSLP, hPa)**:
    - Atmospheric pressure curve and ensemble spread, $1013.25\text{ hPa}$ standard atmosphere reference line, and synchronized Sun/Moon celestial elevation trajectories with the right-axis `[Alt]` scale.
 6. **Daytime & Night Shading Across All Panels**:

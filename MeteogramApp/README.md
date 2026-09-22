@@ -23,8 +23,10 @@ Runs seamlessly on:
   - One-tap **GPS Location** (`CoreLocation`).
   - Star / Favorites system.
 - **Interactive Native Chart & Image Viewer**:
-  - Native **Swift Charts** engine with real-time gesture selection, pseudo-logarithmic precipitation scaling, transparent side-by-side Solar & Lunar Analemma cards, and continuous wind curve loops.
-  - Pinch-to-zoom (up to 400%), smooth panning, and double-tap zoom reset.
+  - Native **Swift Charts** engine with real-time gesture selection, 90th percentile (P90) semi-transparent precipitation bars alongside solid median rain/snow, transparent side-by-side Solar & Lunar Analemma cards, and continuous wind curve loops.
+  - Interactive HUD inspection pane with dynamic rotating wind direction arrow colored by speed tier.
+  - Locked time domain scaling during horizontal model swipes (`15d ↔ 2d ↔ 5d ↔ 10d ↔ 7d`) for absolute gesture stability without zoom shifts.
+  - Fluid pinch-to-zoom (up to 400%), smooth panning, and double-tap zoom reset.
   - Floating zoom controls overlay (+, -, reset).
   - High-DPI crisp rendering.
 - **Language & Time Zone**:
