@@ -256,37 +256,82 @@ function calculateLunarAnalemma(dateUtc, lat = 48.15, lon = 17.10) {
 
 function drawMiniMoonPhase(ctx, cx, cy, radius, phase) {
   ctx.save();
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-  ctx.fillStyle = "#1e293b"; // Dark unlit side
-  ctx.fill();
-
-  // Lit side (warm silver-white)
-  ctx.fillStyle = "#e0f2fe";
-
   const p = ((phase % 1.0) + 1.0) % 1.0;
-  if (p <= 0.5) {
-    // Waxing (right side lit)
+  const darkColor = "#1e293b"; // Dark unlit side
+  const litColor = "#ffffff";  // Luminous moonish pearl white
+  const strokeColor = "#38bdf8";
+
+  // Full Moon (p ~ 0.50)
+  if (Math.abs(p - 0.5) < 0.035) {
     ctx.beginPath();
-    ctx.arc(cx, cy, radius, -Math.PI / 2, Math.PI / 2, false);
-    const k = Math.cos(p * 2 * Math.PI);
-    ctx.ellipse(cx, cy, Math.max(0.1, Math.abs(k) * radius), radius, 0, Math.PI / 2, -Math.PI / 2, k < 0);
+    ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
+    ctx.fillStyle = litColor;
     ctx.fill();
-  } else {
-    // Waning (left side lit)
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius, Math.PI / 2, -Math.PI / 2, false);
-    const k = Math.cos(p * 2 * Math.PI);
-    ctx.ellipse(cx, cy, Math.max(0.1, Math.abs(k) * radius), radius, 0, -Math.PI / 2, Math.PI / 2, k < 0);
-    ctx.fill();
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    ctx.restore();
+    return;
   }
 
-  // Border ring
-  ctx.strokeStyle = "#38bdf8";
-  ctx.lineWidth = 0.8;
+  // New Moon (p ~ 0.0 or 1.0)
+  if (p < 0.035 || p > 0.965) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
+    ctx.fillStyle = darkColor;
+    ctx.fill();
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  // Intermediate phases: draw dark disk base first
   ctx.beginPath();
-  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
+  ctx.fillStyle = darkColor;
+  ctx.fill();
+
+  // Construct illuminated polygon patch (outer limb + inner terminator curve)
+  const n = 36;
+  const k = Math.cos(2 * Math.PI * p);
+  const factor = p < 0.5 ? 1 : -1; // Waxing: lit on right (+1); Waning: lit on left (-1)
+  ctx.beginPath();
+  let started = false;
+
+  // Outer limb arc from -pi/2 (top) to +pi/2 (bottom)
+  for (let i = 0; i <= n; i++) {
+    const phi = -Math.PI / 2 + (Math.PI * i) / n;
+    const x = cx + factor * radius * Math.cos(phi);
+    const y = cy + radius * Math.sin(phi);
+    if (!started) {
+      ctx.moveTo(x, y);
+      started = true;
+    } else {
+      ctx.lineTo(x, y);
+    }
+  }
+
+  // Terminator curve from +pi/2 (bottom) back to -pi/2 (top)
+  for (let i = n; i >= 0; i--) {
+    const phi = -Math.PI / 2 + (Math.PI * i) / n;
+    const x = cx + factor * radius * k * Math.cos(phi);
+    const y = cy + radius * Math.sin(phi);
+    ctx.lineTo(x, y);
+  }
+
+  ctx.closePath();
+  ctx.fillStyle = litColor;
+  ctx.fill();
+
+  // Outer rim stroke
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = 0.8;
   ctx.stroke();
+
   ctx.restore();
 }
 
@@ -1320,8 +1365,13 @@ class MeteogramChart {
     ctx.arc(moonX, moonY, 6, 0, Math.PI * 2);
     ctx.fill();
 
-    // Draw mini phase-accurate Moon marker
-    drawMiniMoonPhase(ctx, moonX, moonY, 3.5, lunarData.phase);
+    // Draw mini phase-accurate Moon marker synchronized with meteogram moon path
+    const dKey = this._formatDateKey(activeDate || new Date());
+    let phaseToUse = lunarData.phase;
+    if (this.data && this.data.astro && this.data.astro.daily && this.data.astro.daily[dKey] && this.data.astro.daily[dKey].moon_phase != null) {
+      phaseToUse = this.data.astro.daily[dKey].moon_phase;
+    }
+    this._drawMoonPhaseBadge(moonX, moonY, phaseToUse, 4.0);
 
     // Footer: current Moon culmination altitude & time anomaly
     ctx.shadowColor = "rgba(255, 255, 255, 0.9)";

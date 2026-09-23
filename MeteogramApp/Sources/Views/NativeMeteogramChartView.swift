@@ -445,7 +445,13 @@ public struct NativeMeteogramChartView: View {
                 let lat = viewModel.forecastData?.location.latitude ?? 48.15
                 let lon = viewModel.forecastData?.location.longitude ?? 17.10
                 let activeDate = selectedDate ?? points.first?.date ?? Date()
-                AnalemmaWidgetView(date: activeDate, latitude: lat, longitude: lon)
+                let activeMoonPhase: Double? = {
+                    let formatter = DateFormatter()
+                    formatter.dateFormat = "yyyy-MM-dd"
+                    let dayKey = formatter.string(from: activeDate)
+                    return viewModel.forecastData?.astro?.daily?[dayKey]?.moonPhase
+                }()
+                AnalemmaWidgetView(date: activeDate, latitude: lat, longitude: lon, moonPhase: activeMoonPhase)
                     .padding(.top, 6)
                     .padding(.trailing, 8)
             }
@@ -1573,31 +1579,40 @@ public struct MiniMoonPhaseShape: Shape {
         let r = min(rect.width, rect.height) / 2.0
         let p = (phase.truncatingRemainder(dividingBy: 1.0) + 1.0).truncatingRemainder(dividingBy: 1.0)
         let k = cos(p * 2.0 * .pi)
-        let ew = max(0.1, abs(k) * r)
+        let n = 36
 
-        if p <= 0.5 {
-            // Waxing: arc right (-pi/2 to pi/2)
-            path.move(to: CGPoint(x: cx, y: cy - r))
-            path.addArc(center: CGPoint(x: cx, y: cy), radius: r, startAngle: .radians(-.pi / 2), endAngle: .radians(.pi / 2), clockwise: false)
-            if k >= 0 {
-                // Crescent: curve back via right edge
-                path.addQuadCurve(to: CGPoint(x: cx, y: cy - r), control: CGPoint(x: cx + ew, y: cy))
+        // Full Moon: fully lit disk
+        if abs(p - 0.5) < 0.035 {
+            path.addEllipse(in: CGRect(x: cx - r, y: cy - r, width: r * 2.0, height: r * 2.0))
+            return path
+        }
+
+        // New Moon: dark unlit disk
+        if p < 0.035 || p > 0.965 {
+            return path
+        }
+
+        let isWaxing = p < 0.5
+        let factor: CGFloat = isWaxing ? 1.0 : -1.0
+
+        for i in 0...n {
+            let phi = -.pi / 2.0 + (.pi * Double(i)) / Double(n)
+            let x = cx + factor * r * CGFloat(cos(phi))
+            let y = cy + r * CGFloat(sin(phi))
+            if i == 0 {
+                path.move(to: CGPoint(x: x, y: y))
             } else {
-                // Gibbous: curve back via left edge
-                path.addQuadCurve(to: CGPoint(x: cx, y: cy - r), control: CGPoint(x: cx - ew, y: cy))
-            }
-        } else {
-            // Waning: arc left (pi/2 to -pi/2)
-            path.move(to: CGPoint(x: cx, y: cy + r))
-            path.addArc(center: CGPoint(x: cx, y: cy), radius: r, startAngle: .radians(.pi / 2), endAngle: .radians(-.pi / 2), clockwise: false)
-            if k >= 0 {
-                // Crescent: curve back via left edge
-                path.addQuadCurve(to: CGPoint(x: cx, y: cy + r), control: CGPoint(x: cx - ew, y: cy))
-            } else {
-                // Gibbous: curve back via right edge
-                path.addQuadCurve(to: CGPoint(x: cx, y: cy + r), control: CGPoint(x: cx + ew, y: cy))
+                path.addLine(to: CGPoint(x: x, y: y))
             }
         }
+
+        for i in stride(from: n, through: 0, by: -1) {
+            let phi = -.pi / 2.0 + (.pi * Double(i)) / Double(n)
+            let x = cx + factor * r * CGFloat(k * cos(phi))
+            let y = cy + r * CGFloat(sin(phi))
+            path.addLine(to: CGPoint(x: x, y: y))
+        }
+
         path.closeSubpath()
         return path
     }
@@ -1637,11 +1652,13 @@ public struct AnalemmaWidgetView: View {
     public let date: Date
     public let latitude: Double
     public let longitude: Double
+    public let moonPhase: Double?
 
-    public init(date: Date, latitude: Double = 48.15, longitude: Double = 17.10) {
+    public init(date: Date, latitude: Double = 48.15, longitude: Double = 17.10, moonPhase: Double? = nil) {
         self.date = date
         self.latitude = latitude
         self.longitude = longitude
+        self.moonPhase = moonPhase
     }
 
     private var annualCurve: [AnalemmaPoint] {
@@ -1850,7 +1867,7 @@ public struct AnalemmaWidgetView: View {
                         .frame(width: 10, height: 10)
                         .position(x: moonX, y: moonY)
 
-                    MiniMoonPhaseView(phase: lunar.phase, size: 6.5)
+                    MiniMoonPhaseView(phase: moonPhase ?? lunar.phase, size: 6.5)
                         .position(x: moonX, y: moonY)
                 }
             }
