@@ -32,6 +32,7 @@ LOCATIONS = [
     {"name": "Vienna", "slug": "vienna"},
     {"name": "Prague", "slug": "prague"},
     {"name": "Lengerich", "slug": "lengerich"},
+    {"name": "Rajka", "slug": "rajka"},
 ]
 
 MODELS = [

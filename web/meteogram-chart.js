@@ -2853,7 +2853,9 @@ const PRESET_COORDS = {
   "vienna": { name: "Vienna", country: "Austria", latitude: 48.2082, longitude: 16.3738, elevation: 171.0, timezone: "Europe/Vienna" },
   "prague": { name: "Prague", country: "Czech Republic", latitude: 50.0755, longitude: 14.4378, elevation: 235.0, timezone: "Europe/Prague" },
   "lengerich": { name: "Lengerich", country: "Germany", latitude: 52.1866, longitude: 7.8604, elevation: 81.0, timezone: "Europe/Berlin" },
-  "lengerich (de)": { name: "Lengerich", country: "Germany", latitude: 52.1866, longitude: 7.8604, elevation: 81.0, timezone: "Europe/Berlin" }
+  "lengerich (de)": { name: "Lengerich", country: "Germany", latitude: 52.1866, longitude: 7.8604, elevation: 81.0, timezone: "Europe/Berlin" },
+  "rajka": { name: "Rajka", country: "Hungary", latitude: 47.9964, longitude: 17.1982, elevation: 128.0, timezone: "Europe/Budapest" },
+  "rajka (hu)": { name: "Rajka", country: "Hungary", latitude: 47.9964, longitude: 17.1982, elevation: 128.0, timezone: "Europe/Budapest" }
 };
 
 window.MeteogramAPI = {

@@ -157,6 +157,30 @@ PRESET_LOCATIONS = {
         "elevation": 81.0,
         "timezone": "Europe/Berlin",
     },
+    "rajka": {
+        "name": "Rajka",
+        "country": "Hungary",
+        "latitude": 47.9964,
+        "longitude": 17.1982,
+        "elevation": 128.0,
+        "timezone": "Europe/Budapest",
+    },
+    "rajka (hu)": {
+        "name": "Rajka",
+        "country": "Hungary",
+        "latitude": 47.9964,
+        "longitude": 17.1982,
+        "elevation": 128.0,
+        "timezone": "Europe/Budapest",
+    },
+    "rajka, hu": {
+        "name": "Rajka",
+        "country": "Hungary",
+        "latitude": 47.9964,
+        "longitude": 17.1982,
+        "elevation": 128.0,
+        "timezone": "Europe/Budapest",
+    },
 }
 
 
