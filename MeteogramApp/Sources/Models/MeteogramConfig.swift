@@ -24,6 +24,7 @@ public struct MeteogramConfig {
         PresetLocation(name: "Repiska", displayName: "📍 Repiská", isMajor: true),
         PresetLocation(name: "Plavecke Podhradie", displayName: "📍 Plavecké Podhradie", isMajor: true),
         PresetLocation(name: "Jasna", displayName: "📍 Jasná", isMajor: true),
+        PresetLocation(name: "Lengerich", displayName: "📍 Lengerich (DE)", isMajor: true),
         PresetLocation(name: "Poprad", displayName: "Poprad / Tatry"),
         PresetLocation(name: "Vienna", displayName: "Vienna"),
         PresetLocation(name: "Prague", displayName: "Prague")
@@ -37,6 +38,7 @@ public struct MeteogramConfig {
         if norm.contains("jasna") || norm.contains("jasná") { return "jasna" }
         if norm.contains("plaveck") { return "plavecke-podhradie" }
         if norm.contains("repisk") || norm.contains("demanov") || norm.contains("demänov") { return "repiska" }
+        if norm.contains("lengerich") { return "lengerich" }
         if norm.contains("kosic") || norm.contains("košic") { return "kosice" }
         if norm.contains("poprad") || norm.contains("tatr") { return "poprad" }
         if norm.contains("vienna") || norm.contains("vieden") || norm.contains("viedeň") { return "vienna" }

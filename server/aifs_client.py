@@ -133,6 +133,30 @@ PRESET_LOCATIONS = {
         "elevation": 850.0,
         "timezone": "Europe/Bratislava",
     },
+    "lengerich": {
+        "name": "Lengerich",
+        "country": "Germany",
+        "latitude": 52.1866,
+        "longitude": 7.8604,
+        "elevation": 81.0,
+        "timezone": "Europe/Berlin",
+    },
+    "lengerich (de)": {
+        "name": "Lengerich",
+        "country": "Germany",
+        "latitude": 52.1866,
+        "longitude": 7.8604,
+        "elevation": 81.0,
+        "timezone": "Europe/Berlin",
+    },
+    "lengerich, de": {
+        "name": "Lengerich",
+        "country": "Germany",
+        "latitude": 52.1866,
+        "longitude": 7.8604,
+        "elevation": 81.0,
+        "timezone": "Europe/Berlin",
+    },
 }
 
 

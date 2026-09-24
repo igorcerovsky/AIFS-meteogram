@@ -69,7 +69,7 @@ python3 server/server.py 8080
 - **Always-Fresh Data & One-Tap Refresh**:
   - **`[ ↻ Refresh ]` Button**: Instantly forces a fresh network fetch from Open-Meteo, bypassing browser and server caches (`refresh=1`, `Cache-Control: no-cache`) to immediately pick up new model runs (00z, 06z, 12z, 18z).
   - **Fresh Model Switching**: Toggling model pills (`15d`, `2d`, `5d`, `10d`, `7d`) automatically fetches up-to-date ensemble data.
-- **Search & Quick Presets**: Type any city name or GPS coordinates (`lat, lon`), or tap preset chips (*Bratislava-Koliba, Jasná, Liptovský Mikuláš, Plavecké Podhradie, Košice, Poprad/Tatry, Vienna, Prague*).
+- **Search & Quick Presets**: Type any city name or GPS coordinates (`lat, lon`), or tap preset chips (*Bratislava-Koliba, Jasná, Liptovský Mikuláš, Repiská, Plavecké Podhradie, Lengerich (DE), Košice, Poprad/Tatry, Vienna, Prague*).
 - **Model Selection**:
   - **ECMWF AIFS Global Ensemble**: 15 days, 10 days, 7 days (50 AI members).
   - **DWD ICON-EU Regional Ensemble**: 5 days (7.0 km resolution, 40 members).

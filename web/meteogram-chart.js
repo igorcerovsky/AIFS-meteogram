@@ -2851,7 +2851,9 @@ const PRESET_COORDS = {
   "kosice": { name: "Košice", country: "Slovakia", latitude: 48.7164, longitude: 21.2611, elevation: 230.0, timezone: "Europe/Bratislava" },
   "poprad": { name: "Poprad", country: "Slovakia", latitude: 49.0594, longitude: 20.2978, elevation: 718.0, timezone: "Europe/Bratislava" },
   "vienna": { name: "Vienna", country: "Austria", latitude: 48.2082, longitude: 16.3738, elevation: 171.0, timezone: "Europe/Vienna" },
-  "prague": { name: "Prague", country: "Czech Republic", latitude: 50.0755, longitude: 14.4378, elevation: 235.0, timezone: "Europe/Prague" }
+  "prague": { name: "Prague", country: "Czech Republic", latitude: 50.0755, longitude: 14.4378, elevation: 235.0, timezone: "Europe/Prague" },
+  "lengerich": { name: "Lengerich", country: "Germany", latitude: 52.1866, longitude: 7.8604, elevation: 81.0, timezone: "Europe/Berlin" },
+  "lengerich (de)": { name: "Lengerich", country: "Germany", latitude: 52.1866, longitude: 7.8604, elevation: 81.0, timezone: "Europe/Berlin" }
 };
 
 window.MeteogramAPI = {

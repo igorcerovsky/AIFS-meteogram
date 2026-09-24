@@ -18,7 +18,7 @@ Runs seamlessly on:
   - Automatic coverage check for locations outside Central Europe (ICON-D2).
   - Seamless fallback to ICON-EU or AIFS with an in-app notice banner.
 - **Location Search & Presets**:
-  - Quick chips: *Bratislava-Koliba, Jasná, Liptovský Mikuláš, Plavecké Podhradie, Košice, Poprad/Tatry, Vienna, Prague*.
+  - Quick chips: *Bratislava-Koliba, Jasná, Liptovský Mikuláš, Repiská, Plavecké Podhradie, Lengerich (DE), Košice, Poprad/Tatry, Vienna, Prague*.
   - Search by city name or `lat, lon` coordinates.
   - One-tap **GPS Location** (`CoreLocation`).
   - Star / Favorites system.
