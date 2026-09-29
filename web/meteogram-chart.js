@@ -719,8 +719,10 @@ class MeteogramChart {
 
   _getTimeTickConfig() {
     const forecastHours = (this.tEnd - this.tStart) / 3600000;
-    if (forecastHours <= 54) {
-      // 2-day / 48h (e.g. ICON-D2): major ticks every 3 hours
+    const model = (this.data && this.data.model) ? this.data.model : "";
+    const isShort = (model === "icon_d2" || forecastHours <= 78);
+    if (isShort) {
+      // 2-day / 48-72h (e.g. ICON-D2): major ticks every 3 hours
       return {
         stepHours: 3,
         majorHours: [0, 3, 6, 9, 12, 15, 18, 21],
@@ -870,14 +872,12 @@ class MeteogramChart {
     }
   }
 
-  _drawPanelBordersAndGrid() {
+  _drawPanelVerticalGrid(p) {
+    if (!p) return;
     const ctx = this.ctx;
-    const topY = this.panels.p1.top;
-    const bottomY = this.panels.p5.bottom;
-
-    // Draw vertical midnight lines and adaptive 6h / 3h lines
     const tz = this.options.tz;
     const tickConfig = this._getTimeTickConfig();
+
     ctx.save();
     for (let i = 0; i < this.times.length; i++) {
       const dt = this.times[i];
@@ -889,43 +889,78 @@ class MeteogramChart {
       if (x < this.marginLeft || x > this.marginLeft + this.plotWidth) continue;
 
       if (hour === 0) {
-        // Midnight border (solid, clear)
-        ctx.strokeStyle = "rgba(148, 163, 184, 0.6)";
+        // Midnight divider (solid prominent line, slate-600)
+        ctx.strokeStyle = "rgba(100, 116, 139, 0.85)";
         ctx.lineWidth = 1.2;
+        ctx.setLineDash([]);
         ctx.beginPath();
-        ctx.moveTo(x, topY);
-        ctx.lineTo(x, bottomY + this.panels.timeline.height);
+        ctx.moveTo(x, p.top);
+        ctx.lineTo(x, p.bottom);
         ctx.stroke();
       } else if (hour === 6 || hour === 12 || hour === 18) {
-        // 6h grid line (subtle dashed)
-        ctx.strokeStyle = "rgba(203, 213, 225, 0.45)";
-        ctx.lineWidth = 0.8;
-        ctx.setLineDash([2, 3]);
+        // 6h major grid line (clearly visible dashed line, slate-400)
+        ctx.strokeStyle = "rgba(148, 163, 184, 0.65)";
+        ctx.lineWidth = 1.0;
+        ctx.setLineDash([3, 3]);
         ctx.beginPath();
-        ctx.moveTo(x, topY);
-        ctx.lineTo(x, bottomY);
+        ctx.moveTo(x, p.top);
+        ctx.lineTo(x, p.bottom);
         ctx.stroke();
         ctx.setLineDash([]);
       } else if (tickConfig.isShort && (hour % 3 === 0)) {
-        // 3h grid line for 2-day forecast (subtle dotted)
-        ctx.strokeStyle = "rgba(226, 232, 240, 0.65)";
-        ctx.lineWidth = 0.75;
-        ctx.setLineDash([1, 2]);
+        // 3h major grid line for 2-day forecast (clearly visible dotted line)
+        ctx.strokeStyle = "rgba(148, 163, 184, 0.50)";
+        ctx.lineWidth = 0.9;
+        ctx.setLineDash([2, 2.5]);
         ctx.beginPath();
-        ctx.moveTo(x, topY);
-        ctx.lineTo(x, bottomY);
+        ctx.moveTo(x, p.top);
+        ctx.lineTo(x, p.bottom);
         ctx.stroke();
         ctx.setLineDash([]);
       }
     }
     ctx.restore();
+  }
 
-    // Horizontal panel dividers and borders
+  _drawPanelBordersAndGrid() {
+    const ctx = this.ctx;
+    const tz = this.options.tz;
+
+    // 1. Draw vertical time tick grid lines inside each data panel
+    for (const key of ["p1", "p2", "p3", "p4", "p5"]) {
+      this._drawPanelVerticalGrid(this.panels[key]);
+    }
+
+    // 2. Midnight divider line through timeline at the bottom
+    const timeline = this.panels.timeline;
+    if (timeline) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(100, 116, 139, 0.85)";
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([]);
+      for (let i = 0; i < this.times.length; i++) {
+        const dt = this.times[i];
+        const hour = tz === "utc" ? dt.getUTCHours() : dt.getHours();
+        const min = tz === "utc" ? dt.getUTCMinutes() : dt.getMinutes();
+        if (min === 0 && hour === 0) {
+          const x = this._timeToX(dt.getTime());
+          if (x >= this.marginLeft && x <= this.marginLeft + this.plotWidth) {
+            ctx.beginPath();
+            ctx.moveTo(x, timeline.top);
+            ctx.lineTo(x, timeline.bottom);
+            ctx.stroke();
+          }
+        }
+      }
+      ctx.restore();
+    }
+
+    // 3. Horizontal panel dividers and outer borders
     ctx.strokeStyle = "#cbd5e1";
     ctx.lineWidth = 1;
     for (const key of ["p1", "p2", "p3", "p4", "p5"]) {
       const p = this.panels[key];
-      ctx.strokeRect(this.marginLeft, p.top, this.plotWidth, p.height);
+      if (p) ctx.strokeRect(this.marginLeft, p.top, this.plotWidth, p.height);
     }
   }
 
@@ -1126,6 +1161,9 @@ class MeteogramChart {
     }
     ctx.closePath();
     ctx.fill();
+
+    // Re-apply vertical grid lines on top of temperature spread shading so they remain crisp
+    this._drawPanelVerticalGrid(p);
 
     // Draw Median Curve (solid red)
     ctx.strokeStyle = "#dc2626";
