@@ -93,7 +93,7 @@ public struct NativeMeteogramChartView: View {
                         }
                     }
                 }
-                Text("Ensemble Forecast (SHMÚ EPSGRAM Style) • \(viewModel.horizon.displayName)")
+                Text("Ensemble Forecast • \(viewModel.horizon.displayName)")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

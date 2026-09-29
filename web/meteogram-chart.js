@@ -15,7 +15,7 @@
 const METEO_TRANSLATIONS = {
   en: {
     title: "ECMWF AIFS Meteogram",
-    subtitle: "Ensemble Forecast (SHMÚ EPSGRAM Style)",
+    subtitle: "Ensemble Forecast",
     temp: "2m Temperature [°C]",
     precip: "Precipitation & Snowfall [mm / 6h]",
     clouds: "Cloud Cover [%]",
@@ -55,7 +55,7 @@ const METEO_TRANSLATIONS = {
   },
   sk: {
     title: "ECMWF AIFS Meteogram",
-    subtitle: "Ensemblová predpoveď (štýl SHMÚ EPSGRAM)",
+    subtitle: "Ensemblová predpoveď",
     temp: "Teplota vzduchu 2 m [°C]",
     precip: "Zrážky a sneženie [mm / 6h]",
     clouds: "Oblačnosť [%]",

@@ -1,4 +1,4 @@
-# ECMWF AIFS Meteogram Generator (SHMÚ EPSGRAM Style)
+# ECMWF AIFS Meteogram Generator
 
 An advanced meteorological visualization system inspired by [SHMÚ's ECMWF EPSGRAM](https://www.shmu.sk/sk/?page=1&id=meteo_epsgramy&nwp_mesto=34031#ecmwf), powered by open forecast data from ECMWF's **AIFS** (*Artificial Intelligence Forecasting System* 0.25° Ensemble — 50 AI members) and DWD's regional high-resolution ensembles (**ICON-EU** and **ICON-D2**).
 

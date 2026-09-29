@@ -1,6 +1,6 @@
 # MeteogramApp (iOS & macOS)
 
-A native multiplatform Apple application built with **SwiftUI** for visualizing **ECMWF AIFS** (50-member AI ensemble) and **DWD ICON-EU / ICON-D2** meteograms in the classic **SHMÚ EPSGRAM** style.
+A native multiplatform Apple application built with **SwiftUI** for visualizing **ECMWF AIFS** (50-member AI ensemble) and **DWD ICON-EU / ICON-D2** meteograms, inspired by [SHMÚ's EPSGRAM](https://www.shmu.sk/sk/?page=1&id=meteo_epsgramy) layouts.
 
 Runs seamlessly on:
 - **macOS** (macOS 14.0 Sonoma or newer, Apple Silicon & Intel)
