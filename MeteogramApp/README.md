@@ -75,6 +75,39 @@ When running on an iPhone:
 
 ---
 
+## 📲 Permanent Installation on iPhone
+
+To run the app on your physical iPhone without having it expire:
+
+| Method | Validity | Cost | Renewal Effort | Best For |
+| :--- | :--- | :--- | :--- | :--- |
+| **PWA Web App** | Unlimited | Free | None (Automatic) | Instant access anywhere without Xcode |
+| **Apple Developer Account** | 365 Days | $99/year | Once a year | Best native experience & TestFlight distribution |
+| **AltStore / SideStore** | Permanent (auto-refresh) | Free | Automatic in background over Wi-Fi | Free native sideloading without weekly Mac connection |
+| **Xcode Free Team** | 7 Days | Free | Re-run `⌘R` in Xcode weekly | Local testing and debugging |
+
+### 1. PWA Web App (Zero Setup, No Expiry)
+Open the live meteogram web app in Safari on your iPhone:
+`https://igorcerovsky.github.io/AIFS-meteogram/`
+Tap the **Share** button in Safari $\rightarrow$ tap **Add to Home Screen** $\rightarrow$ tap **Add**.
+- Launches full-screen like a standalone app with its own app icon.
+- Queries Open-Meteo directly with zero backend required.
+- Never expires and requires no certificates or profiles.
+
+### 2. Apple Developer Account (365 Days or TestFlight)
+With an active Apple Developer Program account:
+1. In Xcode, set **Signing & Capabilities** to your paid Apple Developer Team.
+2. Direct install on your device remains valid for a full **365 days**.
+3. Or distribute via **TestFlight** (internal testing: up to 100 devices, builds valid 90 days with seamless automatic updates over the air).
+
+### 3. AltStore / SideStore (Permanent Free Sideloading)
+1. Install [SideStore](https://sidestore.io/) or [AltStore](https://altstore.io/) on your iPhone.
+2. In Xcode, select **Product $\rightarrow$ Archive**, export the `.ipa` package.
+3. Open the `.ipa` in SideStore/AltStore on your iPhone.
+4. SideStore automatically refreshes the 7-day provisioning certificate in the background over local Wi-Fi via a local WireGuard loopback, keeping the native app permanently active.
+
+---
+
 ## 📁 Architecture & File Structure
 
 ```
@@ -95,6 +128,7 @@ MeteogramApp/
 │   │   ├── ContentView.swift      # Adaptive root container
 │   │   ├── NativeMeteogramChartView.swift # Native Swift Charts meteogram & analemmas
 │   │   ├── ControlPanelView.swift # Controls & parameters form
+│   │   ├── ModelPillsBar.swift    # Compact model switch pills
 │   │   ├── MeteogramImageViewer.swift # Gesture-enabled image viewer
 │   │   ├── FallbackAlertBanner.swift  # Model fallback warning banner
 │   │   ├── PresetsRowView.swift   # Quick preset chips

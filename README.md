@@ -59,11 +59,15 @@ python3 server/server.py 8080
 - **Dynamic HTML5 Canvas Engine (`web/meteogram-chart.js`)**:
   - Automatically scales with `devicePixelRatio` for razor-sharp rendering on Retina and 4K/HiDPI displays.
   - Interactive crosshair tracking across all 5 synchronized panels with real-time value indicators.
+  - **Dual X-Axis Timeline & Integrated Date Headers**: The top of the temperature panel features an integrated time and date axis with distinct weekday and date badges, allowing instant inspection of the forecast timeline without scrolling down.
+  - **Adaptive Time Major Ticks & Multi-Panel Vertical Grid**:
+    - Dynamically scales tick frequency: 3-hour major ticks (`00, 03, 06, 09, 12, 15, 18, 21`) for high-resolution short-range forecasts (2-day DWD ICON-D2) and 6-hour ticks (`00, 06, 12, 18`) for standard horizons (5d, 10d, 15d).
+    - Synchronized vertical grid lines across all 5 graph panels: solid midnight dividers (`00:00`), dashed lines at 6-hour marks, and dotted lines at 3-hour marks, layered above ensemble shading for maximum clarity.
   - **Floating Glassmorphism HUD Tooltip**: Real-time inspection pane displaying exact temperature, precipitation, cloud volume, pressure, and celestial altitudes at the hovered timestamp.
   - **Dynamic Wind Direction Arrow in HUD**: Displays an SVG meteorological directional arrow that rotates smoothly to indicate wind flow, dynamically color-coded by the active wind speed category (calm slate, teal, emerald green, warm orange, storm crimson).
   - **Precipitation 90th Percentile (P90) Envelope**: Semi-transparent light-blue bars render the 90th percentile ensemble upper bound behind solid median precipitation bars, highlighting probabilistic extreme rain risks.
   - **Luminous Golden Yellow Cloud Cover**: Total cloud volume rendered as a luminous golden-yellow spline curve (`#eab308`) and subtle histogram bins, paired with isolated High Cirrus (royal blue `#2563eb`), Medium Alto (emerald `#10b981`), and Low Stratus (crimson `#e11d48`) layers.
-  - **Location-Aware Celestial Analemmas**: Side-by-side Solar & Lunar figure-8 analemma cards embedded directly in the precipitation pane with transparent backgrounds.
+  - **Location-Aware Celestial Analemmas**: Side-by-side Solar & Lunar figure-8 analemma cards embedded directly in the precipitation pane with transparent backgrounds and phase-accurate lunar illumination.
   - **Logarithmic Precipitation Scaling**: Pseudo-logarithmic scaling ($v_0 = 0.2\text{ mm}$) that expands low-intensity precipitation ($0.1 - 2.0\text{ mm}$) for clear visibility of light rain, drizzle, and snow.
   - **Continuous Loop Wind Direction & Dual Velocity Encoding**: Continuous `N-W-S-E-N` looping trajectory with speed-proportional stroke thickness and multi-threshold color coding.
 - **Always-Fresh Data & One-Tap Refresh**:
@@ -134,6 +138,7 @@ python3 server/server.py 8080
 ## 📊 Weather Parameters Visualized
 
 1. **2m Air Temperature (°C)**:
+   - **Dual X-Axis Timeline**: Integrated top timeline displaying calendar day pills (e.g. `Monday 29.09`) and adaptive time ticks, allowing immediate timeline orientation at the very top of the graph.
    - Median trajectory curve, interquartile 25–75% band, and full ensemble min-max spread.
    - **Colored Threshold Grid Lines**: Distinctive reference levels at $-10^\circ\text{C}$ (light blue), $0^\circ\text{C}$ (freezing level blue), $+10^\circ\text{C}$ (yellow), $+20^\circ\text{C}$ (orange), and $+30^\circ\text{C}$ (red).
    - **Sun & Moon Celestial Trajectories**: Continuous elevation arcs rising from and landing strictly at the bottom horizon line, annotated with culmination peak badges (`☀ HH:MM (XX°)`, `☾ HH:MM (XX°)`).
