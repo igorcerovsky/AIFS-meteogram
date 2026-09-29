@@ -357,14 +357,22 @@ public struct NativeMeteogramChartView: View {
 
     @AxisContentBuilder
     private func xAxisMarks(points: [TimeSeriesPoint]) -> some AxisContent {
-        let isShort = (points.count <= 72)
-        if isShort {
-            AxisMarks(values: .automatic(desiredCount: 8)) { value in
+        if points.count <= 54 {
+            // 2-day / 48h forecast: more frequent major ticks every 3 hours
+            AxisMarks(values: .stride(by: .hour, count: 3)) { value in
+                AxisGridLine()
+                AxisTick()
+                AxisValueLabel(format: .dateTime.weekday(.short).hour())
+            }
+        } else if points.count <= 130 {
+            // 5-day forecast: major ticks every 6 hours
+            AxisMarks(values: .stride(by: .hour, count: 6)) { value in
                 AxisGridLine()
                 AxisTick()
                 AxisValueLabel(format: .dateTime.weekday(.short).hour())
             }
         } else {
+            // 15-day / medium-range forecast: adaptive daily marks
             AxisMarks(values: .automatic(desiredCount: 6)) { value in
                 AxisGridLine()
                 AxisTick()

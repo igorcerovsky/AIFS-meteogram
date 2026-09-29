@@ -695,13 +695,54 @@ class MeteogramChart {
     return `${y}-${m}-${day}`;
   }
 
+  _getDaysMap() {
+    const daysMap = [];
+    let currentDayKey = null;
+    let dayStartIdx = 0;
+
+    for (let i = 0; i < this.times.length; i++) {
+      const dt = this.times[i];
+      const dKey = this._formatDateKey(dt);
+      if (dKey !== currentDayKey) {
+        if (currentDayKey !== null) {
+          daysMap.push({ key: currentDayKey, startIdx: dayStartIdx, endIdx: i - 1 });
+        }
+        currentDayKey = dKey;
+        dayStartIdx = i;
+      }
+    }
+    if (currentDayKey !== null) {
+      daysMap.push({ key: currentDayKey, startIdx: dayStartIdx, endIdx: this.times.length - 1 });
+    }
+    return daysMap;
+  }
+
+  _getTimeTickConfig() {
+    const forecastHours = (this.tEnd - this.tStart) / 3600000;
+    if (forecastHours <= 54) {
+      // 2-day / 48h (e.g. ICON-D2): major ticks every 3 hours
+      return {
+        stepHours: 3,
+        majorHours: [0, 3, 6, 9, 12, 15, 18, 21],
+        isShort: true,
+      };
+    } else {
+      // 5-day, 7-day, 10-day, 15-day: major ticks every 6 hours
+      return {
+        stepHours: 6,
+        majorHours: [0, 6, 12, 18],
+        isShort: false,
+      };
+    }
+  }
+
   render() {
     if (!this.data || !this.times || this.times.length === 0 || !this.ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
     const rect = this.container.getBoundingClientRect();
     const cssWidth = Math.max(880, Math.floor(rect.width));
-    const cssHeight = 915;
+    const cssHeight = 950;
 
     this.canvas.width = Math.floor(cssWidth * dpr);
     this.canvas.height = Math.floor(cssHeight * dpr);
@@ -729,24 +770,27 @@ class MeteogramChart {
 
     // Panel rectangles:
     // Header: y 0 to 45
-    // P1: Temperature (h: 220)
-    // P2: Precipitation (h: 120)
+    // P1: Temperature (h: 215)
+    // P1 Axis: Temperature X-Axis (h: 32)
+    // P2: Precipitation (h: 125)
     // P3: Clouds (h: 130)
-    // P4: Wind (h: 140)
+    // P4: Wind (h: 135)
     // P5: MSLP (h: 110)
     // Timeline / Ephemeris (h: 95)
     this.panels = {
-      p1: { top: 45, height: 220, bottom: 265, name: "temp" },
-      p2: { top: 275, height: 125, bottom: 400, name: "precip" },
-      p3: { top: 410, height: 130, bottom: 540, name: "clouds" },
-      p4: { top: 550, height: 135, bottom: 685, name: "wind" },
-      p5: { top: 695, height: 110, bottom: 805, name: "pressure" },
-      timeline: { top: 805, height: 95, bottom: 900, name: "timeline" },
+      p1: { top: 45, height: 215, bottom: 260, name: "temp" },
+      p1_axis: { top: 260, height: 32, bottom: 292, name: "temp_axis" },
+      p2: { top: 300, height: 125, bottom: 425, name: "precip" },
+      p3: { top: 435, height: 130, bottom: 565, name: "clouds" },
+      p4: { top: 575, height: 135, bottom: 710, name: "wind" },
+      p5: { top: 720, height: 110, bottom: 830, name: "pressure" },
+      timeline: { top: 830, height: 95, bottom: 925, name: "timeline" },
     };
 
     this._drawBackground();
     this._drawPanelBordersAndGrid();
     this._drawTemperaturePanel();
+    this._drawTemperatureXAxis();
     this._drawPrecipitationPanel();
     this._drawCloudCoverPanel();
     this._drawWindPanel();
@@ -831,8 +875,9 @@ class MeteogramChart {
     const topY = this.panels.p1.top;
     const bottomY = this.panels.p5.bottom;
 
-    // Draw vertical midnight lines and 6h / 12h lines
+    // Draw vertical midnight lines and adaptive 6h / 3h lines
     const tz = this.options.tz;
+    const tickConfig = this._getTimeTickConfig();
     ctx.save();
     for (let i = 0; i < this.times.length; i++) {
       const dt = this.times[i];
@@ -852,10 +897,20 @@ class MeteogramChart {
         ctx.lineTo(x, bottomY + this.panels.timeline.height);
         ctx.stroke();
       } else if (hour === 6 || hour === 12 || hour === 18) {
-        // 6h grid line (subtle dotted)
-        ctx.strokeStyle = "rgba(203, 213, 225, 0.4)";
+        // 6h grid line (subtle dashed)
+        ctx.strokeStyle = "rgba(203, 213, 225, 0.45)";
         ctx.lineWidth = 0.8;
         ctx.setLineDash([2, 3]);
+        ctx.beginPath();
+        ctx.moveTo(x, topY);
+        ctx.lineTo(x, bottomY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      } else if (tickConfig.isShort && (hour % 3 === 0)) {
+        // 3h grid line for 2-day forecast (subtle dotted)
+        ctx.strokeStyle = "rgba(226, 232, 240, 0.65)";
+        ctx.lineWidth = 0.75;
+        ctx.setLineDash([1, 2]);
         ctx.beginPath();
         ctx.moveTo(x, topY);
         ctx.lineTo(x, bottomY);
@@ -1100,6 +1155,98 @@ class MeteogramChart {
 
     ctx.restore();
     this.panels.p1.valToY = valToY;
+  }
+
+  _drawTemperatureXAxis() {
+    const p = this.panels.p1_axis;
+    if (!p) return;
+    const ctx = this.ctx;
+    const t = METEO_TRANSLATIONS[this.options.lang] || METEO_TRANSLATIONS.en;
+    const tz = this.options.tz;
+    const tickConfig = this._getTimeTickConfig();
+
+    ctx.save();
+    // 1. Two-tier background: Day ribbon (top half: #f1f5f9), Hour ribbon (bottom half: #ffffff)
+    const midY = p.top + 16;
+    ctx.fillStyle = "#f1f5f9";
+    ctx.fillRect(this.marginLeft, p.top, this.plotWidth, 16);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(this.marginLeft, midY, this.plotWidth, p.height - 16);
+
+    // Horizontal hairline dividing Day and Hour ribbons
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(this.marginLeft, midY);
+    ctx.lineTo(this.marginLeft + this.plotWidth, midY);
+    ctx.stroke();
+
+    // Outer border
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(this.marginLeft, p.top, this.plotWidth, p.height);
+
+    const daysMap = this._getDaysMap();
+
+    // 2. Day headers and midnight separator lines
+    for (const d of daysMap) {
+      const startX = Math.max(this.marginLeft, this._timeToX(this.times[d.startIdx].getTime()));
+      const endX = Math.min(this.marginLeft + this.plotWidth, this._timeToX(this.times[d.endIdx].getTime()));
+      const midX = (startX + endX) / 2;
+      const dayWidth = endX - startX;
+
+      // Vertical separator line between days at midnight
+      if (startX > this.marginLeft + 1 && startX < this.marginLeft + this.plotWidth - 1) {
+        ctx.strokeStyle = "rgba(148, 163, 184, 0.75)";
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.moveTo(startX, p.top);
+        ctx.lineTo(startX, p.bottom);
+        ctx.stroke();
+      }
+
+      if (dayWidth >= 28) {
+        const sampleDate = this.times[d.startIdx];
+        const dayName = t.days_short[tz === "utc" ? sampleDate.getUTCDay() : sampleDate.getDay()];
+        const dayNum = tz === "utc" ? sampleDate.getUTCDate() : sampleDate.getDate();
+        const monthNum = (tz === "utc" ? sampleDate.getUTCMonth() : sampleDate.getMonth()) + 1;
+        const dayText = dayWidth < 45 ? `${dayName} ${dayNum}.` : `${dayName} ${dayNum}.${monthNum}.`;
+
+        ctx.fillStyle = "#0f172a";
+        ctx.font = dayWidth < 55 ? "bold 9px 'Inter', sans-serif" : "bold 10px 'Inter', sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(dayText, midX, p.top + 8.5);
+      }
+    }
+
+    // 3. Hour tick marks and numbers in the lower ribbon
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (let i = 0; i < this.times.length; i++) {
+      const dt = this.times[i];
+      const h = tz === "utc" ? dt.getUTCHours() : dt.getHours();
+      const m = tz === "utc" ? dt.getUTCMinutes() : dt.getMinutes();
+      if (m !== 0 || !tickConfig.majorHours.includes(h)) continue;
+
+      const tx = this._timeToX(dt.getTime());
+      if (tx < this.marginLeft || tx > this.marginLeft + this.plotWidth) continue;
+
+      // Tick mark extending down from the midY divider
+      ctx.strokeStyle = (h === 0) ? "rgba(148, 163, 184, 0.9)" : "rgba(203, 213, 225, 0.9)";
+      ctx.lineWidth = (h === 0) ? 1.2 : 0.8;
+      ctx.beginPath();
+      ctx.moveTo(tx, midY);
+      ctx.lineTo(tx, midY + 3);
+      ctx.stroke();
+
+      // Hour number label
+      ctx.font = tickConfig.isShort ? "9.5px 'Inter', monospace" : "8px 'Inter', monospace";
+      ctx.fillStyle = (h === 0) ? "#0f172a" : "#64748b";
+      ctx.fillText(String(h).padStart(2, "0"), tx, midY + 9);
+    }
+
+    ctx.restore();
   }
 
   _drawAnalemmaWidget(ctx, x, y, width, height, activeDate, lat = 48.15, lon = 17.10) {
@@ -2369,26 +2516,9 @@ class MeteogramChart {
     ctx.strokeRect(this.marginLeft, p.top, this.plotWidth, p.height);
 
     // Group dates and draw day headers
-    const daysMap = [];
-    let currentDayKey = null;
-    let dayStartIdx = 0;
-
-    for (let i = 0; i < this.times.length; i++) {
-      const dt = this.times[i];
-      const dKey = this._formatDateKey(dt);
-      if (dKey !== currentDayKey) {
-        if (currentDayKey !== null) {
-          daysMap.push({ key: currentDayKey, startIdx: dayStartIdx, endIdx: i - 1 });
-        }
-        currentDayKey = dKey;
-        dayStartIdx = i;
-      }
-    }
-    if (currentDayKey !== null) {
-      daysMap.push({ key: currentDayKey, startIdx: dayStartIdx, endIdx: this.times.length - 1 });
-    }
-
+    const daysMap = this._getDaysMap();
     const astroDaily = (this.data.astro && this.data.astro.daily) ? this.data.astro.daily : {};
+    const tickConfig = this._getTimeTickConfig();
 
     for (const d of daysMap) {
       const startX = Math.max(this.marginLeft, this._timeToX(this.times[d.startIdx].getTime()));
@@ -2409,14 +2539,14 @@ class MeteogramChart {
       ctx.textAlign = "center";
       ctx.fillText(`${dayName} ${dayNum}.${monthNum}.`, midX, p.top + 16);
 
-      // 6-hour time markers
-      ctx.font = "9px 'Inter', monospace";
+      // Adaptive time markers
+      ctx.font = tickConfig.isShort ? "9.5px 'Inter', monospace" : "9px 'Inter', monospace";
       ctx.fillStyle = "#64748b";
       for (let i = d.startIdx; i <= d.endIdx; i++) {
         const dt = this.times[i];
         const h = tz === "utc" ? dt.getUTCHours() : dt.getHours();
         const m = tz === "utc" ? dt.getUTCMinutes() : dt.getMinutes();
-        if (m === 0 && (h === 0 || h === 6 || h === 12 || h === 18)) {
+        if (m === 0 && tickConfig.majorHours.includes(h)) {
           const tx = this._timeToX(dt.getTime());
           if (tx >= this.marginLeft && tx <= this.marginLeft + this.plotWidth) {
             ctx.fillText(String(h).padStart(2, "0"), tx, p.top + 32);
