@@ -51,6 +51,16 @@ const METEO_TRANSLATIONS = {
     moonset: "Moonset",
     aurora: "Aurora / Kp",
     geomag: "Geomagnetic",
+    kp_scale: "Kp Scale (NOAA SWPC)",
+    quiet: "Quiet",
+    unsettled: "Unsettled",
+    active: "Active",
+    storm_minor: "G1 Minor",
+    storm_mod: "G2 Moderate",
+    storm_strong: "G3 Strong",
+    storm_severe: "G4 Severe",
+    storm_ext: "G5 Extreme",
+    min_kp_needed: "Min Kp for location",
     days_short: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
     days_full: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
     months_short: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
@@ -93,6 +103,16 @@ const METEO_TRANSLATIONS = {
     moonset: "Západ mesiaca",
     aurora: "Polárna žiara / Kp",
     geomag: "Geomagnetická aktivita",
+    kp_scale: "Stupnica Kp (NOAA SWPC)",
+    quiet: "Pokojná",
+    unsettled: "Nestála",
+    active: "Aktívna",
+    storm_minor: "G1 Slabá",
+    storm_mod: "G2 Mierna",
+    storm_strong: "G3 Silná",
+    storm_severe: "G4 Veľmi silná",
+    storm_ext: "G5 Extrémna",
+    min_kp_needed: "Min. Kp pre lokalitu",
     days_short: ["Ne", "Po", "Ut", "St", "Št", "Pi", "So"],
     days_full: ["Nedeľa", "Pondelok", "Utorok", "Streda", "Štvrtok", "Piatok", "Sobota"],
     months_short: ["jan", "feb", "mar", "apr", "máj", "jún", "júl", "aug", "sep", "okt", "nov", "dec"],
@@ -523,9 +543,11 @@ class MeteogramChart {
   }
 
   _getKpColor(kp) {
-    if (kp >= 7.0) return "#c026d3"; // Fuchsia / strong storm (G3-G5)
-    if (kp >= 6.0) return "#ef4444"; // Red / moderate storm (G2)
-    if (kp >= 5.0) return "#f97316"; // Orange / minor storm (G1)
+    if (kp >= 9.0) return "#7e22ce"; // Deep Violet / G5 extreme storm
+    if (kp >= 8.0) return "#c026d3"; // Fuchsia / G4 severe storm
+    if (kp >= 7.0) return "#a855f7"; // Purple / G3 strong storm
+    if (kp >= 6.0) return "#ef4444"; // Red / G2 moderate storm
+    if (kp >= 5.0) return "#f97316"; // Orange / G1 minor storm
     if (kp >= 4.0) return "#eab308"; // Amber / active
     if (kp >= 3.0) return "#84cc16"; // Lime / unsettled
     return "#64748b";                // Slate / quiet
@@ -538,7 +560,7 @@ class MeteogramChart {
     if (kp >= 6.67) return "G3";
     if (kp >= 5.67) return "G2";
     if (kp >= 4.67) return "G1";
-    return kp >= 4.0 ? "Active" : "Quiet";
+    return kp >= 4.0 ? "Active" : "";
   }
 
   _getKpAtTime(tMs) {
@@ -789,7 +811,7 @@ class MeteogramChart {
     const dpr = window.devicePixelRatio || 1;
     const rect = this.container.getBoundingClientRect();
     const cssWidth = Math.max(880, Math.floor(rect.width));
-    const cssHeight = 965;
+    const cssHeight = 975;
 
     this.canvas.width = Math.floor(cssWidth * dpr);
     this.canvas.height = Math.floor(cssHeight * dpr);
@@ -824,6 +846,7 @@ class MeteogramChart {
     // P4: Wind (h: 135)
     // P5: MSLP (h: 110)
     // Timeline / Ephemeris / Aurora (h: 112)
+    // Kp Legend Strip (y: 945 to 972)
     this.panels = {
       p1: { top: 45, height: 215, bottom: 260, name: "temp" },
       p1_axis: { top: 260, height: 32, bottom: 292, name: "temp_axis" },
@@ -843,6 +866,7 @@ class MeteogramChart {
     this._drawWindPanel();
     this._drawPressurePanel();
     this._drawTimelineAndEphemeris();
+    this._drawKpLegend();
     this._drawHeader();
 
     if (this.hoverIdx !== null) {
@@ -2619,6 +2643,15 @@ class MeteogramChart {
       }
     }
 
+    // Left margin row indicators
+    ctx.textAlign = "right";
+    ctx.font = "8px 'Inter', sans-serif";
+    ctx.fillStyle = "#64748b";
+    ctx.fillText("Kp 0–9 ▸", this.marginLeft - 6, p.top + 39);
+    ctx.fillText("☀ / ☾ ▸", this.marginLeft - 6, p.top + 55);
+    ctx.fillText("Phase ▸", this.marginLeft - 6, p.top + 78);
+    ctx.fillText("🌌 Aurora ▸", this.marginLeft - 6, p.top + 95);
+
     for (const d of daysMap) {
       const startX = Math.max(this.marginLeft, this._timeToX(this.times[d.startIdx].getTime()));
       const endX = Math.min(this.marginLeft + this.plotWidth, this._timeToX(this.times[d.endIdx].getTime()));
@@ -2744,6 +2777,77 @@ class MeteogramChart {
         }
       }
     }
+
+    ctx.restore();
+  }
+
+  _drawKpLegend() {
+    const ctx = this.ctx;
+    const t = METEO_TRANSLATIONS[this.options.lang] || METEO_TRANSLATIONS.en;
+    const yCenter = 958;
+    const pBottom = this.panels.timeline.bottom; // 942
+
+    ctx.save();
+
+    // Subtle divider line between timeline and legend
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(this.marginLeft, pBottom + 4);
+    ctx.lineTo(this.marginLeft + this.plotWidth, pBottom + 4);
+    ctx.stroke();
+
+    // Title / Prefix: "Kp Scale (NOAA SWPC):"
+    ctx.font = "bold 8.5px 'Inter', sans-serif";
+    ctx.fillStyle = "#475569";
+    ctx.textAlign = "left";
+    const titleText = `${t.kp_scale}:`;
+    ctx.fillText(titleText, this.marginLeft, yCenter + 1);
+
+    const titleWidth = ctx.measureText(titleText).width;
+    let currX = this.marginLeft + titleWidth + 12;
+
+    // Scale Items
+    const items = [
+      { label: `0–2 ${t.quiet}`, color: "#64748b" },
+      { label: `3 ${t.unsettled}`, color: "#84cc16" },
+      { label: `4 ${t.active}`, color: "#eab308" },
+      { label: `5 ${t.storm_minor}`, color: "#f97316" },
+      { label: `6 ${t.storm_mod}`, color: "#ef4444" },
+      { label: `7 ${t.storm_strong}`, color: "#a855f7" },
+      { label: `8 ${t.storm_severe}`, color: "#c026d3" },
+      { label: `9 ${t.storm_ext}`, color: "#7e22ce" },
+    ];
+
+    ctx.font = "8px 'Inter', sans-serif";
+    for (const it of items) {
+      // Swatch
+      ctx.fillStyle = it.color;
+      if (ctx.roundRect) {
+        ctx.beginPath();
+        ctx.roundRect(currX, yCenter - 5, 9, 7, 2);
+        ctx.fill();
+      } else {
+        ctx.fillRect(currX, yCenter - 5, 9, 7);
+      }
+      currX += 12;
+
+      // Label
+      ctx.fillStyle = "#334155";
+      ctx.fillText(it.label, currX, yCenter + 0.5);
+      currX += ctx.measureText(it.label).width + 9;
+    }
+
+    // Right-aligned Min Kp threshold for user's location
+    const minKp = (this.aurora && this.aurora.min_kp_needed) ? this.aurora.min_kp_needed : 7.0;
+    const stormTier = minKp >= 9 ? "G5" : minKp >= 8 ? "G4" : minKp >= 7 ? "G3" : minKp >= 6 ? "G2" : minKp >= 5 ? "G1" : "";
+    const tierStr = stormTier ? ` (${stormTier})` : "";
+    const rightText = `${t.min_kp_needed}: ~${minKp.toFixed(1)}${tierStr}`;
+
+    ctx.textAlign = "right";
+    ctx.font = "bold 8.5px 'Inter', sans-serif";
+    ctx.fillStyle = minKp >= 7.0 ? "#475569" : "#b45309";
+    ctx.fillText(rightText, this.marginLeft + this.plotWidth, yCenter + 1);
 
     ctx.restore();
   }

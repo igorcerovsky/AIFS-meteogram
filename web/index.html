@@ -897,6 +897,115 @@
       background: rgba(255, 255, 255, 0.1);
     }
 
+    /* Planetary Kp Index Legend Bar */
+    .kp-legend-bar {
+      background: var(--card-bg, #ffffff);
+      border: 1px solid var(--card-border, #cbd5e1);
+      border-radius: 10px;
+      padding: 10px 14px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      transition: background 0.2s, border-color 0.2s, color 0.2s;
+      margin-top: 0.25rem;
+    }
+
+    [data-theme="dark"] .kp-legend-bar {
+      background: rgba(22, 27, 34, 0.9);
+      border-color: rgba(48, 54, 61, 0.8);
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]):not([data-theme="dark"]) .kp-legend-bar {
+        background: rgba(22, 27, 34, 0.9);
+        border-color: rgba(48, 54, 61, 0.8);
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+      }
+    }
+
+    .kp-legend-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .kp-legend-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .kp-legend-title .kp-subtitle {
+      font-weight: 400;
+      font-size: 0.76rem;
+      color: var(--text-muted);
+      margin-left: 4px;
+    }
+
+    .kp-threshold-badge {
+      font-size: 0.76rem;
+      color: var(--text-muted);
+      background: rgba(100, 116, 139, 0.1);
+      border: 1px solid rgba(100, 116, 139, 0.2);
+      padding: 2px 8px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .kp-threshold-badge strong {
+      color: var(--accent-hover, #2563eb);
+    }
+
+    .kp-scale-items {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+      gap: 6px;
+    }
+
+    .kp-scale-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: rgba(148, 163, 184, 0.08);
+      border: 1px solid rgba(148, 163, 184, 0.15);
+      font-size: 0.74rem;
+    }
+
+    .kp-scale-item .kp-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      background-color: var(--kp-c);
+      flex-shrink: 0;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+
+    .kp-scale-item .kp-level {
+      font-weight: 700;
+      color: var(--text-main);
+      font-family: 'Inter', monospace;
+    }
+
+    .kp-scale-item .kp-desc {
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     footer {
       text-align: center;
       padding: 1.5rem;
@@ -1054,6 +1163,63 @@
         </div>
         <div id="meteogram-chart-container" style="width: 100%; min-width: 880px;"></div>
       </div>
+
+      <!-- Planetary Kp Index & Aurora Legend Bar -->
+      <div id="kp-legend-bar" class="kp-legend-bar">
+        <div class="kp-legend-header">
+          <div class="kp-legend-title">
+            <span class="kp-icon">🌌</span>
+            <strong id="kp-legend-header-title">Planetary Kp Index (NOAA SWPC)</strong>
+            <span class="kp-subtitle" id="kp-legend-header-sub">Geomagnetic Activity & Aurora Scale</span>
+          </div>
+          <div class="kp-threshold-badge" id="kp-threshold-badge">
+            <span id="kp-threshold-label">Min Kp for location:</span>
+            <strong id="kp-threshold-val">~7.0 (G3)</strong>
+          </div>
+        </div>
+        <div class="kp-scale-items">
+          <div class="kp-scale-item" style="--kp-c: #64748b;">
+            <div class="kp-swatch"></div>
+            <span class="kp-level">0 – 2</span>
+            <span class="kp-desc" id="kp-desc-02">Quiet</span>
+          </div>
+          <div class="kp-scale-item" style="--kp-c: #84cc16;">
+            <div class="kp-swatch"></div>
+            <span class="kp-level">3</span>
+            <span class="kp-desc" id="kp-desc-3">Unsettled</span>
+          </div>
+          <div class="kp-scale-item" style="--kp-c: #eab308;">
+            <div class="kp-swatch"></div>
+            <span class="kp-level">4</span>
+            <span class="kp-desc" id="kp-desc-4">Active</span>
+          </div>
+          <div class="kp-scale-item" style="--kp-c: #f97316;">
+            <div class="kp-swatch"></div>
+            <span class="kp-level">5 · G1</span>
+            <span class="kp-desc" id="kp-desc-5">Minor Storm</span>
+          </div>
+          <div class="kp-scale-item" style="--kp-c: #ef4444;">
+            <div class="kp-swatch"></div>
+            <span class="kp-level">6 · G2</span>
+            <span class="kp-desc" id="kp-desc-6">Moderate</span>
+          </div>
+          <div class="kp-scale-item" style="--kp-c: #a855f7;">
+            <div class="kp-swatch"></div>
+            <span class="kp-level">7 · G3</span>
+            <span class="kp-desc" id="kp-desc-7">Strong Storm</span>
+          </div>
+          <div class="kp-scale-item" style="--kp-c: #c026d3;">
+            <div class="kp-swatch"></div>
+            <span class="kp-level">8 · G4</span>
+            <span class="kp-desc" id="kp-desc-8">Severe Storm</span>
+          </div>
+          <div class="kp-scale-item" style="--kp-c: #7e22ce;">
+            <div class="kp-swatch"></div>
+            <span class="kp-level">9 · G5</span>
+            <span class="kp-desc" id="kp-desc-9">Extreme</span>
+          </div>
+        </div>
+      </div>
     </section>
 
     <div class="features-info">
@@ -1072,6 +1238,10 @@
       <div class="feature-card">
         <h3>4. Astronomical Sunrise & Sunset</h3>
         <p>Accurate grey nighttime shading and exact daily sunrise & sunset times (☀ / ☽) displayed on bottom day badges for the active timezone.</p>
+      </div>
+      <div class="feature-card">
+        <h3 id="feature-card-5-title">5. NOAA SWPC Planetary Kp & Aurora</h3>
+        <p id="feature-card-5-desc">Real-time 3-hour geomagnetic Kp index ribbons (0–9) and daily aurora visibility badges from NOAA Space Weather Prediction Center. Displays geomagnetic storm tiers (G1 Minor to G5 Extreme) and required threshold for local latitude visibility.</p>
       </div>
     </div>
   </main>
@@ -1209,6 +1379,53 @@
       if (alertEl) alertEl.style.display = 'none';
     }
 
+    function updateKpLegend(aurora, lang) {
+      const minKp = (aurora && aurora.min_kp_needed) ? aurora.min_kp_needed : 7.0;
+      const stormTier = minKp >= 9 ? 'G5' : minKp >= 8 ? 'G4' : minKp >= 7 ? 'G3' : minKp >= 6 ? 'G2' : minKp >= 5 ? 'G1' : '';
+      const tierStr = stormTier ? ` (${stormTier})` : '';
+
+      const threshEl = document.getElementById('kp-threshold-val');
+      if (threshEl) threshEl.innerText = `~${minKp.toFixed(1)}${tierStr}`;
+
+      const titleEl = document.getElementById('kp-legend-header-title');
+      const subtitleEl = document.getElementById('kp-legend-header-sub');
+      const threshLabelEl = document.getElementById('kp-threshold-label');
+      const card5Title = document.getElementById('feature-card-5-title');
+      const card5Desc = document.getElementById('feature-card-5-desc');
+
+      if (lang === 'sk') {
+        if (titleEl) titleEl.innerText = 'Planetárny Kp Index (NOAA SWPC)';
+        if (subtitleEl) subtitleEl.innerText = 'Geomagnetická aktivita a polárna žiara';
+        if (threshLabelEl) threshLabelEl.innerText = 'Min. Kp pre lokalitu:';
+        if (card5Title) card5Title.innerText = '5. NOAA SWPC Planetárny Kp Index a polárna žiara';
+        if (card5Desc) card5Desc.innerText = 'Predpoveď 3-hodinového indexu Kp (0–9) a odznaky geomagnetických búrok (stupne G1 až G5) z amerického NOAA SWPC s prahovou hodnotou pre viditeľnosť na severnom obzore.';
+
+        const d02 = document.getElementById('kp-desc-02'); if (d02) d02.innerText = 'Pokojná';
+        const d3 = document.getElementById('kp-desc-3'); if (d3) d3.innerText = 'Nestála';
+        const d4 = document.getElementById('kp-desc-4'); if (d4) d4.innerText = 'Aktívna';
+        const d5 = document.getElementById('kp-desc-5'); if (d5) d5.innerText = 'G1 Slabá';
+        const d6 = document.getElementById('kp-desc-6'); if (d6) d6.innerText = 'G2 Mierna';
+        const d7 = document.getElementById('kp-desc-7'); if (d7) d7.innerText = 'G3 Silná';
+        const d8 = document.getElementById('kp-desc-8'); if (d8) d8.innerText = 'G4 Veľmi silná';
+        const d9 = document.getElementById('kp-desc-9'); if (d9) d9.innerText = 'G5 Extrémna';
+      } else {
+        if (titleEl) titleEl.innerText = 'Planetary Kp Index (NOAA SWPC)';
+        if (subtitleEl) subtitleEl.innerText = 'Geomagnetic Activity & Aurora Scale';
+        if (threshLabelEl) threshLabelEl.innerText = 'Min Kp for location:';
+        if (card5Title) card5Title.innerText = '5. NOAA SWPC Planetary Kp & Aurora';
+        if (card5Desc) card5Desc.innerText = 'Real-time 3-hour geomagnetic Kp index ribbons (0–9) and daily aurora visibility badges from NOAA Space Weather Prediction Center. Displays geomagnetic storm tiers (G1 Minor to G5 Extreme) and required threshold for local latitude visibility.';
+
+        const d02 = document.getElementById('kp-desc-02'); if (d02) d02.innerText = 'Quiet';
+        const d3 = document.getElementById('kp-desc-3'); if (d3) d3.innerText = 'Unsettled';
+        const d4 = document.getElementById('kp-desc-4'); if (d4) d4.innerText = 'Active';
+        const d5 = document.getElementById('kp-desc-5'); if (d5) d5.innerText = 'G1 Minor';
+        const d6 = document.getElementById('kp-desc-6'); if (d6) d6.innerText = 'G2 Moderate';
+        const d7 = document.getElementById('kp-desc-7'); if (d7) d7.innerText = 'G3 Strong';
+        const d8 = document.getElementById('kp-desc-8'); if (d8) d8.innerText = 'G4 Severe';
+        const d9 = document.getElementById('kp-desc-9'); if (d9) d9.innerText = 'G5 Extreme';
+      }
+    }
+
     function setLoc(name) {
       document.getElementById('location').value = name;
       checkLocationAndSyncDropdown(name);
@@ -1262,6 +1479,7 @@
       // update canvas instantaneously without refetching from server!
       if (optionsOnly && chart && currentData) {
         chart.setOptions({ lang, tz });
+        updateKpLegend(currentData.aurora, lang);
         const newUrl = new URL(window.location.href);
         newUrl.searchParams.set('lang', lang);
         newUrl.searchParams.set('tz', tz);
@@ -1354,6 +1572,7 @@
         window.chart = chart;
 
         chart.setData(data);
+        updateKpLegend(data.aurora, lang);
 
         // Display Aurora / Space Weather Alert if elevated Kp or active storm
         if (data.aurora && (data.aurora.active_storm || (data.aurora.max_kp_3d && data.aurora.max_kp_3d >= 4.67))) {
@@ -1401,6 +1620,7 @@
       const refBtn = document.getElementById('refresh-btn');
       if (refLabel) refLabel.innerText = l === 'sk' ? 'Obnoviť' : 'Refresh';
       if (refBtn) refBtn.title = l === 'sk' ? 'Stiahnuť najnovšie dáta' : 'Refresh forecast (Download latest data)';
+      updateKpLegend(currentData ? currentData.aurora : null, l);
       updateMeteogram(true);
     });
     document.getElementById('tz').addEventListener('change', () => updateMeteogram(true));
@@ -1478,6 +1698,9 @@
           mql.addListener(listener);
         }
       }
+
+      // Initialize Kp legend with active language
+      updateKpLegend(null, document.getElementById('lang').value);
 
       // Trigger initial load
       updateMeteogram(false);
