@@ -49,6 +49,8 @@ const METEO_TRANSLATIONS = {
     sunset: "Sunset",
     moonrise: "Moonrise",
     moonset: "Moonset",
+    aurora: "Aurora / Kp",
+    geomag: "Geomagnetic",
     days_short: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
     days_full: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
     months_short: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
@@ -89,6 +91,8 @@ const METEO_TRANSLATIONS = {
     sunset: "Západ slnka",
     moonrise: "Východ mesiaca",
     moonset: "Západ mesiaca",
+    aurora: "Polárna žiara / Kp",
+    geomag: "Geomagnetická aktivita",
     days_short: ["Ne", "Po", "Ut", "St", "Št", "Pi", "So"],
     days_full: ["Nedeľa", "Pondelok", "Utorok", "Streda", "Štvrtok", "Piatok", "Sobota"],
     months_short: ["jan", "feb", "mar", "apr", "máj", "jún", "júl", "aug", "sep", "okt", "nov", "dec"],
@@ -518,6 +522,46 @@ class MeteogramChart {
     this.resizeObserver.observe(this.container);
   }
 
+  _getKpColor(kp) {
+    if (kp >= 7.0) return "#c026d3"; // Fuchsia / strong storm (G3-G5)
+    if (kp >= 6.0) return "#ef4444"; // Red / moderate storm (G2)
+    if (kp >= 5.0) return "#f97316"; // Orange / minor storm (G1)
+    if (kp >= 4.0) return "#eab308"; // Amber / active
+    if (kp >= 3.0) return "#84cc16"; // Lime / unsettled
+    return "#64748b";                // Slate / quiet
+  }
+
+  _getKpScaleText(kp, scale) {
+    if (scale) return scale;
+    if (kp >= 8.67) return "G5";
+    if (kp >= 7.67) return "G4";
+    if (kp >= 6.67) return "G3";
+    if (kp >= 5.67) return "G2";
+    if (kp >= 4.67) return "G1";
+    return kp >= 4.0 ? "Active" : "Quiet";
+  }
+
+  _getKpAtTime(tMs) {
+    if (!this.aurora || !this.aurora.kp_forecast || this.aurora.kp_forecast.length === 0) return null;
+    const list = this.aurora.kp_forecast;
+    for (let i = 0; i < list.length; i++) {
+      const itemTime = new Date(list[i].time).getTime();
+      if (tMs >= itemTime && tMs < itemTime + 3 * 3600 * 1000) {
+        return list[i];
+      }
+    }
+    let nearest = null;
+    let minDiff = Infinity;
+    for (let i = 0; i < list.length; i++) {
+      const diff = Math.abs(tMs - new Date(list[i].time).getTime());
+      if (diff < minDiff && diff < 3 * 3600 * 1000) {
+        minDiff = diff;
+        nearest = list[i];
+      }
+    }
+    return nearest;
+  }
+
   setData(payload) {
     this.data = payload;
     this._processData();
@@ -578,6 +622,7 @@ class MeteogramChart {
     const lon = (this.data.location && this.data.location.longitude) || 17.10;
     this.sunAlts = this.times.map(t => calculateSolarAltitude(t, lat, lon));
     this.moonAlts = this.times.map(t => calculateLunarAltitude(t, lat, lon));
+    this.aurora = this.data.aurora || null;
 
     // Calculate dense celestial passages starting and ending strictly at the bottom (horizon = 0.0°)
     const padMs = 18 * 3600 * 1000;
@@ -744,7 +789,7 @@ class MeteogramChart {
     const dpr = window.devicePixelRatio || 1;
     const rect = this.container.getBoundingClientRect();
     const cssWidth = Math.max(880, Math.floor(rect.width));
-    const cssHeight = 950;
+    const cssHeight = 965;
 
     this.canvas.width = Math.floor(cssWidth * dpr);
     this.canvas.height = Math.floor(cssHeight * dpr);
@@ -778,7 +823,7 @@ class MeteogramChart {
     // P3: Clouds (h: 130)
     // P4: Wind (h: 135)
     // P5: MSLP (h: 110)
-    // Timeline / Ephemeris (h: 95)
+    // Timeline / Ephemeris / Aurora (h: 112)
     this.panels = {
       p1: { top: 45, height: 215, bottom: 260, name: "temp" },
       p1_axis: { top: 260, height: 32, bottom: 292, name: "temp_axis" },
@@ -786,7 +831,7 @@ class MeteogramChart {
       p3: { top: 435, height: 130, bottom: 565, name: "clouds" },
       p4: { top: 575, height: 135, bottom: 710, name: "wind" },
       p5: { top: 720, height: 110, bottom: 830, name: "pressure" },
-      timeline: { top: 830, height: 95, bottom: 925, name: "timeline" },
+      timeline: { top: 830, height: 112, bottom: 942, name: "timeline" },
     };
 
     this._drawBackground();
@@ -2558,6 +2603,22 @@ class MeteogramChart {
     const astroDaily = (this.data.astro && this.data.astro.daily) ? this.data.astro.daily : {};
     const tickConfig = this._getTimeTickConfig();
 
+    // 3-hour Kp Geomagnetic Activity Ribbon across timeline
+    if (this.aurora && this.aurora.kp_forecast && this.aurora.kp_forecast.length > 0) {
+      const ribbonTop = p.top + 35.5;
+      const ribbonH = 3.5;
+      for (const item of this.aurora.kp_forecast) {
+        const itemT = new Date(item.time).getTime();
+        const itemEndT = itemT + 3 * 3600 * 1000;
+        const x1 = Math.max(this.marginLeft, this._timeToX(itemT));
+        const x2 = Math.min(this.marginLeft + this.plotWidth, this._timeToX(itemEndT));
+        if (x2 > x1) {
+          ctx.fillStyle = this._getKpColor(item.kp);
+          ctx.fillRect(x1, ribbonTop, x2 - x1, ribbonH);
+        }
+      }
+    }
+
     for (const d of daysMap) {
       const startX = Math.max(this.marginLeft, this._timeToX(this.times[d.startIdx].getTime()));
       const endX = Math.min(this.marginLeft + this.plotWidth, this._timeToX(this.times[d.endIdx].getTime()));
@@ -2613,7 +2674,7 @@ class MeteogramChart {
           const sStr = formatTime(astroItem.sunset);
           ctx.fillStyle = "#b45309"; // amber for sun
           ctx.textAlign = "center";
-          ctx.fillText(`☀ ${rStr} – ${sStr}`, midX, p.top + 46);
+          ctx.fillText(`☀ ${rStr} – ${sStr}`, midX, p.top + 48);
         }
 
         // 2. Moon rise & set (as in static version)
@@ -2622,18 +2683,64 @@ class MeteogramChart {
           const msStr = formatTime(astroItem.moonset);
           ctx.fillStyle = "#0284c7"; // blue for moon
           ctx.textAlign = "center";
-          ctx.fillText(`☾ ${mrStr} – ${msStr}`, midX, p.top + 60);
+          ctx.fillText(`☾ ${mrStr} – ${msStr}`, midX, p.top + 62);
         }
 
         // 3. Moon phase vector badge & illumination
         if (astroItem.moon_phase != null) {
           const phase = astroItem.moon_phase;
           const illum = astroItem.illum_pct != null ? `${astroItem.illum_pct}%` : "";
-          this._drawMoonPhaseBadge(midX - 16, p.top + 77, phase, 6.5);
+          this._drawMoonPhaseBadge(midX - 16, p.top + 77, phase, 6.0);
           ctx.fillStyle = "#475569";
           ctx.textAlign = "left";
           ctx.font = `${fs} 'Inter', sans-serif`;
-          ctx.fillText(illum, midX - 5, p.top + 80);
+          ctx.fillText(illum, midX - 5, p.top + 79.5);
+        }
+
+        // 4. Aurora / Kp Badge for this date
+        if (this.aurora && this.aurora.kp_forecast && dayWidth > 38) {
+          const dayStartT = this.times[d.startIdx].getTime();
+          const dayEndT = this.times[d.endIdx].getTime();
+          const dayKpItems = this.aurora.kp_forecast.filter(k => {
+            const kt = new Date(k.time).getTime();
+            return kt >= dayStartT && kt <= dayEndT;
+          });
+          if (dayKpItems.length > 0) {
+            const peakKp = Math.max(...dayKpItems.map(k => k.kp));
+            const peakItem = dayKpItems.find(k => k.kp === peakKp) || dayKpItems[0];
+            const kpColor = this._getKpColor(peakKp);
+            const scaleText = this._getKpScaleText(peakKp, peakItem.scale);
+            const minKp = (this.aurora && this.aurora.min_kp_needed) ? this.aurora.min_kp_needed : 7;
+            const isHighChance = peakKp >= (minKp - 0.5);
+
+            const badgeY = p.top + 95;
+            ctx.save();
+            if (peakKp >= 5.0 || isHighChance) {
+              const textStr = `🌌 Kp ${peakKp.toFixed(1)}${scaleText ? ` (${scaleText})` : ""}`;
+              ctx.font = "bold 8px 'Inter', sans-serif";
+              const tw = ctx.measureText(textStr).width;
+              const pw = tw + 8;
+              const px = midX - pw / 2;
+              const py = badgeY - 8;
+              ctx.fillStyle = kpColor;
+              ctx.beginPath();
+              if (ctx.roundRect) {
+                ctx.roundRect(px, py, pw, 12, 6);
+              } else {
+                ctx.rect(px, py, pw, 12);
+              }
+              ctx.fill();
+              ctx.fillStyle = "#ffffff";
+              ctx.textAlign = "center";
+              ctx.fillText(textStr, midX, badgeY + 1.5);
+            } else {
+              ctx.font = "8px 'Inter', sans-serif";
+              ctx.textAlign = "center";
+              ctx.fillStyle = peakKp >= 4.0 ? "#b45309" : "#64748b";
+              ctx.fillText(`🌌 Kp ${peakKp.toFixed(1)}`, midX, badgeY);
+            }
+            ctx.restore();
+          }
         }
       }
     }
@@ -2903,6 +3010,34 @@ class MeteogramChart {
     const sunAlt = this.sunAlts?.[idx];
     const moonAlt = this.moonAlts?.[idx];
 
+    const tMs = dt.getTime();
+    const kpItem = this._getKpAtTime(tMs);
+    let auroraHtml = "";
+    if (kpItem) {
+      const kpColor = this._getKpColor(kpItem.kp);
+      const scaleText = this._getKpScaleText(kpItem.kp, kpItem.scale);
+      const minKp = (this.aurora && this.aurora.min_kp_needed) ? this.aurora.min_kp_needed : 7;
+      let subText = "";
+      if (kpItem.kp >= minKp) {
+        subText = `<span style="color: #10b981; font-weight: 600;">✨ Visible at this lat</span>`;
+      } else if (kpItem.kp >= minKp - 1.0) {
+        subText = `<span style="color: #06b6d4;">📸 Camera photo chance</span>`;
+      } else {
+        subText = `Req Kp ≥ ${minKp}`;
+      }
+
+      auroraHtml = `
+        <div class="hud-divider"></div>
+        <div class="hud-col">
+          <div class="hud-label">
+            <span>🌌 ${t.aurora || "Aurora / Kp"}</span>
+            <span class="hud-val" style="color: ${kpColor}; font-weight: 700;">Kp ${kpItem.kp.toFixed(1)}${scaleText ? ` (${scaleText})` : ""}</span>
+          </div>
+          <div class="hud-sub">${subText}</div>
+        </div>
+      `;
+    }
+
     this.hud.innerHTML = `
       <div class="hud-content">
         <!-- Time & Ephemeris -->
@@ -2990,6 +3125,7 @@ class MeteogramChart {
           </div>
           <div class="hud-sub">MSLP Sea Level</div>
         </div>
+        ${auroraHtml}
       </div>
     `;
 
@@ -3053,6 +3189,9 @@ window.MeteogramAPI = {
         const resp = await fetch(localUrl, fetchOptions);
         if (resp.ok) {
           const data = await resp.json();
+          if (data && !data.aurora && data.location) {
+            try { data.aurora = await this.fetchAuroraData(data.location.latitude, data.location.longitude); } catch (e) {}
+          }
           try { localStorage.setItem(cacheKey, JSON.stringify({ time: Date.now(), data })); } catch (e) {}
           return data;
         }
@@ -3318,6 +3457,11 @@ window.MeteogramAPI = {
       }
     }
 
+    let aurora = null;
+    try {
+      aurora = await this.fetchAuroraData(loc.latitude, loc.longitude);
+    } catch (e) {}
+
     return {
       location: loc,
       model: model,
@@ -3327,8 +3471,66 @@ window.MeteogramAPI = {
       astro: {
         sun_pairs: sunPairs,
         daily: astroDaily,
-      }
+      },
+      aurora: aurora,
     };
+  },
+
+  async fetchAuroraData(lat, lon) {
+    try {
+      const url = "https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json";
+      const resp = await fetch(url);
+      if (!resp.ok) return null;
+      const raw = await resp.json();
+      if (!Array.isArray(raw)) return null;
+
+      const phi = lat * Math.PI / 180;
+      const lam = lon * Math.PI / 180;
+      const poleLat = 80.7 * Math.PI / 180;
+      const poleLon = -72.7 * Math.PI / 180;
+      const sinGeomag = Math.sin(phi) * Math.sin(poleLat) + Math.cos(phi) * Math.cos(poleLat) * Math.cos(lam - poleLon);
+      const geomagLat = Math.round((Math.asin(sinGeomag) * 180 / Math.PI) * 10) / 10;
+      const minKpNeeded = Math.max(1.0, Math.min(9.0, Math.round(((59.0 - geomagLat) / 1.7) * 10) / 10));
+
+      const kpForecast = raw.map(item => {
+        const kpVal = Number(item.kp || 0);
+        let color = "#64748b";
+        if (kpVal >= 7.0) color = "#c026d3";
+        else if (kpVal >= 6.0) color = "#ef4444";
+        else if (kpVal >= 5.0) color = "#f97316";
+        else if (kpVal >= 4.0) color = "#eab308";
+        else if (kpVal >= 3.0) color = "#84cc16";
+
+        return {
+          time: item.time_tag ? `${item.time_tag}Z` : "",
+          kp: kpVal,
+          observed: item.observed || "predicted",
+          scale: item.noaa_scale || null,
+          color: color,
+        };
+      });
+
+      const predicted = kpForecast.filter(k => k.observed === "predicted" || k.observed === "estimated");
+      const maxKp = predicted.length > 0 ? Math.max(...predicted.map(k => k.kp)) : (kpForecast[kpForecast.length - 1]?.kp || 0);
+      const currentKp = kpForecast[kpForecast.length - 1]?.kp || 0;
+      let activeStorm = null;
+      for (const k of kpForecast) {
+        if (k.scale) { activeStorm = k.scale; break; }
+      }
+
+      return {
+        kp_forecast: kpForecast,
+        current_kp: currentKp,
+        max_kp_3d: maxKp,
+        active_storm: activeStorm,
+        geomag_lat: geomagLat,
+        min_kp_needed: minKpNeeded,
+        active_alerts: [],
+      };
+    } catch (e) {
+      console.warn("Direct SWPC fetch error:", e);
+      return null;
+    }
   }
 };
 

@@ -185,6 +185,7 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
                 lon = loc_info["longitude"]
                 stats = client_inst.fetch_ensemble(lat, lon, days=days_param, model=model_param)
                 astro_data = client_inst.fetch_astronomy_data(lat, lon, days=days_param)
+                aurora_data = client_inst.fetch_aurora_data(lat, lon)
 
                 def serialize_val(val):
                     if val is None:
@@ -210,6 +211,7 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
                     "fallback_from": stats.get("fallback_from", ""),
                     "stats": serialize_val(stats),
                     "astro": serialize_val(astro_data),
+                    "aurora": serialize_val(aurora_data),
                 }
 
                 body = json.dumps(payload).encode("utf-8")

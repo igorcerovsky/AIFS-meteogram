@@ -843,6 +843,60 @@
       background: rgba(255, 255, 255, 0.1);
     }
 
+    .aurora-alert {
+      background: linear-gradient(135deg, rgba(88, 28, 135, 0.25) 0%, rgba(13, 148, 136, 0.20) 100%);
+      border: 1px solid rgba(168, 85, 247, 0.45);
+      border-radius: 12px;
+      padding: 0.9rem 1.25rem;
+      display: none;
+      align-items: center;
+      gap: 0.9rem;
+      color: #f0f6fc;
+      animation: alertSlideIn 0.3s ease-out;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 4px 20px rgba(147, 51, 234, 0.15);
+      margin-bottom: 0.8rem;
+    }
+
+    .aurora-alert-icon {
+      font-size: 1.4rem;
+      flex-shrink: 0;
+      line-height: 1;
+    }
+
+    .aurora-alert-content {
+      flex: 1;
+      font-size: 0.85rem;
+      line-height: 1.45;
+    }
+
+    .aurora-alert-content strong {
+      color: #c084fc;
+      display: block;
+      font-size: 0.9rem;
+      margin-bottom: 0.2rem;
+    }
+
+    .aurora-alert-content span {
+      color: #e6edf3;
+    }
+
+    .aurora-alert-close {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 1.25rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 6px;
+      transition: all 0.15s;
+    }
+
+    .aurora-alert-close:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.1);
+    }
+
     footer {
       text-align: center;
       padding: 1.5rem;
@@ -967,6 +1021,16 @@
         <span id="model-alert-message">2-day ICON-D2 model is not available for this location. Automatically switched to closest available model: DWD ICON-EU (5-day).</span>
       </div>
       <button type="button" class="model-alert-close" onclick="hideAlert()" title="Close notice">&times;</button>
+    </div>
+
+    <!-- Space Weather / Aurora Forecast Notice Banner -->
+    <div id="aurora-alert" class="aurora-alert" role="alert">
+      <div class="aurora-alert-icon">🌌</div>
+      <div class="aurora-alert-content">
+        <strong id="aurora-alert-title">Space Weather / Aurora Forecast (NOAA SWPC)</strong>
+        <span id="aurora-alert-message">Elevated geomagnetic activity predicted.</span>
+      </div>
+      <button type="button" class="aurora-alert-close" onclick="hideAuroraAlert()" title="Close notice">&times;</button>
     </div>
 
     <section class="result-container">
@@ -1119,6 +1183,32 @@
       if (alertEl) alertEl.style.display = 'none';
     }
 
+    function showAuroraAlert(aurora, lang) {
+      const alertEl = document.getElementById('aurora-alert');
+      const titleEl = document.getElementById('aurora-alert-title');
+      const msgEl = document.getElementById('aurora-alert-message');
+      if (!alertEl || !titleEl || !msgEl) return;
+
+      const scale = aurora.active_storm || (aurora.max_kp_3d >= 5 ? 'G1' : 'Active');
+      const kp = aurora.max_kp_3d ? aurora.max_kp_3d.toFixed(1) : (aurora.current_kp ? aurora.current_kp.toFixed(1) : '4.7');
+      const minKp = aurora.min_kp_needed ? aurora.min_kp_needed.toFixed(1) : '7.0';
+      const alertText = (aurora.active_alerts && aurora.active_alerts.length > 0) ? aurora.active_alerts[0].summary : '';
+
+      if (lang === 'sk') {
+        titleEl.innerText = `🌌 Predpoveď polárnej žiary (NOAA SWPC): Búrka ${scale} (Kp ${kp})`;
+        msgEl.innerText = `${alertText ? `${alertText}. ` : ''}Pre viditeľnosť na severnom obzore v tejto zemepisnej šírke je potrebný index Kp ≥ ${minKp}. Odporúčame sledovať nočnú oblačnosť na grafe meteogramu.`;
+      } else {
+        titleEl.innerText = `🌌 Space Weather / Aurora Alert (NOAA SWPC): ${scale} Storm (Kp ${kp})`;
+        msgEl.innerText = `${alertText ? `${alertText}. ` : ''}Northern horizon visibility at this latitude typically requires Kp ≥ ${minKp}. Cross-reference with night hours and cloud cover on the chart.`;
+      }
+      alertEl.style.display = 'flex';
+    }
+
+    function hideAuroraAlert() {
+      const alertEl = document.getElementById('aurora-alert');
+      if (alertEl) alertEl.style.display = 'none';
+    }
+
     function setLoc(name) {
       document.getElementById('location').value = name;
       checkLocationAndSyncDropdown(name);
@@ -1264,6 +1354,14 @@
         window.chart = chart;
 
         chart.setData(data);
+
+        // Display Aurora / Space Weather Alert if elevated Kp or active storm
+        if (data.aurora && (data.aurora.active_storm || (data.aurora.max_kp_3d && data.aurora.max_kp_3d >= 4.67))) {
+          showAuroraAlert(data.aurora, lang);
+        } else {
+          hideAuroraAlert();
+        }
+
         hideLoader();
       } catch (err) {
         if (requestId === currentRequestId) {

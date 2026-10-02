@@ -188,9 +188,12 @@ class AIFSClient:
     GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
     ENSEMBLE_URL = "https://ensemble-api.open-meteo.com/v1/ensemble"
     ASTRONOMY_URL = "https://api.open-meteo.com/v1/forecast"
+    SWPC_KP_URL = "https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json"
+    SWPC_ALERTS_URL = "https://services.swpc.noaa.gov/products/alerts.json"
 
     def __init__(self):
         self.headers = {"User-Agent": "Meteogram-AIFS/1.0 (ECMWF-AI-Meteogram; Contact: https://github.com/igorcerovsky/AIFS-meteogram)"}
+        self._aurora_cache = {"ts": 0, "kp": None, "alerts": None}
 
     def _http_get_json(self, url: str, timeout: int = 15, max_retries: int = 4) -> Optional[Dict[str, Any]]:
         """
@@ -339,6 +342,134 @@ class AIFSClient:
     ) -> List[Tuple[datetime, datetime]]:
         """Fetch sunrise and sunset times for day/night background bands."""
         return self.fetch_astronomy_data(latitude, longitude, days=days)["sun_pairs"]
+
+    def fetch_aurora_data(self, latitude: float, longitude: float) -> Dict[str, Any]:
+        """
+        Fetch NOAA SWPC 3-day planetary Kp index forecast and active geomagnetic alerts.
+        Computes location-aware geomagnetic latitude and aurora visibility threshold.
+        """
+        import math
+        import time
+
+        now = time.time()
+        kp_raw = None
+        alerts_raw = None
+
+        if hasattr(self, "_aurora_cache") and (now - self._aurora_cache.get("ts", 0) < 900):
+            kp_raw = self._aurora_cache.get("kp")
+            alerts_raw = self._aurora_cache.get("alerts")
+
+        if kp_raw is None:
+            try:
+                kp_data = self._http_get_json(self.SWPC_KP_URL, timeout=10, max_retries=2)
+                if isinstance(kp_data, list) and len(kp_data) > 0:
+                    kp_raw = kp_data
+            except Exception:
+                pass
+
+        if alerts_raw is None:
+            try:
+                alerts_data = self._http_get_json(self.SWPC_ALERTS_URL, timeout=10, max_retries=2)
+                if isinstance(alerts_data, list):
+                    alerts_raw = alerts_data
+            except Exception:
+                pass
+
+        if kp_raw is not None or alerts_raw is not None:
+            self._aurora_cache = {
+                "ts": now,
+                "kp": kp_raw,
+                "alerts": alerts_raw,
+            }
+
+        # Calculate geomagnetic latitude using centered dipole approximation
+        phi = math.radians(latitude)
+        lam = math.radians(longitude)
+        pole_lat = math.radians(80.7)
+        pole_lon = math.radians(-72.7)
+        sin_geomag = math.sin(phi) * math.sin(pole_lat) + math.cos(phi) * math.cos(pole_lat) * math.cos(lam - pole_lon)
+        geomag_lat = round(math.degrees(math.asin(sin_geomag)), 1)
+
+        # Minimum Kp required for horizon visibility looking north
+        min_kp_needed = max(1.0, min(9.0, round((59.0 - geomag_lat) / 1.7, 1)))
+
+        formatted_forecast = []
+        max_kp_3d = 0.0
+        current_kp = 0.0
+        active_storm = None
+
+        if isinstance(kp_raw, list):
+            for item in kp_raw:
+                if not isinstance(item, dict):
+                    continue
+                kp_val = float(item.get("kp", 0.0))
+                time_tag = item.get("time_tag", "")
+                obs = item.get("observed", "predicted")
+                scale = item.get("noaa_scale")
+
+                if kp_val >= 7.0:
+                    color = "#c026d3" # Fuchsia / strong storm
+                elif kp_val >= 6.0:
+                    color = "#ef4444" # Red / moderate storm
+                elif kp_val >= 5.0:
+                    color = "#f97316" # Orange / G1 storm
+                elif kp_val >= 4.0:
+                    color = "#eab308" # Amber / active
+                elif kp_val >= 3.0:
+                    color = "#84cc16" # Lime / unsettled
+                else:
+                    color = "#64748b" # Slate / quiet
+
+                formatted_forecast.append({
+                    "time": f"{time_tag}Z" if time_tag and not time_tag.endswith("Z") else time_tag,
+                    "kp": round(kp_val, 2),
+                    "observed": obs,
+                    "scale": scale,
+                    "color": color,
+                })
+
+                if obs in ["predicted", "estimated"]:
+                    if kp_val > max_kp_3d:
+                        max_kp_3d = kp_val
+                    if scale and not active_storm:
+                        active_storm = scale
+
+            if formatted_forecast:
+                current_kp = formatted_forecast[-1]["kp"]
+
+        # Parse active geomagnetic alerts
+        active_alerts = []
+        if isinstance(alerts_raw, list):
+            for a in alerts_raw:
+                if not isinstance(a, dict):
+                    continue
+                msg = a.get("message", "")
+                if "Geomagnetic" in msg or "K-index" in msg:
+                    lines = [line.strip() for line in msg.split("\n") if line.strip()]
+                    summary_line = ""
+                    for line in lines:
+                        if any(k in line.upper() for k in ["WATCH:", "WARNING:", "ALERT:", "EXTENDED WARNING:"]):
+                            summary_line = line
+                            break
+                    if not summary_line and lines:
+                        summary_line = lines[0]
+                    active_alerts.append({
+                        "product_id": a.get("product_id"),
+                        "issue_datetime": a.get("issue_datetime"),
+                        "summary": summary_line,
+                    })
+                    if len(active_alerts) >= 5:
+                        break
+
+        return {
+            "kp_forecast": formatted_forecast,
+            "current_kp": round(current_kp, 2),
+            "max_kp_3d": round(max_kp_3d, 2),
+            "active_storm": active_storm,
+            "geomag_lat": geomag_lat,
+            "min_kp_needed": min_kp_needed,
+            "active_alerts": active_alerts,
+        }
 
     MODEL_MAPPING = {
         "aifs": {
