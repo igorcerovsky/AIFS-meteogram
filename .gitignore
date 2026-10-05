@@ -14,3 +14,4 @@ venv/
 *.xcuserstate
 xcuserdata/
 DerivedData/
+build/

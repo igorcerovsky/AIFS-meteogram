@@ -43,10 +43,15 @@ public class MeteogramViewModel: ObservableObject {
     }
 
     // Native Swift Charts State
-    @Published public var forecastData: ForecastResponse?
+    @Published public var forecastData: ForecastResponse? {
+        didSet {
+            updateAuroraData(from: forecastData)
+        }
+    }
     @Published public var timeSeries: [TimeSeriesPoint] = []
     @Published public var selectedDate: Date?
     @Published public var displayMode: MeteogramDisplayMode = .nativeCharts
+    @Published public var auroraData: AuroraData?
 
     // State
     @Published public var currentImage: PlatformImage?
@@ -442,5 +447,17 @@ public class MeteogramViewModel: ObservableObject {
             UIPasteboard.general.image = image
         }
         #endif
+    }
+
+    public func updateAuroraData(from forecast: ForecastResponse?) {
+        if let aurora = forecast?.aurora {
+            self.auroraData = aurora
+        } else if let loc = forecast?.location {
+            Task {
+                if let direct = await MeteogramService.shared.fetchAuroraData(latitude: loc.latitude, longitude: loc.longitude) {
+                    self.auroraData = direct
+                }
+            }
+        }
     }
 }

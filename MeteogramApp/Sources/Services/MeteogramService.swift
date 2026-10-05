@@ -341,6 +341,86 @@ public class MeteogramService {
             return (false, 0, error.localizedDescription)
         }
     }
+
+    /// Direct NOAA SWPC planetary Kp index forecast fetcher with local geomagnetic dipole math
+    public func fetchAuroraData(latitude: Double, longitude: Double) async -> AuroraData? {
+        guard let url = URL(string: "https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json") else {
+            return nil
+        }
+        do {
+            var req = URLRequest(url: url)
+            req.timeoutInterval = 8.0
+            let (data, response) = try await session.data(for: req)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
+
+            struct SwpcRawItem: Codable {
+                let time_tag: String?
+                let kp: Double?
+                let observed: String?
+                let noaa_scale: String?
+            }
+
+            guard let rawList = try? JSONDecoder().decode([SwpcRawItem].self, from: data) else {
+                return nil
+            }
+
+            let phi = latitude * .pi / 180.0
+            let lam = longitude * .pi / 180.0
+            let poleLat = 80.7 * .pi / 180.0
+            let poleLon = -72.7 * .pi / 180.0
+            let sinGeomag = sin(phi) * sin(poleLat) + cos(phi) * cos(poleLat) * cos(lam - poleLon)
+            let geomagLat = round(asin(sinGeomag) * 180.0 / .pi * 10.0) / 10.0
+            let minKpNeeded = max(1.0, min(9.0, round(((59.0 - geomagLat) / 1.7) * 10.0) / 10.0))
+
+            var kpItems: [KpForecastItem] = []
+            var max3d = 0.0
+            var currentKp = 0.0
+            var activeStorm: String? = nil
+
+            for item in rawList {
+                guard let t = item.time_tag, let kp = item.kp else { continue }
+                let obs = item.observed ?? "predicted"
+                let scale = item.noaa_scale
+                let colorHex: String
+                if kp >= 7.0 { colorHex = "#c026d3" }
+                else if kp >= 6.0 { colorHex = "#ef4444" }
+                else if kp >= 5.0 { colorHex = "#f97316" }
+                else if kp >= 4.0 { colorHex = "#eab308" }
+                else if kp >= 3.0 { colorHex = "#84cc16" }
+                else { colorHex = "#64748b" }
+
+                let formattedTime = t.hasSuffix("Z") ? t : "\(t)Z"
+                kpItems.append(KpForecastItem(
+                    time: formattedTime,
+                    kp: round(kp * 100) / 100,
+                    observed: obs,
+                    scale: scale,
+                    color: colorHex
+                ))
+
+                if obs == "predicted" || obs == "estimated" {
+                    if kp > max3d { max3d = kp }
+                    if scale != nil && activeStorm == nil { activeStorm = scale }
+                }
+            }
+
+            if let last = kpItems.last {
+                currentKp = last.kp
+            }
+
+            return AuroraData(
+                kpForecast: kpItems,
+                currentKp: round(currentKp * 100) / 100,
+                maxKp3d: round(max3d * 100) / 100,
+                activeStorm: activeStorm,
+                geomagLat: geomagLat,
+                minKpNeeded: minKpNeeded,
+                activeAlerts: []
+            )
+        } catch {
+            return nil
+        }
+    }
 }
 
 // MARK: - Offline Forecast Cache Manager

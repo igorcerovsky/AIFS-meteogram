@@ -64,6 +64,11 @@ public struct NativeMeteogramChartView: View {
 
                             // Astronomical Ephemeris Timeline
                             ephemerisTimelineView(points: points)
+
+                            // NOAA SWPC Planetary Kp & Aurora Forecast
+                            if let aurora = viewModel.auroraData {
+                                GeomagneticKpView(aurora: aurora, language: viewModel.language)
+                            }
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
@@ -1137,6 +1142,19 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                         Text(String(format: "(%.0f km/h)", firstPoint.windSpeedKmH))
                             .font(.caption2)
                             .foregroundColor(.secondary)
+
+                        if let aurora = viewModel.auroraData {
+                            Text("•")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                            HStack(spacing: 2) {
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 8, weight: .bold))
+                                Text(String(format: "Kp %.1f", aurora.currentKp))
+                                    .font(.system(size: 10, weight: .bold))
+                            }
+                            .foregroundColor(aurora.currentKp >= 5.0 ? .orange : (aurora.currentKp >= 4.0 ? .yellow : .purple))
+                        }
                     }
                 }
                 .padding(.horizontal, 14)

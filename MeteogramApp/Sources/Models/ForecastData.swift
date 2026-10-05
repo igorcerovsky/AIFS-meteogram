@@ -9,6 +9,7 @@ public struct ForecastResponse: Codable, Sendable {
     public let fallbackFrom: String?
     public let stats: ForecastStats
     public let astro: AstroData?
+    public let aurora: AuroraData?
 
     enum CodingKeys: String, CodingKey {
         case location
@@ -17,6 +18,7 @@ public struct ForecastResponse: Codable, Sendable {
         case fallbackFrom = "fallback_from"
         case stats
         case astro
+        case aurora
     }
 
     public init(from decoder: Decoder) throws {
@@ -26,6 +28,7 @@ public struct ForecastResponse: Codable, Sendable {
         self.fallbackFrom = try container.decodeIfPresent(String.self, forKey: .fallbackFrom)
         self.stats = try container.decode(ForecastStats.self, forKey: .stats)
         self.astro = try container.decodeIfPresent(AstroData.self, forKey: .astro)
+        self.aurora = try container.decodeIfPresent(AuroraData.self, forKey: .aurora)
 
         if let boolVal = try? container.decode(Bool.self, forKey: .modelFallback) {
             self.modelFallback = boolVal
@@ -115,6 +118,131 @@ public struct AstroDailyItem: Codable, Sendable {
         case sunrise, sunset, moonrise, moonset
         case moonPhase = "moon_phase"
         case illumPct = "illum_pct"
+    }
+}
+
+// MARK: - Geomagnetic & Planetary Kp Index Models (NOAA SWPC)
+
+public struct AuroraData: Codable, Sendable {
+    public let kpForecast: [KpForecastItem]
+    public let currentKp: Double
+    public let maxKp3d: Double
+    public let activeStorm: String?
+    public let geomagLat: Double?
+    public let minKpNeeded: Double
+    public let activeAlerts: [AuroraAlertItem]
+
+    enum CodingKeys: String, CodingKey {
+        case kpForecast = "kp_forecast"
+        case currentKp = "current_kp"
+        case maxKp3d = "max_kp_3d"
+        case activeStorm = "active_storm"
+        case geomagLat = "geomag_lat"
+        case minKpNeeded = "min_kp_needed"
+        case activeAlerts = "active_alerts"
+    }
+
+    public init(
+        kpForecast: [KpForecastItem] = [],
+        currentKp: Double = 0.0,
+        maxKp3d: Double = 0.0,
+        activeStorm: String? = nil,
+        geomagLat: Double? = nil,
+        minKpNeeded: Double = 7.0,
+        activeAlerts: [AuroraAlertItem] = []
+    ) {
+        self.kpForecast = kpForecast
+        self.currentKp = currentKp
+        self.maxKp3d = maxKp3d
+        self.activeStorm = activeStorm
+        self.geomagLat = geomagLat
+        self.minKpNeeded = minKpNeeded
+        self.activeAlerts = activeAlerts
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.kpForecast = (try? container.decode([KpForecastItem].self, forKey: .kpForecast)) ?? []
+        self.currentKp = (try? container.decode(Double.self, forKey: .currentKp)) ?? 0.0
+        self.maxKp3d = (try? container.decode(Double.self, forKey: .maxKp3d)) ?? 0.0
+        self.activeStorm = try? container.decodeIfPresent(String.self, forKey: .activeStorm)
+        self.geomagLat = try? container.decodeIfPresent(Double.self, forKey: .geomagLat)
+        self.minKpNeeded = (try? container.decode(Double.self, forKey: .minKpNeeded)) ?? 7.0
+        self.activeAlerts = (try? container.decode([AuroraAlertItem].self, forKey: .activeAlerts)) ?? []
+    }
+
+    /// Whether a geomagnetic storm (≥ G1 or Kp ≥ 5) is predicted or active
+    public var isStormActiveOrPredicted: Bool {
+        activeStorm != nil || maxKp3d >= 5.0 || currentKp >= 5.0
+    }
+
+    /// Whether aurora is potentially visible at the location on the northern horizon
+    public var isAuroraLikelyVisible: Bool {
+        maxKp3d >= minKpNeeded || currentKp >= minKpNeeded
+    }
+}
+
+public struct KpForecastItem: Codable, Identifiable, Sendable {
+    public var id: String { time }
+    public let time: String
+    public let kp: Double
+    public let observed: String? // "observed", "estimated", "predicted"
+    public let scale: String?    // "G1" to "G5"
+    public let color: String?
+
+    public init(
+        time: String,
+        kp: Double,
+        observed: String? = nil,
+        scale: String? = nil,
+        color: String? = nil
+    ) {
+        self.time = time
+        self.kp = kp
+        self.observed = observed
+        self.scale = scale
+        self.color = color
+    }
+
+    public var isForecast: Bool {
+        observed == "predicted" || observed == "estimated"
+    }
+
+    public var stormLevel: String? {
+        if let s = scale, !s.isEmpty { return s }
+        if kp >= 9.0 { return "G5" }
+        if kp >= 8.0 { return "G4" }
+        if kp >= 7.0 { return "G3" }
+        if kp >= 6.0 { return "G2" }
+        if kp >= 5.0 { return "G1" }
+        return nil
+    }
+
+    public var parsedDate: Date? {
+        let iso1 = ISO8601DateFormatter()
+        iso1.formatOptions = [.withInternetDateTime]
+        if let d = iso1.date(from: time) { return d }
+        let f2 = DateFormatter()
+        f2.dateFormat = "yyyy-MM-dd HH:mm:ss'Z'"
+        f2.timeZone = TimeZone(secondsFromGMT: 0)
+        if let d = f2.date(from: time) { return d }
+        let f3 = DateFormatter()
+        f3.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        f3.timeZone = TimeZone(secondsFromGMT: 0)
+        return f3.date(from: time)
+    }
+}
+
+public struct AuroraAlertItem: Codable, Identifiable, Sendable {
+    public var id: String { productId ?? summary ?? UUID().uuidString }
+    public let productId: String?
+    public let issueDatetime: String?
+    public let summary: String?
+
+    enum CodingKeys: String, CodingKey {
+        case productId = "product_id"
+        case issueDatetime = "issue_datetime"
+        case summary
     }
 }
 
