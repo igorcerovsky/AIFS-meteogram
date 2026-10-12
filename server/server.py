@@ -371,7 +371,16 @@ class MeteogramHandler(SimpleHTTPRequestHandler):
 
 def run_server(port=8080):
     server_address = ("", port)
-    httpd = ThreadingHTTPServer(server_address, MeteogramHandler)
+    ThreadingHTTPServer.allow_reuse_address = True
+    try:
+        httpd = ThreadingHTTPServer(server_address, MeteogramHandler)
+    except OSError as e:
+        if e.errno == 48:  # Address already in use
+            print(f"[!] Error: Port {port} is already in use by another process.")
+            print(f"[*] To free the port, run: kill $(lsof -t -i :{port})")
+            print(f"[*] Or start on a different port: python3 server/server.py <port>")
+            sys.exit(1)
+        raise
     print(f"[*] Meteogram Web Server running on http://localhost:{port}")
     print(f"[*] Open http://localhost:{port} in your browser to explore!")
     try:
