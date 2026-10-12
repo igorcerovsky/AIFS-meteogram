@@ -491,7 +491,7 @@ class AIFSClient:
             "name": "DWD ICON-EU 7.0 km",
             "max_days": 7,
             "default_days": 5,
-            "time_res": "minutely_15",
+            "time_res": "hourly",
         },
     }
 
@@ -622,17 +622,39 @@ class AIFSClient:
                         del hourly[mk]
             else:
                 # Case B: Ensemble values exist for some timesteps, but have trailing or interstitial nulls
+                # Find the last valid ensemble index to calculate baseline boundary offset and prevent hard step jumps
+                last_valid_idx = -1
+                for i in range(len(det_vals)):
+                    if i < len(ens_vals) and ens_vals[i] is not None:
+                        last_valid_idx = i
+
+                base_offset = 0.0
+                if last_valid_idx >= 0 and last_valid_idx < len(det_vals) and det_vals[last_valid_idx] is not None:
+                    # For non-cumulative continuous variables (temperature, pressure, wind, cloud cover)
+                    if v not in ["precipitation", "snowfall"]:
+                        base_offset = ens_vals[last_valid_idx] - det_vals[last_valid_idx]
+
+                decay_steps = 36  # Smoothly relax transition bias over 36 hours
                 merged = []
                 for i in range(len(det_vals)):
                     if i < len(ens_vals) and ens_vals[i] is not None:
                         merged.append(ens_vals[i])
                     else:
-                        merged.append(det_vals[i])
+                        step_delta = i - last_valid_idx if last_valid_idx >= 0 else 0
+                        decay_w = max(0.0, 1.0 - step_delta / decay_steps) if decay_steps > 0 else 0.0
+                        adj_det = det_vals[i] + base_offset * decay_w
+                        if v == "wind_speed_10m":
+                            adj_det = max(0.0, adj_det)
+                        elif v.startswith("cloud_cover"):
+                            adj_det = max(0.0, min(100.0, adj_det))
+                        elif v in ["precipitation", "snowfall"]:
+                            adj_det = max(0.0, det_vals[i])
+                        merged.append(round(adj_det, 2))
                 hourly[v] = merged
 
                 # Pad ensemble members. For trailing steps where the regional model has run out of ensemble
                 # members (e.g. ICON-EU after ~55h), apply ECMWF AIFS ensemble spread around the high-res deterministic
-                # baseline so percentiles don't collapse into a single flat line.
+                # baseline with smooth boundary continuity so percentiles don't collapse or jump discontinuously.
                 aifs_base = aifs_hourly.get(v)
                 for m in range(1, 51):
                     mk = f"{v}_member{m:02d}"
@@ -641,31 +663,45 @@ class AIFSClient:
                         aifs_mk = f"{v}_member{((m - 1) % 50) + 1:02d}"
                         aifs_m_vals = aifs_hourly.get(aifs_mk)
 
+                        last_m_pert = 0.0
+                        if (
+                            last_valid_idx >= 0
+                            and last_valid_idx < len(m_vals)
+                            and m_vals[last_valid_idx] is not None
+                            and last_valid_idx < len(ens_vals)
+                            and ens_vals[last_valid_idx] is not None
+                        ):
+                            last_m_pert = m_vals[last_valid_idx] - ens_vals[last_valid_idx]
+
                         merged_m = []
                         for i in range(len(det_vals)):
                             if i < len(m_vals) and m_vals[i] is not None:
                                 merged_m.append(m_vals[i])
                             else:
-                                det_v = det_vals[i]
+                                step_delta = i - last_valid_idx if last_valid_idx >= 0 else 0
+                                decay_w = max(0.0, 1.0 - step_delta / decay_steps) if decay_steps > 0 else 0.0
+                                adj_det = det_vals[i] + base_offset * decay_w
+
                                 if aifs_m_vals and aifs_base and len(aifs_base) > 0:
                                     step = min(int(i * len(aifs_base) / len(det_vals)), len(aifs_base) - 1)
                                     am_v = aifs_m_vals[step]
                                     ab_v = aifs_base[step]
                                     if am_v is not None and ab_v is not None:
-                                        pert = am_v - ab_v
+                                        aifs_pert = am_v - ab_v
                                         if v in ["precipitation", "snowfall"]:
-                                            val = max(0.0, det_v * (am_v / max(0.1, ab_v)))
-                                        elif v == "wind_speed_10m":
-                                            val = max(0.0, det_v + pert)
-                                        elif v.startswith("cloud_cover"):
-                                            val = max(0.0, min(100.0, det_v + pert))
+                                            val = max(0.0, det_vals[i] * (am_v / max(0.1, ab_v)))
                                         else:
-                                            val = det_v + pert
+                                            blended_pert = last_m_pert * decay_w + aifs_pert * (1.0 - decay_w)
+                                            val = adj_det + blended_pert
+                                            if v == "wind_speed_10m":
+                                                val = max(0.0, val)
+                                            elif v.startswith("cloud_cover"):
+                                                val = max(0.0, min(100.0, val))
                                         merged_m.append(round(val, 2))
                                     else:
-                                        merged_m.append(det_v)
+                                        merged_m.append(round(adj_det, 2))
                                 else:
-                                    merged_m.append(det_v)
+                                    merged_m.append(round(adj_det, 2))
                         hourly[mk] = merged_m
 
     def fetch_ensemble(

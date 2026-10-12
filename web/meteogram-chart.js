@@ -3509,19 +3509,44 @@ window.MeteogramAPI = {
           }
         } else {
           // Merge trailing or missing nulls
+          let lastValidIdx = -1;
+          for (let i = 0; i < detVals.length; i++) {
+            if (i < ensVals.length && ensVals[i] !== null && !isNaN(ensVals[i])) {
+              lastValidIdx = i;
+            }
+          }
+
+          let baseOffset = 0.0;
+          if (lastValidIdx >= 0 && lastValidIdx < detVals.length && detVals[lastValidIdx] !== null && !isNaN(detVals[lastValidIdx])) {
+            if (v !== "precipitation" && v !== "snowfall") {
+              baseOffset = ensVals[lastValidIdx] - detVals[lastValidIdx];
+            }
+          }
+
+          const decaySteps = 36; // Smoothly relax transition bias over 36 hours
           const merged = [];
           for (let i = 0; i < detVals.length; i++) {
             if (i < ensVals.length && ensVals[i] !== null && !isNaN(ensVals[i])) {
               merged.push(ensVals[i]);
             } else {
-              merged.push(detVals[i]);
+              const stepDelta = lastValidIdx >= 0 ? (i - lastValidIdx) : 0;
+              const decayW = decaySteps > 0 ? Math.max(0.0, 1.0 - stepDelta / decaySteps) : 0.0;
+              let adjDet = detVals[i] + baseOffset * decayW;
+              if (v === "wind_speed_10m") {
+                adjDet = Math.max(0.0, adjDet);
+              } else if (v.startsWith("cloud_cover")) {
+                adjDet = Math.max(0.0, Math.min(100.0, adjDet));
+              } else if (v === "precipitation" || v === "snowfall") {
+                adjDet = Math.max(0.0, detVals[i]);
+              }
+              merged.push(Math.round(adjDet * 100) / 100);
             }
           }
           hourly[v] = merged;
 
           // Pad existing members. For trailing steps where the regional model has run out of ensemble
           // members (e.g. ICON-EU after ~55h), apply ECMWF AIFS ensemble spread around the high-res deterministic
-          // baseline so percentiles don't collapse into a single flat line.
+          // baseline with smooth boundary continuity so percentiles don't collapse or jump discontinuously.
           const aifsBaseVals = aifsHourly ? aifsHourly[v] : null;
           for (let m = 1; m <= 50; m++) {
             const pad = m < 10 ? `0${m}` : `${m}`;
@@ -3531,32 +3556,52 @@ window.MeteogramAPI = {
               const aifsMKey = `${v}_member${((m - 1) % 50) + 1 < 10 ? '0' + (((m - 1) % 50) + 1) : (((m - 1) % 50) + 1)}`;
               const aifsMVals = aifsHourly ? aifsHourly[aifsMKey] : null;
 
+              let lastMPert = 0.0;
+              if (
+                lastValidIdx >= 0 &&
+                lastValidIdx < mVals.length &&
+                mVals[lastValidIdx] !== null &&
+                !isNaN(mVals[lastValidIdx]) &&
+                lastValidIdx < ensVals.length &&
+                ensVals[lastValidIdx] !== null &&
+                !isNaN(ensVals[lastValidIdx])
+              ) {
+                lastMPert = mVals[lastValidIdx] - ensVals[lastValidIdx];
+              }
+
               const mergedM = [];
               for (let i = 0; i < detVals.length; i++) {
                 if (i < mVals.length && mVals[i] !== null && !isNaN(mVals[i])) {
                   mergedM.push(mVals[i]);
                 } else {
-                  const detV = detVals[i];
+                  const stepDelta = lastValidIdx >= 0 ? (i - lastValidIdx) : 0;
+                  const decayW = decaySteps > 0 ? Math.max(0.0, 1.0 - stepDelta / decaySteps) : 0.0;
+                  const adjDet = detVals[i] + baseOffset * decayW;
+
                   if (aifsMVals && aifsBaseVals && aifsBaseVals.length > 0) {
                     const step = Math.min(Math.floor(i * aifsBaseVals.length / detVals.length), aifsBaseVals.length - 1);
                     const amV = aifsMVals[step];
                     const abV = aifsBaseVals[step];
                     if (amV !== null && !isNaN(amV) && abV !== null && !isNaN(abV)) {
-                      const pert = amV - abV;
-                      let val = detV + pert;
+                      const aifsPert = amV - abV;
+                      let val;
                       if (v === "precipitation" || v === "snowfall") {
-                        val = Math.max(0.0, detV * (amV / Math.max(0.1, abV)));
-                      } else if (v === "wind_speed_10m") {
-                        val = Math.max(0.0, detV + pert);
-                      } else if (v.startsWith("cloud_cover")) {
-                        val = Math.max(0.0, Math.min(100.0, detV + pert));
+                        val = Math.max(0.0, detVals[i] * (amV / Math.max(0.1, abV)));
+                      } else {
+                        const blendedPert = lastMPert * decayW + aifsPert * (1.0 - decayW);
+                        val = adjDet + blendedPert;
+                        if (v === "wind_speed_10m") {
+                          val = Math.max(0.0, val);
+                        } else if (v.startsWith("cloud_cover")) {
+                          val = Math.max(0.0, Math.min(100.0, val));
+                        }
                       }
                       mergedM.push(Math.round(val * 100) / 100);
                     } else {
-                      mergedM.push(detV);
+                      mergedM.push(Math.round(adjDet * 100) / 100);
                     }
                   } else {
-                    mergedM.push(detV);
+                    mergedM.push(Math.round(adjDet * 100) / 100);
                   }
                 }
               }
