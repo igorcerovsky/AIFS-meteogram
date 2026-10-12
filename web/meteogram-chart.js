@@ -3436,6 +3436,32 @@ window.MeteogramAPI = {
       fetch(forecastEndpoint, fetchOpts).then(r => r.json()).catch(() => null),
     ]);
 
+    let fallbackUsed = false;
+    let fallbackFrom = "";
+    let effectiveModel = model;
+
+    // Helper to check if ensemble response contains actual valid weather member data
+    const hasValidMembers = (res) => {
+      if (!res || !res.hourly) return false;
+      const t = res.hourly.temperature_2m || res.hourly.temperature_2m_member01;
+      return Array.isArray(t) && t.some(x => x !== null && !isNaN(x));
+    };
+
+    // If icon_d2 ensemble has no data, fall back to icon_eu (40 members covering all Europe)
+    if (model === "icon_d2" && !hasValidMembers(ensRes)) {
+      fallbackUsed = true;
+      fallbackFrom = "icon_d2";
+      effectiveModel = "icon_eu";
+      apiModel = "icon_eu";
+      actualDays = Math.min(days, 5);
+      const euEnsUrl = `https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&models=icon_eu&hourly=${hourlyVars}&forecast_days=${actualDays}&timezone=UTC${cacheBust}`;
+      const euDetUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&models=icon_eu&daily=sunrise,sunset,moonrise,moonset,moon_phase&hourly=${hourlyVars}&forecast_days=${Math.min(actualDays + 2, 16)}&timezone=UTC${cacheBust}`;
+      [ensRes, astroRes] = await Promise.all([
+        fetch(euEnsUrl, fetchOpts).then(r => r.json()).catch(() => null),
+        fetch(euDetUrl, fetchOpts).then(r => r.json()).catch(() => null),
+      ]);
+    }
+
     if ((!ensRes || !ensRes.hourly) && astroRes && astroRes.hourly) {
       ensRes = astroRes;
     }
@@ -3443,6 +3469,15 @@ window.MeteogramAPI = {
     if (!ensRes || !ensRes.hourly) {
       throw new Error("Failed to fetch weather data from Open-Meteo");
     }
+
+    // If ICON-EU is selected and forecast horizon is longer than ~2 days (e.g. 5 days vs 55h),
+    // fetch ECMWF AIFS ensemble to synthesize realistic ensemble spread for trailing timesteps.
+    let aifsRes = null;
+    if (effectiveModel === "icon_eu" && actualDays > 2) {
+      const aifsUrl = `https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&models=ecmwf_aifs025&hourly=${hourlyVars}&forecast_days=${actualDays}&timezone=UTC${cacheBust}`;
+      aifsRes = await fetch(aifsUrl, fetchOpts).then(r => r.json()).catch(() => null);
+    }
+    const aifsHourly = aifsRes && aifsRes.hourly ? aifsRes.hourly : null;
 
     // Process ensemble members client-side
     const hourly = ensRes.hourly;
@@ -3484,18 +3519,45 @@ window.MeteogramAPI = {
           }
           hourly[v] = merged;
 
-          // Pad existing members with detVals so trailing steps aren't lost
+          // Pad existing members. For trailing steps where the regional model has run out of ensemble
+          // members (e.g. ICON-EU after ~55h), apply ECMWF AIFS ensemble spread around the high-res deterministic
+          // baseline so percentiles don't collapse into a single flat line.
+          const aifsBaseVals = aifsHourly ? aifsHourly[v] : null;
           for (let m = 1; m <= 50; m++) {
             const pad = m < 10 ? `0${m}` : `${m}`;
             const mk = `${v}_member${pad}`;
             if (hourly[mk] && hourly[mk].some(x => x !== null && !isNaN(x))) {
               const mVals = hourly[mk];
+              const aifsMKey = `${v}_member${((m - 1) % 50) + 1 < 10 ? '0' + (((m - 1) % 50) + 1) : (((m - 1) % 50) + 1)}`;
+              const aifsMVals = aifsHourly ? aifsHourly[aifsMKey] : null;
+
               const mergedM = [];
               for (let i = 0; i < detVals.length; i++) {
                 if (i < mVals.length && mVals[i] !== null && !isNaN(mVals[i])) {
                   mergedM.push(mVals[i]);
                 } else {
-                  mergedM.push(detVals[i]);
+                  const detV = detVals[i];
+                  if (aifsMVals && aifsBaseVals && aifsBaseVals.length > 0) {
+                    const step = Math.min(Math.floor(i * aifsBaseVals.length / detVals.length), aifsBaseVals.length - 1);
+                    const amV = aifsMVals[step];
+                    const abV = aifsBaseVals[step];
+                    if (amV !== null && !isNaN(amV) && abV !== null && !isNaN(abV)) {
+                      const pert = amV - abV;
+                      let val = detV + pert;
+                      if (v === "precipitation" || v === "snowfall") {
+                        val = Math.max(0.0, detV * (amV / Math.max(0.1, abV)));
+                      } else if (v === "wind_speed_10m") {
+                        val = Math.max(0.0, detV + pert);
+                      } else if (v.startsWith("cloud_cover")) {
+                        val = Math.max(0.0, Math.min(100.0, detV + pert));
+                      }
+                      mergedM.push(Math.round(val * 100) / 100);
+                    } else {
+                      mergedM.push(detV);
+                    }
+                  } else {
+                    mergedM.push(detV);
+                  }
                 }
               }
               hourly[mk] = mergedM;
@@ -3616,9 +3678,9 @@ window.MeteogramAPI = {
 
     return {
       location: loc,
-      model: model,
-      model_fallback: false,
-      fallback_from: "",
+      model: effectiveModel,
+      model_fallback: fallbackUsed,
+      fallback_from: fallbackFrom,
       stats: stats,
       astro: {
         sun_pairs: sunPairs,

@@ -568,12 +568,18 @@ class AIFSClient:
         return True
 
     def _merge_deterministic_data(
-        self, raw: Dict[str, Any], det_raw: Optional[Dict[str, Any]], vars_to_merge: List[str]
+        self,
+        raw: Dict[str, Any],
+        det_raw: Optional[Dict[str, Any]],
+        vars_to_merge: List[str],
+        aifs_raw: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Merge deterministic forecast data into ensemble raw data:
         1. Backfills variables missing or entirely null in ensemble (e.g. ICON-D2 when ensemble API has no data).
         2. Backfills trailing nulls (e.g. ICON-EU when ensemble ends at hour ~55 while deterministic runs to 120h).
+           If aifs_raw is provided, synthesizes realistic ensemble spread (percentiles) onto the deterministic
+           baseline for trailing timesteps rather than collapsing all members to identical values.
         3. Backfills cloud layers (low/mid/high) which are null in ensemble on ICON models.
         """
         if not det_raw or not isinstance(det_raw, dict):
@@ -597,6 +603,8 @@ class AIFSClient:
             raw["elevation"] = det_raw.get("elevation", 0)
         if "utc_offset_seconds" not in raw or raw["utc_offset_seconds"] is None:
             raw["utc_offset_seconds"] = det_raw.get("utc_offset_seconds", 0)
+
+        aifs_hourly = aifs_raw.get("hourly", {}) if (aifs_raw and isinstance(aifs_raw, dict)) else {}
 
         for v in vars_to_merge:
             ens_vals = hourly.get(v)
@@ -622,17 +630,42 @@ class AIFSClient:
                         merged.append(det_vals[i])
                 hourly[v] = merged
 
-                # Also pad any ensemble members that have data so trailing steps don't become NaN
+                # Pad ensemble members. For trailing steps where the regional model has run out of ensemble
+                # members (e.g. ICON-EU after ~55h), apply ECMWF AIFS ensemble spread around the high-res deterministic
+                # baseline so percentiles don't collapse into a single flat line.
+                aifs_base = aifs_hourly.get(v)
                 for m in range(1, 51):
                     mk = f"{v}_member{m:02d}"
                     if mk in hourly and any(x is not None for x in hourly[mk]):
                         m_vals = hourly[mk]
+                        aifs_mk = f"{v}_member{((m - 1) % 50) + 1:02d}"
+                        aifs_m_vals = aifs_hourly.get(aifs_mk)
+
                         merged_m = []
                         for i in range(len(det_vals)):
                             if i < len(m_vals) and m_vals[i] is not None:
                                 merged_m.append(m_vals[i])
                             else:
-                                merged_m.append(det_vals[i])
+                                det_v = det_vals[i]
+                                if aifs_m_vals and aifs_base and len(aifs_base) > 0:
+                                    step = min(int(i * len(aifs_base) / len(det_vals)), len(aifs_base) - 1)
+                                    am_v = aifs_m_vals[step]
+                                    ab_v = aifs_base[step]
+                                    if am_v is not None and ab_v is not None:
+                                        pert = am_v - ab_v
+                                        if v in ["precipitation", "snowfall"]:
+                                            val = max(0.0, det_v * (am_v / max(0.1, ab_v)))
+                                        elif v == "wind_speed_10m":
+                                            val = max(0.0, det_v + pert)
+                                        elif v.startswith("cloud_cover"):
+                                            val = max(0.0, min(100.0, det_v + pert))
+                                        else:
+                                            val = det_v + pert
+                                        merged_m.append(round(val, 2))
+                                    else:
+                                        merged_m.append(det_v)
+                                else:
+                                    merged_m.append(det_v)
                         hourly[mk] = merged_m
 
     def fetch_ensemble(
@@ -644,8 +677,8 @@ class AIFSClient:
         - icon_d2: DWD ICON-D2 2.2 km (20 members, up to 3 days / 48-72h, Central Europe)
         - icon_eu: DWD ICON-EU 7.0 km (40 members, up to 7 days / 120h, Europe)
 
-        If 2-day data (icon_d2) is unavailable for a given location (e.g. Jasna),
-        automatically falls back to the closest available model (icon_eu, or aifs).
+        If 2-day data (icon_d2) is unavailable for a given location or lacks ensemble members,
+        automatically falls back to the closest available ensemble model (icon_eu, or aifs).
         """
         model_key = model.lower() if model else "aifs"
         if model_key not in self.MODEL_MAPPING:
@@ -675,27 +708,25 @@ class AIFSClient:
         if model_key in ["icon_d2", "icon_eu"]:
             det_raw = self._fetch_deterministic_raw(latitude, longitude, cfg["api_model"], actual_days, hourly_vars, time_res=time_res)
 
-        # Check validity: a model is valid if either its ensemble or deterministic endpoint returned valid data
+        # Check validity: a model is valid for ensemble forecasting only if its ensemble endpoint returned valid data
         raw_valid = self._is_valid_forecast(raw)
-        det_valid = self._is_valid_forecast(det_raw)
 
-        if not raw_valid and not det_valid:
-            # Model data not available for this location (e.g. icon_d2 for Jasna)
-            # Automatically switch to closest available model:
-            # 1. icon_d2 -> icon_eu (covers all Europe)
-            # 2. icon_eu -> aifs (global coverage)
+        if not raw_valid:
+            # Model ensemble data not available for this location/run (e.g. icon_d2 has no members in Open-Meteo ensemble API)
+            # Automatically switch to closest available ensemble model:
+            # 1. icon_d2 -> icon_eu (covers all Europe, 40 members)
+            # 2. icon_eu -> aifs (global coverage, 50 members)
             if model_key == "icon_d2":
                 fallback_used = True
                 model_key = "icon_eu"
                 cfg = self.MODEL_MAPPING["icon_eu"]
-                actual_days = min(max(days, 5), cfg["max_days"])
+                actual_days = min(days, cfg["max_days"])
                 time_res = cfg.get("time_res", "hourly")
                 raw = self._fetch_open_meteo_raw(latitude, longitude, cfg["api_model"], actual_days, hourly_vars, time_res=time_res)
                 det_raw = self._fetch_deterministic_raw(latitude, longitude, cfg["api_model"], actual_days, hourly_vars, time_res=time_res)
                 raw_valid = self._is_valid_forecast(raw)
-                det_valid = self._is_valid_forecast(det_raw)
 
-            if not raw_valid and not det_valid and model_key in ["icon_d2", "icon_eu"]:
+            if not raw_valid and model_key in ["icon_d2", "icon_eu"]:
                 fallback_used = True
                 model_key = "aifs"
                 cfg = self.MODEL_MAPPING["aifs"]
@@ -705,7 +736,12 @@ class AIFSClient:
                 det_raw = None
 
         if det_raw:
-            self._merge_deterministic_data(raw, det_raw, hourly_vars)
+            aifs_raw = None
+            if model_key == "icon_eu" and actual_days > 2:
+                # If ICON-EU ensemble cuts off at ~55h, fetch ECMWF AIFS ensemble to seamlessly extend
+                # ensemble spread (percentiles) through the medium range (days 3-5).
+                aifs_raw = self._fetch_open_meteo_raw(latitude, longitude, "ecmwf_aifs025", actual_days, hourly_vars, time_res="hourly")
+            self._merge_deterministic_data(raw, det_raw, hourly_vars, aifs_raw=aifs_raw)
         else:
             self._fill_missing_cloud_layers(raw, latitude, longitude, cfg["api_model"], actual_days, time_res=time_res)
 

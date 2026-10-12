@@ -1265,23 +1265,25 @@
       }
     }
 
-    function showAlert(loc, fromModel, toModel, lang) {
+    function showAlert(loc, fromModel, toModel, lang, horizonDays = 5) {
       const alertEl = document.getElementById('model-alert');
       const titleEl = document.getElementById('model-alert-title');
       const msgEl = document.getElementById('model-alert-message');
       if (!alertEl) return;
 
+      const horizonStr = horizonDays === 2 ? '2-day' : '5-day';
       const fromName = fromModel === 'icon_d2' ? '2-day (DWD ICON-D2 2.2 km)' : fromModel.toUpperCase();
-      const toName = toModel === 'icon_eu' ? 'DWD ICON-EU (5-day, 7.0 km)' : 'ECMWF AIFS (15-day)';
+      const toName = toModel === 'icon_eu' ? `DWD ICON-EU (${horizonStr}, 7.0 km)` : 'ECMWF AIFS (15-day)';
 
       if (lang === 'sk') {
+        const horizonStrSk = horizonDays === 2 ? '2-dňový' : '5-dňový';
         const fromNameSk = fromModel === 'icon_d2' ? '2-dňový model (DWD ICON-D2 2.2 km)' : fromModel.toUpperCase();
-        const toNameSk = toModel === 'icon_eu' ? 'DWD ICON-EU (5-dňový, 7.0 km)' : 'ECMWF AIFS (15-dňový)';
+        const toNameSk = toModel === 'icon_eu' ? `DWD ICON-EU (${horizonStrSk}, 7.0 km)` : 'ECMWF AIFS (15-dňový)';
         titleEl.innerText = 'Model automaticky prepnutý na najbližší dostupný';
-        msgEl.innerText = `${fromNameSk} nie je pre lokalitu „${loc}“ dostupný (poloha je mimo domény modelu). Automaticky sme prepli na najbližší dostupný model: ${toNameSk}.`;
+        msgEl.innerText = `${fromNameSk} nie je pre lokalitu „${loc}“ dostupný (chýbajú ansámblové dáta). Automaticky sme prepli na najbližší dostupný model: ${toNameSk}.`;
       } else {
         titleEl.innerText = 'Model Automatically Switched to Closest Available';
-        msgEl.innerText = `${fromName} is not available for "${loc}" (location is outside Central Europe model domain). Automatically switched to closest available model: ${toName}.`;
+        msgEl.innerText = `${fromName} is not available for "${loc}" (ensemble data unavailable). Automatically switched to closest available model: ${toName}.`;
       }
       alertEl.style.display = 'flex';
     }
@@ -1458,11 +1460,12 @@
 
         // Automatic switch to closest available model if fallback triggered
         if (data.model_fallback) {
-          let newHorizonVal = 'icon_eu_5';
-          let newModelLabel = 'DWD ICON-EU (7.0 km, 5-day)';
+          const isTwoDay = (days === 2 || rawHorizon === 'icon_d2_2' || rawHorizon === 'icon_d2');
+          let newHorizonVal = isTwoDay ? 'icon_d2_2' : 'icon_eu_5';
+          let newModelLabel = isTwoDay ? 'DWD ICON-EU (2-day, 7.0 km)' : 'DWD ICON-EU (7.0 km, 5-day)';
           if (data.model === 'icon_eu') {
-            newHorizonVal = 'icon_eu_5';
-            newModelLabel = 'DWD ICON-EU (7.0 km, 5-day)';
+            newHorizonVal = isTwoDay ? 'icon_d2_2' : 'icon_eu_5';
+            newModelLabel = isTwoDay ? 'DWD ICON-EU (2-day, 7.0 km)' : 'DWD ICON-EU (7.0 km, 5-day)';
           } else if (data.model === 'aifs') {
             newHorizonVal = '15';
             newModelLabel = 'ECMWF AIFS (15-day)';
@@ -1471,7 +1474,7 @@
           document.getElementById('days').value = newHorizonVal;
           updateModelPillsUI(newHorizonVal);
           document.getElementById('result-title').innerText = `Meteogram: ${loc} (${newModelLabel})`;
-          showAlert(loc, data.fallback_from || 'icon_d2', data.model, lang);
+          showAlert(loc, data.fallback_from || 'icon_d2', data.model, lang, isTwoDay ? 2 : 5);
         } else if (!isKnownOutsideIconD2(loc)) {
           hideAlert();
         }
