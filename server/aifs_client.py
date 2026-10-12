@@ -517,17 +517,47 @@ class AIFSClient:
         data["time_res"] = time_res
         return data
 
-    def _is_valid_forecast(self, raw: Dict[str, Any]) -> bool:
+    def _fetch_deterministic_raw(
+        self, latitude: float, longitude: float, api_model: str, days: int, hourly_vars: List[str], time_res: str = "hourly"
+    ) -> Dict[str, Any]:
+        params = urllib.parse.urlencode(
+            {
+                "latitude": latitude,
+                "longitude": longitude,
+                "models": api_model,
+                time_res: ",".join(hourly_vars),
+                "forecast_days": days,
+                "timezone": "UTC",
+            }
+        )
+        url = f"{self.ASTRONOMY_URL}?{params}"
+        data = self._http_get_json(url, timeout=15, max_retries=4)
+        if not data or not isinstance(data, dict):
+            return {"latitude": None}
+        if time_res != "hourly" and time_res in data and "hourly" not in data:
+            data["hourly"] = data.pop(time_res)
+        data["time_res"] = time_res
+        return data
+
+    def _is_valid_forecast(self, raw: Optional[Dict[str, Any]]) -> bool:
         import math
+        if not raw or not isinstance(raw, dict):
+            return False
         lat_val = raw.get("latitude")
         if lat_val is None:
             return False
         if isinstance(lat_val, float) and math.isnan(lat_val):
             return False
-        time_arr = raw.get("hourly", {}).get("time")
+        hourly = raw.get("hourly", {})
+        time_arr = hourly.get("time")
         if not time_arr or len(time_arr) == 0:
             return False
-        return True
+        # Verify that at least one weather variable has actual data (not all nulls)
+        for cv in ["temperature_2m", "precipitation", "wind_speed_10m", "pressure_msl", "cloud_cover"]:
+            vals = hourly.get(cv)
+            if vals and any(x is not None for x in vals):
+                return True
+        return False
 
     def is_icon_d2_available(self, latitude: float, longitude: float) -> bool:
         """Check if coordinates fall within the DWD ICON-D2 domain (Germany & Central Europe)."""
@@ -536,6 +566,74 @@ class AIFSClient:
         if not (43.0 <= latitude <= 58.0 and -2.5 <= longitude <= 18.35):
             return False
         return True
+
+    def _merge_deterministic_data(
+        self, raw: Dict[str, Any], det_raw: Optional[Dict[str, Any]], vars_to_merge: List[str]
+    ) -> None:
+        """
+        Merge deterministic forecast data into ensemble raw data:
+        1. Backfills variables missing or entirely null in ensemble (e.g. ICON-D2 when ensemble API has no data).
+        2. Backfills trailing nulls (e.g. ICON-EU when ensemble ends at hour ~55 while deterministic runs to 120h).
+        3. Backfills cloud layers (low/mid/high) which are null in ensemble on ICON models.
+        """
+        if not det_raw or not isinstance(det_raw, dict):
+            return
+
+        det_hourly = det_raw.get("hourly", {})
+        if not det_hourly:
+            return
+
+        if not raw or not isinstance(raw, dict):
+            return
+
+        hourly = raw.setdefault("hourly", {})
+
+        # If time array is missing or empty in ensemble, use deterministic time array
+        if not hourly.get("time") and det_hourly.get("time"):
+            hourly["time"] = list(det_hourly["time"])
+
+        # Carry over elevation / utc_offset_seconds if missing
+        if "elevation" not in raw or raw["elevation"] is None:
+            raw["elevation"] = det_raw.get("elevation", 0)
+        if "utc_offset_seconds" not in raw or raw["utc_offset_seconds"] is None:
+            raw["utc_offset_seconds"] = det_raw.get("utc_offset_seconds", 0)
+
+        for v in vars_to_merge:
+            ens_vals = hourly.get(v)
+            det_vals = det_hourly.get(v)
+            if not det_vals:
+                continue
+
+            # Case A: Ensemble values are completely missing, None, or all null
+            if not ens_vals or not any(x is not None for x in ens_vals):
+                hourly[v] = list(det_vals)
+                # Strip null member keys so they do not pollute stats with zeros/nans
+                for m in range(1, 51):
+                    mk = f"{v}_member{m:02d}"
+                    if mk in hourly and not any(x is not None for x in hourly[mk]):
+                        del hourly[mk]
+            else:
+                # Case B: Ensemble values exist for some timesteps, but have trailing or interstitial nulls
+                merged = []
+                for i in range(len(det_vals)):
+                    if i < len(ens_vals) and ens_vals[i] is not None:
+                        merged.append(ens_vals[i])
+                    else:
+                        merged.append(det_vals[i])
+                hourly[v] = merged
+
+                # Also pad any ensemble members that have data so trailing steps don't become NaN
+                for m in range(1, 51):
+                    mk = f"{v}_member{m:02d}"
+                    if mk in hourly and any(x is not None for x in hourly[mk]):
+                        m_vals = hourly[mk]
+                        merged_m = []
+                        for i in range(len(det_vals)):
+                            if i < len(m_vals) and m_vals[i] is not None:
+                                merged_m.append(m_vals[i])
+                            else:
+                                merged_m.append(det_vals[i])
+                        hourly[mk] = merged_m
 
     def fetch_ensemble(
         self, latitude: float, longitude: float, days: int = 15, model: str = "aifs"
@@ -573,8 +671,15 @@ class AIFSClient:
         ]
 
         raw = self._fetch_open_meteo_raw(latitude, longitude, cfg["api_model"], actual_days, hourly_vars, time_res=time_res)
+        det_raw = None
+        if model_key in ["icon_d2", "icon_eu"]:
+            det_raw = self._fetch_deterministic_raw(latitude, longitude, cfg["api_model"], actual_days, hourly_vars, time_res=time_res)
 
-        if not self._is_valid_forecast(raw):
+        # Check validity: a model is valid if either its ensemble or deterministic endpoint returned valid data
+        raw_valid = self._is_valid_forecast(raw)
+        det_valid = self._is_valid_forecast(det_raw)
+
+        if not raw_valid and not det_valid:
             # Model data not available for this location (e.g. icon_d2 for Jasna)
             # Automatically switch to closest available model:
             # 1. icon_d2 -> icon_eu (covers all Europe)
@@ -586,16 +691,24 @@ class AIFSClient:
                 actual_days = min(max(days, 5), cfg["max_days"])
                 time_res = cfg.get("time_res", "hourly")
                 raw = self._fetch_open_meteo_raw(latitude, longitude, cfg["api_model"], actual_days, hourly_vars, time_res=time_res)
+                det_raw = self._fetch_deterministic_raw(latitude, longitude, cfg["api_model"], actual_days, hourly_vars, time_res=time_res)
+                raw_valid = self._is_valid_forecast(raw)
+                det_valid = self._is_valid_forecast(det_raw)
 
-            if not self._is_valid_forecast(raw) and model_key in ["icon_d2", "icon_eu"]:
+            if not raw_valid and not det_valid and model_key in ["icon_d2", "icon_eu"]:
                 fallback_used = True
                 model_key = "aifs"
                 cfg = self.MODEL_MAPPING["aifs"]
                 actual_days = min(max(days, 10), cfg["max_days"])
                 time_res = cfg.get("time_res", "hourly")
                 raw = self._fetch_open_meteo_raw(latitude, longitude, cfg["api_model"], actual_days, hourly_vars, time_res=time_res)
+                det_raw = None
 
-        self._fill_missing_cloud_layers(raw, latitude, longitude, cfg["api_model"], actual_days, time_res=time_res)
+        if det_raw:
+            self._merge_deterministic_data(raw, det_raw, hourly_vars)
+        else:
+            self._fill_missing_cloud_layers(raw, latitude, longitude, cfg["api_model"], actual_days, time_res=time_res)
+
         stats = self._process_ensemble(raw)
         stats["model"] = model_key
         stats["model_fallback"] = fallback_used

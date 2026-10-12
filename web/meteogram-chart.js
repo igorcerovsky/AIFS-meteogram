@@ -3427,15 +3427,18 @@ window.MeteogramAPI = {
 
     const cacheBust = forceRefresh ? `&_t=${Date.now()}` : '';
     const ensembleUrl = `https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}&models=${apiModel}&hourly=${hourlyVars}&forecast_days=${actualDays}&timezone=UTC${cacheBust}`;
-    // For ICON-EU and ICON-D2, ensemble endpoint returns nulls for low/mid/high cloud layers.
-    // Request cloud_cover_low, cloud_cover_mid, cloud_cover_high from deterministic forecast endpoint to backfill.
-    const forecastEndpoint = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&models=${apiModel}&daily=sunrise,sunset,moonrise,moonset,moon_phase&hourly=cloud_cover_low,cloud_cover_mid,cloud_cover_high&forecast_days=${Math.min(actualDays + 2, 16)}&timezone=UTC${cacheBust}`;
+    // Request all variables from deterministic forecast endpoint to backfill missing or trailing ensemble data (ICON-EU & ICON-D2)
+    const forecastEndpoint = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&models=${apiModel}&daily=sunrise,sunset,moonrise,moonset,moon_phase&hourly=${hourlyVars}&forecast_days=${Math.min(actualDays + 2, 16)}&timezone=UTC${cacheBust}`;
 
     const fetchOpts = forceRefresh ? { cache: 'reload' } : {};
-    const [ensRes, astroRes] = await Promise.all([
+    let [ensRes, astroRes] = await Promise.all([
       fetch(ensembleUrl, fetchOpts).then(r => r.json()).catch(() => null),
       fetch(forecastEndpoint, fetchOpts).then(r => r.json()).catch(() => null),
     ]);
+
+    if ((!ensRes || !ensRes.hourly) && astroRes && astroRes.hourly) {
+      ensRes = astroRes;
+    }
 
     if (!ensRes || !ensRes.hourly) {
       throw new Error("Failed to fetch weather data from Open-Meteo");
@@ -3443,15 +3446,61 @@ window.MeteogramAPI = {
 
     // Process ensemble members client-side
     const hourly = ensRes.hourly;
+    const vars = [
+      "temperature_2m", "precipitation", "snowfall",
+      "cloud_cover", "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high",
+      "wind_speed_10m", "wind_direction_10m", "pressure_msl"
+    ];
 
-    // Backfill missing cloud layers from deterministic endpoint if ensemble layers are missing/null (ICON-EU & ICON-D2)
+    // Backfill missing variables and trailing nulls from deterministic endpoint (ICON-EU & ICON-D2)
     if (astroRes && astroRes.hourly) {
-      const cloudVars = ["cloud_cover_low", "cloud_cover_mid", "cloud_cover_high"];
-      for (const cv of cloudVars) {
-        const ensVals = hourly[cv];
-        const hasValidEns = ensVals && Array.isArray(ensVals) && ensVals.some(v => v !== null && !isNaN(v));
-        if (!hasValidEns && astroRes.hourly[cv]) {
-          hourly[cv] = astroRes.hourly[cv];
+      if (!hourly.time && astroRes.hourly.time) {
+        hourly.time = astroRes.hourly.time;
+      }
+      for (const v of vars) {
+        const ensVals = hourly[v];
+        const detVals = astroRes.hourly[v];
+        if (!detVals) continue;
+
+        if (!ensVals || !Array.isArray(ensVals) || ensVals.every(x => x === null || isNaN(x))) {
+          hourly[v] = detVals.slice();
+          // Strip null ensemble member keys
+          for (let m = 1; m <= 50; m++) {
+            const pad = m < 10 ? `0${m}` : `${m}`;
+            const mk = `${v}_member${pad}`;
+            if (hourly[mk] && hourly[mk].every(x => x === null || isNaN(x))) {
+              delete hourly[mk];
+            }
+          }
+        } else {
+          // Merge trailing or missing nulls
+          const merged = [];
+          for (let i = 0; i < detVals.length; i++) {
+            if (i < ensVals.length && ensVals[i] !== null && !isNaN(ensVals[i])) {
+              merged.push(ensVals[i]);
+            } else {
+              merged.push(detVals[i]);
+            }
+          }
+          hourly[v] = merged;
+
+          // Pad existing members with detVals so trailing steps aren't lost
+          for (let m = 1; m <= 50; m++) {
+            const pad = m < 10 ? `0${m}` : `${m}`;
+            const mk = `${v}_member${pad}`;
+            if (hourly[mk] && hourly[mk].some(x => x !== null && !isNaN(x))) {
+              const mVals = hourly[mk];
+              const mergedM = [];
+              for (let i = 0; i < detVals.length; i++) {
+                if (i < mVals.length && mVals[i] !== null && !isNaN(mVals[i])) {
+                  mergedM.push(mVals[i]);
+                } else {
+                  mergedM.push(detVals[i]);
+                }
+              }
+              hourly[mk] = mergedM;
+            }
+          }
         }
       }
     }
@@ -3461,12 +3510,6 @@ window.MeteogramAPI = {
       elevation: ensRes.elevation || loc.elevation || 0,
       utc_offset_seconds: ensRes.utc_offset_seconds || 0,
     };
-
-    const vars = [
-      "temperature_2m", "precipitation", "snowfall",
-      "cloud_cover", "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high",
-      "wind_speed_10m", "wind_direction_10m", "pressure_msl"
-    ];
 
     for (const v of vars) {
       const memberKeys = Object.keys(hourly).filter(k => k === v || k.startsWith(`${v}_member`));
@@ -3488,6 +3531,11 @@ window.MeteogramAPI = {
         for (const mk of memberKeys) {
           const val = hourly[mk][t];
           if (val !== null && !isNaN(val)) vals.push(val);
+        }
+
+        // If ensemble members at this timestep are absent/null, use baseline hourly value
+        if (vals.length === 0 && hourly[v] && hourly[v][t] !== null && !isNaN(hourly[v][t])) {
+          vals.push(hourly[v][t]);
         }
 
         if (vals.length === 0) {
