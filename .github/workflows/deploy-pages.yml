@@ -10,7 +10,7 @@ on:
   schedule:
     # Automatically updates every 6 hours (02:00, 08:00, 14:00, 20:00 UTC)
     # matching ECMWF and DWD forecast publishing cycles
-    - cron: "0 2,8,14,20 * * *"
+    - cron: "0 6,12 * * *"
   workflow_dispatch: # Allows clicking "Run workflow" in GitHub Actions anytime
 
 permissions:
