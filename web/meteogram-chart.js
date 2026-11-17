@@ -61,6 +61,7 @@ const METEO_TRANSLATIONS = {
     storm_severe: "G4 Severe",
     storm_ext: "G5 Extreme",
     min_kp_needed: "Min Kp for location",
+    now: "Now",
     days_short: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
     days_full: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
     months_short: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
@@ -113,6 +114,7 @@ const METEO_TRANSLATIONS = {
     storm_severe: "G4 Veľmi silná",
     storm_ext: "G5 Extrémna",
     min_kp_needed: "Min. Kp pre lokalitu",
+    now: "Teraz",
     days_short: ["Ne", "Po", "Ut", "St", "Št", "Pi", "So"],
     days_full: ["Nedeľa", "Pondelok", "Utorok", "Streda", "Štvrtok", "Piatok", "Sobota"],
     months_short: ["jan", "feb", "mar", "apr", "máj", "jún", "júl", "aug", "sep", "okt", "nov", "dec"],
@@ -868,6 +870,7 @@ class MeteogramChart {
     this._drawTimelineAndEphemeris();
     this._drawKpLegend();
     this._drawHeader();
+    this._drawCurrentTimeMarker();
 
     if (this.hoverIdx !== null) {
       this._drawCrosshair();
@@ -2962,6 +2965,70 @@ class MeteogramChart {
 
     ctx.fillStyle = "#334155";
     ctx.fillText(label, x + 18, y + 3);
+    ctx.restore();
+  }
+
+  _drawCurrentTimeMarker() {
+    if (!this.times || this.times.length === 0) return;
+    const nowMs = Date.now();
+    if (nowMs < this.tStart || nowMs > this.tEnd) return;
+
+    const x = this._timeToX(nowMs);
+    if (x < this.marginLeft || x > this.marginLeft + this.plotWidth) return;
+
+    const ctx = this.ctx;
+    const t = METEO_TRANSLATIONS[this.options.lang] || METEO_TRANSLATIONS.en;
+
+    ctx.save();
+    ctx.strokeStyle = "rgba(5, 150, 105, 0.85)";
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash([4, 3]);
+
+    for (const key of ["p1", "p2", "p3", "p4", "p5", "timeline"]) {
+      const p = this.panels[key];
+      if (!p) continue;
+      ctx.beginPath();
+      ctx.moveTo(x, p.top);
+      ctx.lineTo(x, p.bottom);
+      ctx.stroke();
+    }
+
+    ctx.setLineDash([]);
+
+    // Small anchor dot at top of Panel 1
+    const p1 = this.panels.p1;
+    if (p1) {
+      ctx.beginPath();
+      ctx.arc(x, p1.top, 2.5, 0, 2 * Math.PI);
+      ctx.fillStyle = "#059669";
+      ctx.fill();
+
+      // Compact "NOW" pill badge below Panel 1 title/legend row
+      const label = (t.now || "Now").toUpperCase();
+      ctx.font = "bold 8.5px 'Inter', sans-serif";
+      const textW = ctx.measureText(label).width;
+      const pillW = textW + 8;
+      const pillH = 14;
+      const minX = this.marginLeft + 2;
+      const maxX = this.marginLeft + this.plotWidth - pillW - 2;
+      const pillX = Math.max(minX, Math.min(maxX, x - pillW / 2));
+      const pillY = p1.top + 20;
+
+      ctx.fillStyle = "rgba(5, 150, 105, 0.92)";
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(pillX, pillY, pillW, pillH, 3);
+      } else {
+        ctx.rect(pillX, pillY, pillW, pillH);
+      }
+      ctx.fill();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, pillX + pillW / 2, pillY + pillH / 2 + 0.5);
+    }
+
     ctx.restore();
   }
 

@@ -165,6 +165,7 @@ public struct NativeMeteogramChartView: View {
                     temperatureSpreadMarks(points: points)
                     temperatureMedianMark(points: points)
                     temperatureThresholdMarks(bottomMajor: tempDomain.bottomMajor, topMajor: tempDomain.topMajor)
+                    nowRuleMark(xDomain: xDomain, showLabel: true)
 
                     // Synchronized Selection Crosshair
                     if let selDate = selectedDate {
@@ -360,6 +361,31 @@ public struct NativeMeteogramChartView: View {
         return firstDate < lastDate ? firstDate...lastDate : Date()...Date().addingTimeInterval(3600)
     }
 
+    @ChartContentBuilder
+    private func nowRuleMark(xDomain: ClosedRange<Date>, showLabel: Bool = false) -> some ChartContent {
+        let now = Date()
+        if xDomain.contains(now) {
+            if showLabel {
+                RuleMark(x: .value("Now", now))
+                    .foregroundStyle(Color(red: 5/255, green: 150/255, blue: 105/255).opacity(0.85))
+                    .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                    .annotation(position: .top, alignment: .center, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                        Text("NOW")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color(red: 5/255, green: 150/255, blue: 105/255).opacity(0.92))
+                            .cornerRadius(3)
+                    }
+            } else {
+                RuleMark(x: .value("Now", now))
+                    .foregroundStyle(Color(red: 5/255, green: 150/255, blue: 105/255).opacity(0.85))
+                    .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+            }
+        }
+    }
+
     @AxisContentBuilder
     private func xAxisMarks(points: [TimeSeriesPoint]) -> some AxisContent {
         if points.count <= 54 {
@@ -420,6 +446,7 @@ public struct NativeMeteogramChartView: View {
             ZStack(alignment: .topTrailing) {
                 Chart {
                     precipitationMarks(points: points, yMax: yMax)
+                    nowRuleMark(xDomain: xDomain)
 
                     if let selDate = selectedDate {
                         RuleMark(x: .value("Selected", selDate))
@@ -548,9 +575,12 @@ public struct NativeMeteogramChartView: View {
                 .font(.caption2)
             }
 
+            let xDomain = chartXDomain(points: points)
+
             Chart {
                 cloudBars(points: points)
                 cloudLayerLines(points: points)
+                nowRuleMark(xDomain: xDomain)
 
                 if let selDate = selectedDate {
                     RuleMark(x: .value("Selected", selDate))
@@ -558,7 +588,7 @@ public struct NativeMeteogramChartView: View {
                         .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
                 }
             }
-            .chartXScale(domain: chartXDomain(points: points))
+            .chartXScale(domain: xDomain)
             .chartXSelection(value: $selectedDate)
             .chartYScale(domain: 0...100)
             .chartYAxis {
@@ -893,6 +923,8 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                         .foregroundStyle(Color.primary.opacity(0.75))
                         .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
                 }
+
+                nowRuleMark(xDomain: chartXDomain(points: points))
             }
             .chartXScale(domain: chartXDomain(points: points))
             .chartXSelection(value: $selectedDate)
@@ -1030,6 +1062,8 @@ private func calcWindDirY(dirDeg: Double, yMaxWind: Double) -> Double {
                             .foregroundStyle(Color.gray.opacity(0.6))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
                     }
+
+                    nowRuleMark(xDomain: xDomain)
 
                     if let selDate = selectedDate {
                         RuleMark(x: .value("Selected", selDate))
