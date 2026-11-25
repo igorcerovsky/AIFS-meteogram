@@ -530,9 +530,9 @@ public struct NativeMeteogramChartView: View {
             }
         }
 
-        // 2. Solid expected rain (median)
+        // 2. Solid expected rain (median) — only when no snow
         ForEach(points) { p in
-            if p.precipMedian > 0 {
+            if p.snowMedian <= 0, p.precipMedian > 0 {
                 BarMark(
                     x: .value("Time", p.date),
                     y: .value("Rain", calcPrecipPseudoLog(p.precipMedian, yMax: yMax)),
@@ -542,12 +542,12 @@ public struct NativeMeteogramChartView: View {
             }
         }
 
-        // 3. Snowfall (median)
+        // 3. Snowfall (median) — whole bin snow-colored
         ForEach(points) { p in
             if p.snowMedian > 0 {
                 BarMark(
                     x: .value("Time", p.date),
-                    y: .value("Snow", calcPrecipPseudoLog(p.snowMedian, yMax: yMax)),
+                    y: .value("Snow", calcPrecipPseudoLog(max(p.precipMedian, p.snowMedian), yMax: yMax)),
                     stacking: .unstacked
                 )
                 .foregroundStyle(Color.cyan.opacity(0.85))

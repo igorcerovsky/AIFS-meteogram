@@ -555,10 +555,14 @@ class MeteogramRenderer:
             edge_lw = 0.8
             marker_size = 9.0
 
-        # Plot stacked bars with clean edges
+        # Plot bars: whole bin snow-colored when snow is present, otherwise rain-colored
+        has_snow = snow_vals > 0
+        rain_only_vals = np.where(has_snow, 0.0, rain_vals)
+        snow_full_vals = np.where(has_snow, np.maximum(rain_vals, snow_vals), 0.0)
+
         ax_precip.bar(
             bar_num_times,
-            rain_vals,
+            rain_only_vals,
             width=bar_width,
             color="#1d70b8",
             edgecolor="#0f4c81",
@@ -569,8 +573,7 @@ class MeteogramRenderer:
         )
         ax_precip.bar(
             bar_num_times,
-            snow_vals,
-            bottom=rain_vals,
+            snow_full_vals,
             width=bar_width,
             color="#00b4d8",
             edgecolor="#0077b6",

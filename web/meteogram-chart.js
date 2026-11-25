@@ -1863,18 +1863,16 @@ class MeteogramChart {
       }
 
       // 2. Expected (Median / 100% scenario) Rain & Snow Solid Bars in contrast
-      if (r > 0 || s > 0) {
+      if (s > 0) {
+        // Snow bar (whole bin cyan when snow is present)
+        const yS = valToY(Math.max(r, s));
+        ctx.fillStyle = "#06b6d4";
+        ctx.fillRect(x - barWidth / 2, yS, barWidth, p.bottom - yS);
+      } else if (r > 0) {
         // Rain bar (solid vibrant blue)
         const yR = valToY(r);
         ctx.fillStyle = "#2563eb";
         ctx.fillRect(x - barWidth / 2, yR, barWidth, p.bottom - yR);
-
-        // Snow bar (cyan stacked on top)
-        if (s > 0) {
-          const yS = valToY(r + s);
-          ctx.fillStyle = "#06b6d4";
-          ctx.fillRect(x - barWidth / 2, yS, barWidth, yR - yS);
-        }
       }
     }
 
